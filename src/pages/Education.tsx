@@ -1,9 +1,10 @@
+
 import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { PlayCircle, BookOpen, Users, MessageCircle, ExternalLink } from "lucide-react";
+import { PlayCircle, BookOpen, Users, MessageCircle, ExternalLink, Trophy, Clock, Video } from "lucide-react";
 import Sidebar from "@/components/layout/Sidebar";
 import TopBar from "@/components/layout/TopBar";
 import MobileHeader from "@/components/layout/MobileHeader";
