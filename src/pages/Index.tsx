@@ -49,7 +49,7 @@ const Index = () => {
         <nav className="flex justify-between items-center">
           <div className="flex items-center gap-2">
             <TrendingUp className="h-8 w-8 text-blue-600" />
-            <span className="text-2xl font-bold text-gray-900">ForexDeFi</span>
+            <span className="text-2xl font-bold text-gray-900">ShTrader</span>
           </div>
           <div className="flex items-center gap-4">
             <Badge variant="outline">Beta Version</Badge>
@@ -138,7 +138,7 @@ const Index = () => {
       {/* Footer */}
       <footer className="container mx-auto px-4 py-8 mt-16 border-t">
         <div className="text-center text-gray-600">
-          <p>&copy; 2024 ForexDeFi. Decentralized trading platform for everyone.</p>
+          <p>&copy; 2024 ShTrader. Decentralized trading platform for everyone.</p>
         </div>
       </footer>
     </div>
