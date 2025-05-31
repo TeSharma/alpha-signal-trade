@@ -49,9 +49,9 @@ const Index = () => {
         <nav className="flex justify-between items-center">
           <div className="flex items-center justify-center flex-1 md:flex-none md:justify-start">
             <img 
-              src="/lovable-uploads/2c29a237-d9d6-435f-ae2a-5deb44689d82.png" 
-              alt="Logo" 
-              className="h-16 w-auto object-contain"
+              src="/lovable-uploads/de844a80-a7e2-4449-b7ea-cecb59ff1b0d.png" 
+              alt="ShTrader Logo" 
+              className="h-20 w-auto object-contain"
             />
           </div>
           <div className="flex items-center gap-4">
