@@ -48,8 +48,11 @@ const Index = () => {
       <header className="container mx-auto px-4 py-6">
         <nav className="flex justify-between items-center">
           <div className="flex items-center gap-2">
-            <TrendingUp className="h-8 w-8 text-blue-600" />
-            <span className="text-2xl font-bold text-gray-900">ShTrader</span>
+            <img 
+              src="/lovable-uploads/2c29a237-d9d6-435f-ae2a-5deb44689d82.png" 
+              alt="ShTrader Logo" 
+              className="h-10 w-auto"
+            />
           </div>
           <div className="flex items-center gap-4">
             <Badge variant="outline">Beta Version</Badge>
