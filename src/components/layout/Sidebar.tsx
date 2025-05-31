@@ -8,7 +8,7 @@ const Sidebar = () => {
   return (
     <div className="w-64 bg-white border-r border-gray-200 min-h-screen">
       {/* Logo */}
-      <div className="p-6 border-b border-gray-200">
+      <div className="p-6">
         <div className="flex items-center justify-center">
           <img 
             src="/lovable-uploads/2c29a237-d9d6-435f-ae2a-5deb44689d82.png" 
