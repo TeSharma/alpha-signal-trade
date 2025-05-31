@@ -47,11 +47,11 @@ const Index = () => {
       {/* Header */}
       <header className="container mx-auto px-4 py-6">
         <nav className="flex justify-between items-center">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center justify-center flex-1 md:flex-none md:justify-start">
             <img 
               src="/lovable-uploads/2c29a237-d9d6-435f-ae2a-5deb44689d82.png" 
-              alt="ShTrader Logo" 
-              className="h-10 w-auto"
+              alt="Logo" 
+              className="h-16 w-auto object-contain"
             />
           </div>
           <div className="flex items-center gap-4">

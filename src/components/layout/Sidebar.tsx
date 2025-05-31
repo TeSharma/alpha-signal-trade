@@ -12,8 +12,8 @@ const Sidebar = () => {
         <div className="flex items-center justify-center">
           <img 
             src="/lovable-uploads/2c29a237-d9d6-435f-ae2a-5deb44689d82.png" 
-            alt="ShTrader Logo" 
-            className="h-8 w-auto"
+            alt="Logo" 
+            className="h-12 w-auto object-contain"
           />
         </div>
       </div>
