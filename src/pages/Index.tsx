@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -46,14 +45,7 @@ const Index = () => {
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
       {/* Header */}
       <header className="container mx-auto px-4 py-6">
-        <nav className="flex justify-between items-center">
-          <div className="flex items-center justify-center flex-1 md:flex-none md:justify-start">
-            <img 
-              src="/lovable-uploads/de844a80-a7e2-4449-b7ea-cecb59ff1b0d.png" 
-              alt="ShTrader Logo" 
-              className="h-20 w-auto object-contain"
-            />
-          </div>
+        <nav className="flex justify-end items-center">
           <div className="flex items-center gap-4">
             <Badge variant="outline">Beta Version</Badge>
             <Button onClick={() => navigate('/dashboard')}>
@@ -66,6 +58,15 @@ const Index = () => {
       {/* Hero Section */}
       <main className="container mx-auto px-4 py-12">
         <div className="text-center max-w-4xl mx-auto mb-16">
+          {/* Logo positioned above the heading */}
+          <div className="flex justify-center mb-8">
+            <img 
+              src="/lovable-uploads/de844a80-a7e2-4449-b7ea-cecb59ff1b0d.png" 
+              alt="ShTrader Logo" 
+              className="h-24 w-auto object-contain"
+            />
+          </div>
+          
           <h1 className="text-5xl font-bold text-gray-900 mb-6">
             Decentralized Forex Trading
             <span className="text-blue-600"> Reimagined</span>
