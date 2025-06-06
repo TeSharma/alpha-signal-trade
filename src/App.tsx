@@ -10,6 +10,7 @@ import Trade from "./pages/Trade";
 import Signals from "./pages/Signals";
 import Education from "./pages/Education";
 import Account from "./pages/Account";
+import Signup from "./pages/Signup";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -27,6 +28,7 @@ const App = () => (
           <Route path="/signals" element={<Signals />} />
           <Route path="/education" element={<Education />} />
           <Route path="/account" element={<Account />} />
+          <Route path="/signup" element={<Signup />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>

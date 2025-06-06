@@ -65,7 +65,7 @@ const Index = () => {
         <div className="text-center max-w-4xl mx-auto mb-16">
           <h1 className="text-5xl font-bold text-gray-900 mb-6">
             Decentralized Forex Trading
-            <span className="text-blue-600"> Reimagined</span>
+            <span className="text-blue-600"> Platform</span>
           </h1>
           <p className="text-xl text-gray-600 mb-8">
             Trade forex pairs with complete self-custody, AI assistance, and educational support. 
