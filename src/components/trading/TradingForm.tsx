@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -11,13 +12,20 @@ interface TradingFormProps {
   accountMode: 'demo' | 'live';
 }
 
+interface AISignalResponse {
+  pair: string;
+  direction: string;
+  confidence: number;
+  recommendation: string;
+}
+
 const TradingForm = ({ accountMode }: TradingFormProps) => {
   const [selectedPair, setSelectedPair] = useState('GBP/JPY');
   const [tradeDirection, setTradeDirection] = useState<'buy' | 'sell'>('buy');
   const [lotSize, setLotSize] = useState('0.1');
   const [stopLoss, setStopLoss] = useState('');
   const [takeProfit, setTakeProfit] = useState('');
-  const [signalResponse, setSignalResponse] = useState<any>(null);
+  const [signalResponse, setSignalResponse] = useState<AISignalResponse | null>(null);
   const [isLoadingSignal, setIsLoadingSignal] = useState(false);
 
   const forexPairs = [
@@ -259,7 +267,7 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
 };
 
 // AI Signal Check (mock implementation)
-const checkAISignal = async (pair: string, direction: string) => {
+const checkAISignal = async (pair: string, direction: string): Promise<AISignalResponse> => {
   // In a real implementation, this would call your AI service
   return new Promise((resolve) => {
     setTimeout(() => {
