@@ -1,24 +1,32 @@
-import { useState } from 'react'
-import { signUpWithEmail } from '@/lib/supabase'
+import { useState, useEffect } from 'react'
+import { updatePassword } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { useNavigate } from 'react-router-dom'
-import { Link } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 
-export const SignupForm = () => {
-  const [email, setEmail] = useState('')
+export const UpdatePasswordForm = () => {
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [loading, setLoading] = useState(false)
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+
+  useEffect(() => {
+    // Check for password recovery hash
+    const recoveryToken = searchParams.get('recovery_token')
+    if (!recoveryToken) {
+      setError('Invalid password reset link')
+    }
+  }, [searchParams])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
     setError('')
+    setSuccess('')
 
     if (password !== confirmPassword) {
       setError('Passwords do not match')
@@ -26,14 +34,13 @@ export const SignupForm = () => {
       return
     }
 
-    const { data, error: signupError } = await signUpWithEmail(email, password)
+    const { error } = await updatePassword(password)
     
-    if (signupError) {
-      setError(signupError.message)
-    } else if (data?.user?.identities?.length === 0) {
-      setError('User already registered')
+    if (error) {
+      setError(error.message)
     } else {
-      setSuccess('Check your email for verification link')
+      setSuccess('Password updated successfully!')
+      setTimeout(() => navigate('/login'), 2000)
     }
 
     setLoading(false)
@@ -42,9 +49,9 @@ export const SignupForm = () => {
   return (
     <div className="w-full max-w-md space-y-6">
       <div className="text-center">
-        <h1 className="text-2xl font-bold">Create an account</h1>
+        <h1 className="text-2xl font-bold">Update Password</h1>
         <p className="text-sm text-gray-500">
-          Enter your email and password to sign up
+          Enter your new password
         </p>
       </div>
 
@@ -62,18 +69,7 @@ export const SignupForm = () => {
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="space-y-2">
-          <Label htmlFor="email">Email</Label>
-          <Input
-            id="email"
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-          />
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="password">Password</Label>
+          <Label htmlFor="password">New Password</Label>
           <Input
             id="password"
             type="password"
@@ -95,15 +91,8 @@ export const SignupForm = () => {
         </div>
 
         <Button type="submit" className="w-full" disabled={loading}>
-          {loading ? 'Creating account...' : 'Sign up'}
+          {loading ? 'Updating...' : 'Update Password'}
         </Button>
-
-        <div className="text-center text-sm">
-          Already have an account?{' '}
-          <Link to="/login" className="text-blue-600 hover:underline">
-            Sign in
-          </Link>
-        </div>
       </form>
     </div>
   )

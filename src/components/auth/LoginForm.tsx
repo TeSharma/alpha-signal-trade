@@ -70,10 +70,18 @@ export const LoginForm = () => {
           {loading ? 'Signing in...' : 'Sign in'}
         </Button>
 
-        <div className="text-center text-sm">
-          Don't have an account?{' '}
-          <Link to="/signup" className="text-blue-600 hover:underline">
-            Sign up
+        <div className="flex justify-between text-sm">
+          <div>
+            Don't have an account?{' '}
+            <Link to="/signup" className="text-blue-600 hover:underline">
+              Sign up
+            </Link>
+          </div>
+          <Link 
+            to="/forgot-password" 
+            className="text-blue-600 hover:underline"
+          >
+            Forgot password?
           </Link>
         </div>
       </form>
