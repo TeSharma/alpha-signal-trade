@@ -24,6 +24,30 @@ const ResponsiveNav = () => {
 
   return (
     <>
+      {/* Desktop Navigation - Visible in sidebar */}
+      <nav className="hidden lg:block p-4">
+        <div className="space-y-2">
+          {menuItems.map((item) => {
+            const Icon = item.icon;
+            const isActive = location.pathname === item.path;
+            
+            return (
+              <Button
+                key={item.path}
+                variant={isActive ? 'default' : 'ghost'}
+                className={`w-full justify-start gap-3 ${
+                  isActive ? 'bg-blue-50 text-blue-600' : 'text-gray-600'
+                }`}
+                onClick={() => navigate(item.path)}
+              >
+                <Icon className="h-5 w-5" />
+                {item.label}
+              </Button>
+            );
+          })}
+        </div>
+      </nav>
+
       {/* Mobile Bottom Navigation - Visible only on mobile */}
       <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 px-2 py-1 z-50">
         <div className="flex justify-around">
