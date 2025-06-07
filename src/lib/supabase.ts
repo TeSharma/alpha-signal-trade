@@ -1,13 +1,49 @@
 
 import { createClient } from '@supabase/supabase-js'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
-// Only create the client if both URL and key are provided
-export const supabase = supabaseUrl && supabaseAnonKey 
-  ? createClient(supabaseUrl, supabaseAnonKey)
-  : null
+// Validate and normalize URL before creating client
+let supabaseClient = null
+if (supabaseUrl && supabaseAnonKey) {
+  try {
+    // Normalize URL - ensure proper format
+    let normalizedUrl = supabaseUrl.trim()
+    
+    // Remove any existing protocol
+    normalizedUrl = normalizedUrl.replace(/^https?:\/\//, '')
+    
+    // Add single https:// protocol
+    normalizedUrl = `https://${normalizedUrl}`
+    
+    // Remove trailing slashes
+    normalizedUrl = normalizedUrl.replace(/\/+$/, '')
+    
+    // Validate URL structure
+    const urlObj = new URL(normalizedUrl)
+    if (!urlObj.hostname) {
+      throw new Error('Invalid Supabase URL - missing hostname')
+    }
+    
+    supabaseClient = createClient(normalizedUrl, supabaseAnonKey)
+    console.log('Supabase client initialized with URL:', normalizedUrl)
+  } catch (error) {
+    console.error('Supabase initialization failed:', {
+      originalUrl: supabaseUrl,
+      error: error.message
+    })
+    throw error // Re-throw to prevent silent failures
+  }
+}
+
+export const supabase = supabaseClient
+
+if (supabase) {
+  console.log('Supabase client initialized successfully')
+} else {
+  console.warn('Supabase client failed to initialize - check environment variables')
+}
 
 // Auth functions with null checks
 export const signInWithEmail = async (email: string, password: string) => {
