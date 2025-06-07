@@ -1,14 +1,14 @@
-import { defineConfig, loadEnv } from "vite";
-import react from "@vitejs/plugin-react-swc";
-import path from "path";
-import { componentTagger } from "lovable-tagger";
+import { defineConfig, loadEnv } from 'vite';
+import react from '@vitejs/plugin-react-swc';
+import path from 'path';
+import { componentTagger } from 'lovable-tagger';
 
 export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, process.cwd(), 'NEXT_PUBLIC_');
+  const env = loadEnv(mode, process.cwd(), '');
 
   return {
     server: {
-      host: "::",
+      host: '::',
       port: 8080,
     },
     plugins: [
@@ -17,14 +17,14 @@ export default defineConfig(({ mode }) => {
     ].filter(Boolean),
     resolve: {
       alias: {
-        "@": path.resolve(__dirname, "./src"),
+        '@': path.resolve(__dirname, './src'),
       },
     },
     define: {
       'process.env': {
         NEXT_PUBLIC_SUPABASE_URL: JSON.stringify(env.NEXT_PUBLIC_SUPABASE_URL),
-        NEXT_PUBLIC_SUPABASE_ANON_KEY: JSON.stringify(env.NEXT_PUBLIC_SUPABASE_ANON_KEY)
-      }
-    }
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: JSON.stringify(env.NEXT_PUBLIC_SUPABASE_ANON_KEY),
+      },
+    },
   };
 });
