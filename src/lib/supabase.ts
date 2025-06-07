@@ -37,7 +37,7 @@ if (supabaseUrl && supabaseAnonKey) {
   }
 }
 
-export const supabase = supabaseClient
+export const supabase = supabaseClient(supabaseUrl, supabaseAnonKey)
 
 if (supabase) {
   console.log('Supabase client initialized successfully')
