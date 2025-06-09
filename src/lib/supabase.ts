@@ -5,7 +5,7 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
 // Validate and normalize URL before creating client
-let supabaseClient = null
+let supabase = null
 if (supabaseUrl && supabaseAnonKey) {
   try {
     // Normalize URL - ensure proper format
@@ -26,7 +26,7 @@ if (supabaseUrl && supabaseAnonKey) {
       throw new Error('Invalid Supabase URL - missing hostname')
     }
     
-    supabaseClient = createClient(normalizedUrl, supabaseAnonKey)
+    supabase = createClient(normalizedUrl, supabaseAnonKey)
     console.log('Supabase client initialized with URL:', normalizedUrl)
   } catch (error) {
     console.error('Supabase initialization failed:', {
@@ -35,15 +35,11 @@ if (supabaseUrl && supabaseAnonKey) {
     })
     throw error // Re-throw to prevent silent failures
   }
-}
-
-export const supabase = supabaseClient(supabaseUrl, supabaseAnonKey)
-
-if (supabase) {
-  console.log('Supabase client initialized successfully')
 } else {
-  console.warn('Supabase client failed to initialize - check environment variables')
+  console.warn('Supabase environment variables not found. Please set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.')
 }
+
+export { supabase }
 
 // Auth functions with null checks
 export const signInWithEmail = async (email: string, password: string) => {
