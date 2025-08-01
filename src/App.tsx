@@ -8,6 +8,7 @@ import Index from "./pages/Index";
 import Dashboard from "./pages/Dashboard";
 import Trade from "./pages/Trade";
 import Signals from "./pages/Signals";
+import Community from "./pages/Community";
 import Education from "./pages/Education";
 import Account from "./pages/Account";
 import Signup from "./pages/Signup";
@@ -39,6 +40,11 @@ const App = () => (
           <Route path="/signals" element={
             <AuthGuard>
               <Signals />
+            </AuthGuard>
+          } />
+          <Route path="/community" element={
+            <AuthGuard>
+              <Community />
             </AuthGuard>
           } />
           <Route path="/education" element={
