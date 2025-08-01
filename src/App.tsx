@@ -11,6 +11,7 @@ import Signals from "./pages/Signals";
 import Community from "./pages/Community";
 import Education from "./pages/Education";
 import Account from "./pages/Account";
+import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 import ForgotPassword from "./pages/ForgotPassword";
 import UpdatePassword from "./pages/UpdatePassword";
@@ -27,6 +28,7 @@ const App = () => (
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<Index />} />
+          <Route path="/login" element={<Login />} />
           <Route path="/dashboard" element={
             <AuthGuard>
               <Dashboard />
