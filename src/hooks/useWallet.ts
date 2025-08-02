@@ -55,7 +55,11 @@ export const useWallet = () => {
   }, []);
 
   const checkConnection = async () => {
+    // Wait a bit for ethereum object to be available
+    await new Promise(resolve => setTimeout(resolve, 100));
+    
     if (!window.ethereum) {
+      console.log('No ethereum object found on window');
       setWalletState(prev => ({ ...prev, error: 'No wallet found' }));
       return;
     }
