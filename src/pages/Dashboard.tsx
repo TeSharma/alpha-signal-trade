@@ -7,6 +7,7 @@ import Sidebar from "@/components/layout/Sidebar";
 import TopBar from "@/components/layout/TopBar";
 import MobileHeader from "@/components/layout/MobileHeader";
 import CollapsibleCard from "@/components/ui/collapsible-card";
+import { SupabaseTest } from '@/components/ui/supabase-test';
 
 const Dashboard = () => {
   const [accountMode, setAccountMode] = useState<'demo' | 'live'>('demo');
@@ -38,6 +39,9 @@ const Dashboard = () => {
       <div className="lg:hidden">
         <MobileDashboard accountMode={accountMode} mockTrades={mockTrades} />
       </div>
+
+      {/* Supabase Test Component */}
+      <SupabaseTest />
     </div>
   );
 };

@@ -1,57 +1,25 @@
-
 import { createClient } from '@supabase/supabase-js'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
-// Validate and normalize URL before creating client
-let supabaseClient = null
-if (supabaseUrl && supabaseAnonKey) {
-  try {
-    // Normalize URL - ensure proper format
-    let normalizedUrl = supabaseUrl.trim()
-    
-    // Remove any existing protocol
-    normalizedUrl = normalizedUrl.replace(/^https?:\/\//, '')
-    
-    // Add single https:// protocol
-    normalizedUrl = `https://${normalizedUrl}`
-    
-    // Remove trailing slashes
-    normalizedUrl = normalizedUrl.replace(/\/+$/, '')
-    
-    // Validate URL structure
-    const urlObj = new URL(normalizedUrl)
-    if (!urlObj.hostname) {
-      throw new Error('Invalid Supabase URL - missing hostname')
-    }
-    
-    supabaseClient = createClient(normalizedUrl, supabaseAnonKey)
-    console.log('Supabase client initialized with URL:', normalizedUrl)
-  } catch (error) {
-    console.error('Supabase initialization failed:', {
-      originalUrl: supabaseUrl,
-      error: error.message
-    })
-    throw error // Re-throw to prevent silent failures
+if (!supabaseUrl || !supabaseAnonKey) {
+  throw new Error('Missing Supabase environment variables')
+}
+
+// Ensure URL is properly formatted
+const formattedUrl = supabaseUrl.startsWith('http') 
+  ? supabaseUrl 
+  : `https://${supabaseUrl}`
+
+export const supabase = createClient(formattedUrl, supabaseAnonKey, {
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true
   }
-}
+})
 
-export const supabase = supabaseClient(supabaseUrl, supabaseAnonKey)
-
-if (supabase) {
-  console.log('Supabase client initialized successfully')
-} else {
-  console.warn('Supabase client failed to initialize - check environment variables')
-}
-
-// Auth functions with null checks
 export const signInWithEmail = async (email: string, password: string) => {
-  if (!supabase) {
-    console.warn('Supabase not configured. Please set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY environment variables.')
-    return { data: null, error: new Error('Supabase not configured') }
-  }
-  
   const { data, error } = await supabase.auth.signInWithPassword({
     email,
     password
@@ -60,11 +28,6 @@ export const signInWithEmail = async (email: string, password: string) => {
 }
 
 export const signUpWithEmail = async (email: string, password: string) => {
-  if (!supabase) {
-    console.warn('Supabase not configured. Please set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY environment variables.')
-    return { data: null, error: new Error('Supabase not configured') }
-  }
-  
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
@@ -76,10 +39,6 @@ export const signUpWithEmail = async (email: string, password: string) => {
 }
 
 export const verifyEmail = async (email: string) => {
-  if (!supabase) {
-    return { data: null, error: new Error('Supabase not configured') }
-  }
-  
   const token = new URLSearchParams(window.location.search).get('token') || ''
   const { data, error } = await supabase.auth.verifyOtp({
     type: 'email',
@@ -93,19 +52,11 @@ export const verifyEmail = async (email: string) => {
 }
 
 export const signOut = async () => {
-  if (!supabase) {
-    return { error: new Error('Supabase not configured') }
-  }
-  
   const { error } = await supabase.auth.signOut()
   return { error }
 }
 
 export const resetPassword = async (email: string) => {
-  if (!supabase) {
-    return { data: null, error: new Error('Supabase not configured') }
-  }
-  
   const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
     redirectTo: `${window.location.origin}/update-password`
   })
@@ -113,10 +64,6 @@ export const resetPassword = async (email: string) => {
 }
 
 export const updatePassword = async (newPassword: string) => {
-  if (!supabase) {
-    return { data: null, error: new Error('Supabase not configured') }
-  }
-  
   const { data, error } = await supabase.auth.updateUser({
     password: newPassword
   })
@@ -124,19 +71,54 @@ export const updatePassword = async (newPassword: string) => {
 }
 
 export const getSession = async () => {
-  if (!supabase) {
-    return { session: null, error: new Error('Supabase not configured') }
-  }
-  
   const { data, error } = await supabase.auth.getSession()
   return { session: data.session, error }
 }
 
 export const getUser = async () => {
-  if (!supabase) {
-    return { user: null, error: new Error('Supabase not configured') }
-  }
-  
   const { data: { user }, error } = await supabase.auth.getUser()
   return { user, error }
+}
+
+// Test connection function
+export const testConnection = async () => {
+  try {
+    // Test database connection by checking database health
+    const { error: dbError } = await supabase
+      .from('_health')
+      .select('*')
+      .limit(1)
+    
+    if (dbError) {
+      console.log('Database connection test:', { status: 'error', error: dbError.message })
+    } else {
+      console.log('Database connection test:', { status: 'success' })
+    }
+
+    // Test authentication
+    const { data: authData, error: authError } = await supabase.auth.getSession()
+    if (authError) {
+      console.log('Auth service test:', { status: 'error', error: authError.message })
+    } else {
+      console.log('Auth service test:', { status: 'success' })
+    }
+
+    return {
+      database: !dbError,
+      auth: !authError,
+      errors: {
+        database: dbError?.message,
+        auth: authError?.message
+      }
+    }
+  } catch (error) {
+    console.error('Connection test failed:', error)
+    return {
+      database: false,
+      auth: false,
+      errors: {
+        general: error.message
+      }
+    }
+  }
 }
