@@ -3,7 +3,9 @@ import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Wallet, RefreshCw, ToggleLeft, ToggleRight } from "lucide-react";
+import { Wallet, RefreshCw, ToggleLeft, ToggleRight, AlertTriangle } from "lucide-react";
+import { useWallet } from "@/hooks/useWallet";
+import { useApp } from "@/contexts/AppContext";
 
 interface AccountBalanceProps {
   accountMode: 'demo' | 'live';
@@ -11,11 +13,20 @@ interface AccountBalanceProps {
 }
 
 const AccountBalance = ({ accountMode, onModeChange }: AccountBalanceProps) => {
-  const demoBalance = 1000.00;
-  const liveBalance = 2547.83;
+  const { isConnected, balance: walletBalance, refreshBalance } = useWallet();
+  const { state } = useApp();
+  
+  const demoBalance = state.userBalance;
+  const liveBalance = isConnected ? parseFloat(walletBalance || '0') : 0;
   const currentBalance = accountMode === 'demo' ? demoBalance : liveBalance;
 
   const handleModeToggle = () => {
+    if (accountMode === 'demo') {
+      // Switching to live - check wallet connection
+      if (!isConnected) {
+        return; // Don't switch if wallet not connected
+      }
+    }
     onModeChange(accountMode === 'demo' ? 'live' : 'demo');
   };
 
@@ -71,12 +82,29 @@ const AccountBalance = ({ accountMode, onModeChange }: AccountBalanceProps) => {
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-3xl font-bold">${currentBalance.toFixed(2)}</p>
+              <p className="text-3xl font-bold">
+                {accountMode === 'demo' 
+                  ? `$${currentBalance.toFixed(2)}` 
+                  : `${currentBalance.toFixed(4)} ETH`
+                }
+              </p>
               <div className="flex items-center gap-2 mt-1">
                 <Badge variant={accountMode === 'demo' ? 'default' : 'destructive'}>
                   {accountMode === 'demo' ? 'Demo Account' : 'Live Account'}
                 </Badge>
-                <span className="text-sm text-gray-500">USDC</span>
+                <span className="text-sm text-gray-500">
+                  {accountMode === 'demo' ? 'USDC' : 'ETH'}
+                </span>
+                {accountMode === 'live' && (
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    onClick={refreshBalance}
+                    className="h-6 w-6 p-0"
+                  >
+                    <RefreshCw className="h-3 w-3" />
+                  </Button>
+                )}
               </div>
             </div>
             <div className="text-right">
@@ -85,7 +113,18 @@ const AccountBalance = ({ accountMode, onModeChange }: AccountBalanceProps) => {
             </div>
           </div>
 
-          {accountMode === 'live' && (
+          {accountMode === 'live' && !isConnected && (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4 text-red-600" />
+                <p className="text-sm text-red-800">
+                  <strong>Wallet Required:</strong> Connect your wallet to access live trading.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {accountMode === 'live' && isConnected && (
             <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
               <p className="text-sm text-yellow-800">
                 <strong>Live Trading:</strong> Real funds at risk. Trade responsibly.

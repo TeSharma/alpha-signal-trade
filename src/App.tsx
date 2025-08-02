@@ -4,6 +4,7 @@ import { AuthGuard } from "@/components/auth/AuthGuard";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { AppProvider } from "@/contexts/AppContext";
 import Index from "./pages/Index";
 import Dashboard from "./pages/Dashboard";
 import Trade from "./pages/Trade";
@@ -23,9 +24,10 @@ const queryClient = new QueryClient();
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <BrowserRouter>
+      <AppProvider>
+        <Toaster />
+        <Sonner />
+        <BrowserRouter>
         <Routes>
           <Route path="/" element={<Index />} />
           <Route path="/login" element={<Login />} />
@@ -65,7 +67,8 @@ const App = () => (
           <Route path="/verify-email" element={<VerifyEmail />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
-      </BrowserRouter>
+        </BrowserRouter>
+      </AppProvider>
     </TooltipProvider>
   </QueryClientProvider>
 );

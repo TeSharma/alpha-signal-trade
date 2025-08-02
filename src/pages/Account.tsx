@@ -11,6 +11,7 @@ import TopBar from "@/components/layout/TopBar";
 import MobileHeader from "@/components/layout/MobileHeader";
 import TradeHistory from "@/components/trading/TradeHistory";
 import CollapsibleCard from "@/components/ui/collapsible-card";
+import WalletStatus from "@/components/wallet/WalletStatus";
 
 const Account = () => {
   const [accountMode, setAccountMode] = useState<'demo' | 'live'>('demo');
@@ -47,6 +48,9 @@ const DesktopAccount = ({ accountMode }: { accountMode: 'demo' | 'live' }) => (
         <h1 className="text-3xl font-bold text-gray-900">Account</h1>
         <p className="text-gray-600">Manage your profile, security, and preferences</p>
       </div>
+
+      {/* Wallet Status */}
+      <WalletStatus />
 
       {/* Account Details */}
       <Card>
