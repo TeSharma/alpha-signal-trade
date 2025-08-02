@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { signInWithEmail } from '@/lib/supabase'
+import { supabase } from '@/integrations/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -17,7 +17,7 @@ export const LoginForm = () => {
     setLoading(true)
     setError('')
 
-    const { error } = await signInWithEmail(email, password)
+    const { error } = await supabase.auth.signInWithPassword({ email, password })
     
     if (error) {
       setError(error.message)

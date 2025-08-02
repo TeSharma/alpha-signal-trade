@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { signUpWithEmail } from '@/lib/supabase'
+import { supabase } from '@/integrations/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -26,7 +26,13 @@ export const SignupForm = () => {
       return
     }
 
-    const { data, error: signupError } = await signUpWithEmail(email, password)
+    const { data, error: signupError } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        emailRedirectTo: `${window.location.origin}/`
+      }
+    })
     
     if (signupError) {
       setError(signupError.message)

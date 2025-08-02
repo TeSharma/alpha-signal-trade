@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getSession } from '@/lib/supabase'
+import { supabase } from '@/integrations/supabase/client'
 import { Toaster } from '@/components/ui/toaster'
 import { useToast } from '@/components/ui/use-toast'
 
@@ -10,7 +10,7 @@ export const AuthGuard = ({ children }: { children: React.ReactNode }) => {
 
   useEffect(() => {
     const checkAuth = async () => {
-      const { session, error } = await getSession()
+      const { data: { session }, error } = await supabase.auth.getSession()
       
       if (error || !session) {
         toast({

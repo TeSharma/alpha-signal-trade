@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Menu, Bell, Wallet, X } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { useWallet } from "@/hooks/useWallet";
 import Sidebar from "./Sidebar";
 
 interface MobileHeaderProps {
@@ -13,6 +14,7 @@ interface MobileHeaderProps {
 
 const MobileHeader = ({ accountMode, onAccountModeChange }: MobileHeaderProps) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const { isConnected, connectWallet, isConnecting } = useWallet();
 
   return (
     <div className="lg:hidden">
@@ -46,7 +48,13 @@ const MobileHeader = ({ accountMode, onAccountModeChange }: MobileHeaderProps) =
           <Button variant="ghost" size="sm">
             <Bell className="h-4 w-4" />
           </Button>
-          <Button variant="ghost" size="sm">
+          <Button 
+            variant="ghost" 
+            size="sm"
+            onClick={connectWallet}
+            disabled={isConnecting}
+            className={isConnected ? "text-green-600" : ""}
+          >
             <Wallet className="h-4 w-4" />
           </Button>
         </div>

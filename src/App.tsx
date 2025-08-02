@@ -4,12 +4,15 @@ import { AuthGuard } from "@/components/auth/AuthGuard";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { AppProvider } from "@/contexts/AppContext";
 import Index from "./pages/Index";
 import Dashboard from "./pages/Dashboard";
 import Trade from "./pages/Trade";
 import Signals from "./pages/Signals";
+import Community from "./pages/Community";
 import Education from "./pages/Education";
 import Account from "./pages/Account";
+import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 import ForgotPassword from "./pages/ForgotPassword";
 import UpdatePassword from "./pages/UpdatePassword";
@@ -21,11 +24,13 @@ const queryClient = new QueryClient();
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <BrowserRouter>
+      <AppProvider>
+        <Toaster />
+        <Sonner />
+        <BrowserRouter>
         <Routes>
           <Route path="/" element={<Index />} />
+          <Route path="/login" element={<Login />} />
           <Route path="/dashboard" element={
             <AuthGuard>
               <Dashboard />
@@ -39,6 +44,11 @@ const App = () => (
           <Route path="/signals" element={
             <AuthGuard>
               <Signals />
+            </AuthGuard>
+          } />
+          <Route path="/community" element={
+            <AuthGuard>
+              <Community />
             </AuthGuard>
           } />
           <Route path="/education" element={
@@ -57,7 +67,8 @@ const App = () => (
           <Route path="/verify-email" element={<VerifyEmail />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
-      </BrowserRouter>
+        </BrowserRouter>
+      </AppProvider>
     </TooltipProvider>
   </QueryClientProvider>
 );

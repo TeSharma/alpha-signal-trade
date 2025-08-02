@@ -3,22 +3,44 @@ import { createClient } from '@supabase/supabase-js'
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error('Missing Supabase environment variables')
+// Validate and normalize URL before creating client
+let supabase = null
+if (supabaseUrl && supabaseAnonKey) {
+  try {
+    // Normalize URL - ensure proper format
+    let normalizedUrl = supabaseUrl.trim()
+    
+    // Remove any existing protocol
+    normalizedUrl = normalizedUrl.replace(/^https?:\/\//, '')
+    
+    // Add single https:// protocol
+    normalizedUrl = `https://${normalizedUrl}`
+    
+    // Remove trailing slashes
+    normalizedUrl = normalizedUrl.replace(/\/+$/, '')
+    
+    // Validate URL structure
+    const urlObj = new URL(normalizedUrl)
+    if (!urlObj.hostname) {
+      throw new Error('Invalid Supabase URL - missing hostname')
+    }
+    
+    supabase = createClient(normalizedUrl, supabaseAnonKey)
+    console.log('Supabase client initialized with URL:', normalizedUrl)
+  } catch (error) {
+    console.error('Supabase initialization failed:', {
+      originalUrl: supabaseUrl,
+      error: error.message
+    })
+    throw error // Re-throw to prevent silent failures
+  }
+} else {
+  console.warn('Supabase environment variables not found. Please set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.')
 }
 
-// Ensure URL is properly formatted
-const formattedUrl = supabaseUrl.startsWith('http') 
-  ? supabaseUrl 
-  : `https://${supabaseUrl}`
+export { supabase }
 
-export const supabase = createClient(formattedUrl, supabaseAnonKey, {
-  auth: {
-    persistSession: true,
-    autoRefreshToken: true
-  }
-})
-
+// Auth functions with null checks
 export const signInWithEmail = async (email: string, password: string) => {
   const { data, error } = await supabase.auth.signInWithPassword({
     email,

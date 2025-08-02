@@ -1,6 +1,6 @@
 import Web3 from 'web3';
 
-let web3Instance;
+let web3Instance = null;
 
 export const getWeb3 = () => {
   if (!web3Instance && window.ethereum) {

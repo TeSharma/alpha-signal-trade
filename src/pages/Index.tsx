@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useNavigate } from 'react-router-dom';
-import { TrendingUp, Shield, BookOpen, Users, Bot, BarChart3, UserPlus } from "lucide-react";
+import { TrendingUp, Shield, BookOpen, Users, Bot, BarChart3, UserPlus, LogIn } from "lucide-react";
 
 const Index = () => {
   const navigate = useNavigate();
@@ -49,6 +49,14 @@ const Index = () => {
         <nav className="flex justify-end items-center">
           <div className="flex items-center gap-4">
             <Badge variant="outline">Beta Version</Badge>
+            <Button 
+              variant="outline" 
+              onClick={() => navigate('/login')}
+              className="flex items-center gap-2"
+            >
+              <LogIn className="h-4 w-4" />
+              Login
+            </Button>
             <Button 
               variant="outline" 
               onClick={() => navigate('/signup')}
