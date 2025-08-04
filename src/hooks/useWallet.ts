@@ -55,16 +55,30 @@ export const useWallet = () => {
   }, []);
 
   const checkConnection = async () => {
-    // Wait longer for ethereum object to be available
-    await new Promise(resolve => setTimeout(resolve, 500));
+    // Wait for wallet providers to load
+    let attempts = 0;
+    const maxAttempts = 10;
     
-    console.log('Checking wallet connection...');
-    console.log('window.ethereum available:', !!window.ethereum);
-    console.log('window.ethereum.isMetaMask:', window.ethereum?.isMetaMask);
+    while (attempts < maxAttempts) {
+      console.log(`Attempt ${attempts + 1}: Checking for wallet...`);
+      console.log('window.ethereum available:', !!window.ethereum);
+      console.log('window.ethereum.isMetaMask:', window.ethereum?.isMetaMask);
+      
+      if (window.ethereum) {
+        console.log('Ethereum provider found!');
+        break;
+      }
+      
+      attempts++;
+      await new Promise(resolve => setTimeout(resolve, 200));
+    }
     
     if (!window.ethereum) {
-      console.log('No ethereum object found on window');
-      setWalletState(prev => ({ ...prev, error: 'No wallet found' }));
+      console.log('No ethereum object found after all attempts');
+      setWalletState(prev => ({ 
+        ...prev, 
+        error: 'Please install MetaMask, Coinbase Wallet, or another Web3 wallet' 
+      }));
       return;
     }
 

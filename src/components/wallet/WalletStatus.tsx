@@ -44,9 +44,42 @@ const WalletStatus = () => {
         </CardHeader>
         <CardContent className="space-y-4">
           {error && (
-            <div className="flex items-center gap-2 text-red-600 text-sm">
-              <AlertTriangle className="h-4 w-4" />
-              {error}
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 text-red-600 text-sm">
+                <AlertTriangle className="h-4 w-4" />
+                {error}
+              </div>
+              {error.includes('install') && (
+                <div className="p-3 bg-muted rounded-lg text-sm">
+                  <p className="font-medium mb-2">Popular Web3 Wallets:</p>
+                  <div className="space-y-1">
+                    <a 
+                      href="https://metamask.io/" 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="block text-blue-600 hover:text-blue-800"
+                    >
+                      • MetaMask (Browser Extension)
+                    </a>
+                    <a 
+                      href="https://www.coinbase.com/wallet" 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="block text-blue-600 hover:text-blue-800"
+                    >
+                      • Coinbase Wallet
+                    </a>
+                    <a 
+                      href="https://walletconnect.com/" 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="block text-blue-600 hover:text-blue-800"
+                    >
+                      • WalletConnect
+                    </a>
+                  </div>
+                </div>
+              )}
             </div>
           )}
           <p className="text-sm text-muted-foreground">
