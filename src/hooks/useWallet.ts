@@ -55,8 +55,12 @@ export const useWallet = () => {
   }, []);
 
   const checkConnection = async () => {
-    // Wait a bit for ethereum object to be available
-    await new Promise(resolve => setTimeout(resolve, 100));
+    // Wait longer for ethereum object to be available
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
+    console.log('Checking wallet connection...');
+    console.log('window.ethereum available:', !!window.ethereum);
+    console.log('window.ethereum.isMetaMask:', window.ethereum?.isMetaMask);
     
     if (!window.ethereum) {
       console.log('No ethereum object found on window');
@@ -88,7 +92,12 @@ export const useWallet = () => {
   };
 
   const connectWallet = useCallback(async () => {
+    console.log('Connect wallet clicked');
+    console.log('window.ethereum available:', !!window.ethereum);
+    console.log('window.ethereum object:', window.ethereum);
+    
     if (!window.ethereum) {
+      console.log('No ethereum provider found');
       toast.error('Please install MetaMask or another Web3 wallet');
       setWalletState(prev => ({ ...prev, error: 'No wallet found' }));
       return;

@@ -36,7 +36,7 @@ export function SupabaseTest() {
             <p>Auth Service: {testResult.auth ? '✅' : '❌'}</p>
             {testResult.errors && Object.entries(testResult.errors).map(([key, error]) => (
               error && <p key={key} className="text-red-500">
-                {key}: {error}
+                {key}: {String(error)}
               </p>
             ))}
           </div>
