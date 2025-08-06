@@ -14,6 +14,27 @@ export type Database = {
   }
   public: {
     Tables: {
+      _health: {
+        Row: {
+          additional_info: Json | null
+          checked_at: string | null
+          id: number
+          status: string
+        }
+        Insert: {
+          additional_info?: Json | null
+          checked_at?: string | null
+          id?: never
+          status?: string
+        }
+        Update: {
+          additional_info?: Json | null
+          checked_at?: string | null
+          id?: never
+          status?: string
+        }
+        Relationships: []
+      }
       chat_rooms: {
         Row: {
           created_at: string
@@ -48,15 +69,7 @@ export type Database = {
           requires_verification?: boolean
           updated_at?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "chat_rooms_created_by_fkey"
-            columns: ["created_by"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["user_id"]
-          },
-        ]
+        Relationships: []
       }
       messages: {
         Row: {
@@ -115,39 +128,36 @@ export type Database = {
       profiles: {
         Row: {
           avatar_url: string | null
-          bio: string | null
-          created_at: string
-          display_name: string | null
-          id: string
-          is_online: boolean
-          last_seen: string | null
-          updated_at: string
+          email: string | null
+          full_name: string | null
+          id: number
+          location: string | null
+          updated_at: string | null
           user_id: string
-          username: string
+          username: string | null
+          website: string | null
         }
         Insert: {
           avatar_url?: string | null
-          bio?: string | null
-          created_at?: string
-          display_name?: string | null
-          id?: string
-          is_online?: boolean
-          last_seen?: string | null
-          updated_at?: string
+          email?: string | null
+          full_name?: string | null
+          id?: never
+          location?: string | null
+          updated_at?: string | null
           user_id: string
-          username: string
+          username?: string | null
+          website?: string | null
         }
         Update: {
           avatar_url?: string | null
-          bio?: string | null
-          created_at?: string
-          display_name?: string | null
-          id?: string
-          is_online?: boolean
-          last_seen?: string | null
-          updated_at?: string
+          email?: string | null
+          full_name?: string | null
+          id?: never
+          location?: string | null
+          updated_at?: string | null
           user_id?: string
-          username?: string
+          username?: string | null
+          website?: string | null
         }
         Relationships: []
       }
