@@ -7,7 +7,9 @@ import { useNavigate } from 'react-router-dom'
 import { Link } from 'react-router-dom'
 
 export const SignupForm = () => {
+  const [fullName, setFullName] = useState('')
   const [email, setEmail] = useState('')
+  const [location, setLocation] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [error, setError] = useState('')
@@ -20,6 +22,18 @@ export const SignupForm = () => {
     setLoading(true)
     setError('')
 
+    if (!fullName.trim()) {
+      setError('Full name is required')
+      setLoading(false)
+      return
+    }
+
+    if (!location.trim()) {
+      setError('Location is required')
+      setLoading(false)
+      return
+    }
+
     if (password !== confirmPassword) {
       setError('Passwords do not match')
       setLoading(false)
@@ -30,7 +44,11 @@ export const SignupForm = () => {
       email,
       password,
       options: {
-        emailRedirectTo: `${window.location.origin}/`
+        emailRedirectTo: `${window.location.origin}/`,
+        data: {
+          full_name: fullName,
+          location: location
+        }
       }
     })
     
@@ -39,7 +57,7 @@ export const SignupForm = () => {
     } else if (data?.user?.identities?.length === 0) {
       setError('User already registered')
     } else {
-      setSuccess('Check your email for verification link')
+      setSuccess('Account created successfully! Check your email for verification link')
     }
 
     setLoading(false)
@@ -50,7 +68,7 @@ export const SignupForm = () => {
       <div className="text-center">
         <h1 className="text-2xl font-bold">Create an account</h1>
         <p className="text-sm text-gray-500">
-          Enter your email and password to sign up
+          Enter your details to get started with trading
         </p>
       </div>
 
@@ -68,6 +86,19 @@ export const SignupForm = () => {
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="space-y-2">
+          <Label htmlFor="fullName">Full Name</Label>
+          <Input
+            id="fullName"
+            type="text"
+            value={fullName}
+            onChange={(e) => setFullName(e.target.value)}
+            required
+            placeholder="Enter your full name"
+            autoComplete="name"
+          />
+        </div>
+
+        <div className="space-y-2">
           <Label htmlFor="email">Email</Label>
           <Input
             id="email"
@@ -75,7 +106,21 @@ export const SignupForm = () => {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
+            placeholder="Enter your email"
             autoComplete="username"
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="location">Location</Label>
+          <Input
+            id="location"
+            type="text"
+            value={location}
+            onChange={(e) => setLocation(e.target.value)}
+            required
+            placeholder="Enter your location (City, Country)"
+            autoComplete="address-level1"
           />
         </div>
 

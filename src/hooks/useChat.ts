@@ -24,7 +24,7 @@ export interface Message {
   updated_at: string;
   profiles?: {
     username: string;
-    display_name: string;
+    full_name: string;
     avatar_url?: string;
   };
 }
@@ -33,7 +33,7 @@ export interface UserProfile {
   id: string;
   user_id: string;
   username: string;
-  display_name: string;
+  full_name: string;
   avatar_url?: string;
   is_online: boolean;
   last_seen: string;
@@ -86,7 +86,7 @@ export const useChat = () => {
           updated_at,
           profiles:user_id (
             username,
-            display_name,
+            full_name,
             avatar_url
           )
         `)
@@ -111,7 +111,7 @@ export const useChat = () => {
         updated_at: item.updated_at,
         profiles: item.profiles ? {
           username: item.profiles.username,
-          display_name: item.profiles.display_name,
+          full_name: item.profiles.full_name,
           avatar_url: item.profiles.avatar_url,
         } : undefined,
       }));
@@ -184,13 +184,17 @@ export const useChat = () => {
           // Fetch user profile for the new message
           const { data: profile } = await supabase
             .from('profiles')
-            .select('username, display_name, avatar_url')
+            .select('username, full_name, avatar_url')
             .eq('user_id', newMessage.user_id)
             .single();
 
           setMessages((prev) => [
             ...prev,
-            { ...newMessage, profiles: profile },
+            { ...newMessage, profiles: profile ? {
+              username: profile.username,
+              full_name: profile.full_name,
+              avatar_url: profile.avatar_url,
+            } : undefined },
           ]);
         }
       )

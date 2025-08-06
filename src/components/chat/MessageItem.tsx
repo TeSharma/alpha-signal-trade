@@ -9,7 +9,7 @@ interface MessageItemProps {
 }
 
 export const MessageItem = ({ message, showAvatar }: MessageItemProps) => {
-  const displayName = message.profiles?.display_name || message.profiles?.username || 'Anonymous';
+  const displayName = message.profiles?.full_name || message.profiles?.username || 'Anonymous';
   const username = message.profiles?.username || 'anonymous';
   const avatarUrl = message.profiles?.avatar_url;
 
