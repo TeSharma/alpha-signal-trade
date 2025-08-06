@@ -83,12 +83,16 @@ export const useWallet = () => {
     }
 
     try {
-      const web3 = getWeb3();
-      const accounts = await web3.eth.getAccounts();
-      const chainId = await web3.eth.getChainId();
+      // Check if MetaMask is connected by requesting accounts
+      const accounts = await window.ethereum.request({ 
+        method: 'eth_accounts' 
+      });
 
       if (accounts.length > 0) {
+        const web3 = getWeb3();
+        const chainId = await web3.eth.getChainId();
         const balance = await getAccountBalance(accounts[0]);
+        
         setWalletState({
           isConnected: true,
           account: accounts[0],
@@ -98,10 +102,25 @@ export const useWallet = () => {
           error: null,
         });
         setWalletConnected(true);
+        console.log('Wallet reconnected:', accounts[0]);
+      } else {
+        console.log('No accounts found - wallet not connected');
+        setWalletState(prev => ({ 
+          ...prev, 
+          isConnected: false, 
+          account: null,
+          error: null 
+        }));
+        setWalletConnected(false);
       }
     } catch (error) {
       console.error('Error checking wallet connection:', error);
-      setWalletState(prev => ({ ...prev, error: 'Failed to check connection' }));
+      setWalletState(prev => ({ 
+        ...prev, 
+        isConnected: false,
+        error: 'Failed to check connection' 
+      }));
+      setWalletConnected(false);
     }
   };
 
