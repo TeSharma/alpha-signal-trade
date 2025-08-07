@@ -2,8 +2,9 @@
 import React from 'react';
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Bell, Settings, User } from "lucide-react";
+import { Settings, User } from "lucide-react";
 import { useApp } from "@/contexts/AppContext";
+import { NotificationBell } from "@/components/notifications/NotificationBell";
 
 interface TopBarProps {
   accountMode: 'demo' | 'live';
@@ -51,9 +52,7 @@ const TopBar = ({ accountMode }: TopBarProps) => {
 
       {/* Right side - User actions */}
       <div className="flex items-center gap-2">
-        <Button variant="ghost" size="sm">
-          <Bell className="h-4 w-4" />
-        </Button>
+        <NotificationBell />
         <Button variant="ghost" size="sm">
           <Settings className="h-4 w-4" />
         </Button>
