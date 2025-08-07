@@ -125,6 +125,84 @@ export type Database = {
           },
         ]
       }
+      notification_preferences: {
+        Row: {
+          created_at: string
+          email_notifications: boolean
+          id: string
+          marketing_emails: boolean
+          price_alerts: boolean
+          push_notifications: boolean
+          signal_alerts: boolean
+          trading_alerts: boolean
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          email_notifications?: boolean
+          id?: string
+          marketing_emails?: boolean
+          price_alerts?: boolean
+          push_notifications?: boolean
+          signal_alerts?: boolean
+          trading_alerts?: boolean
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          email_notifications?: boolean
+          id?: string
+          marketing_emails?: boolean
+          price_alerts?: boolean
+          push_notifications?: boolean
+          signal_alerts?: boolean
+          trading_alerts?: boolean
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      notifications: {
+        Row: {
+          action_url: string | null
+          created_at: string
+          id: string
+          is_read: boolean
+          message: string
+          metadata: Json | null
+          title: string
+          type: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          action_url?: string | null
+          created_at?: string
+          id?: string
+          is_read?: boolean
+          message: string
+          metadata?: Json | null
+          title: string
+          type?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          action_url?: string | null
+          created_at?: string
+          id?: string
+          is_read?: boolean
+          message?: string
+          metadata?: Json | null
+          title?: string
+          type?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -181,7 +259,17 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      create_notification: {
+        Args: {
+          p_user_id: string
+          p_title: string
+          p_message: string
+          p_type?: string
+          p_action_url?: string
+          p_metadata?: Json
+        }
+        Returns: string
+      }
     }
     Enums: {
       [_ in never]: never
