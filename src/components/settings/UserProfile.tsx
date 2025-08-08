@@ -8,6 +8,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { User, Camera, Loader2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { useFileStorage } from '@/hooks/useFileStorage';
 
 interface UserProfile {
   id: number;
@@ -32,6 +33,7 @@ export const UserProfile = () => {
     location: '',
   });
   const { toast } = useToast();
+  const { uploadFile, getFileUrl } = useFileStorage();
 
   useEffect(() => {
     fetchProfile();
@@ -107,6 +109,36 @@ export const UserProfile = () => {
     }
   };
 
+  const handleAvatarUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const filePath = await uploadFile(file, 'avatars');
+      if (filePath) {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          await supabase
+            .from('profiles')
+            .update({ avatar_url: getFileUrl(filePath, 'avatars') })
+            .eq('user_id', user.id);
+          
+          fetchProfile();
+          toast({
+            title: "Success",
+            description: "Avatar updated successfully",
+          });
+        }
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to update avatar",
+        variant: "destructive",
+      });
+    }
+  };
+
   const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
@@ -153,10 +185,21 @@ export const UserProfile = () => {
                 {formData.full_name ? formData.full_name.split(' ').map(n => n[0]).join('').toUpperCase() : 'U'}
               </AvatarFallback>
             </Avatar>
-            <Button variant="outline" size="sm" type="button">
-              <Camera className="h-4 w-4 mr-2" />
-              Change Avatar
-            </Button>
+            <div>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={handleAvatarUpload}
+                className="hidden"
+                id="avatar-upload"
+              />
+              <Button variant="outline" size="sm" type="button" asChild>
+                <label htmlFor="avatar-upload" className="cursor-pointer">
+                  <Camera className="h-4 w-4 mr-2" />
+                  Change Avatar
+                </label>
+              </Button>
+            </div>
           </div>
 
           {/* Form Fields */}
