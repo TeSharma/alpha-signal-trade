@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Wallet, RefreshCw, ToggleLeft, ToggleRight, AlertTriangle } from "lucide-react";
 import { useWallet } from "@/hooks/useWallet";
-import { useApp } from "@/contexts/AppContext";
+import { useTrades } from "@/hooks/useTrades";
 
 interface AccountBalanceProps {
   accountMode: 'demo' | 'live';
@@ -14,11 +14,12 @@ interface AccountBalanceProps {
 
 const AccountBalance = ({ accountMode, onModeChange }: AccountBalanceProps) => {
   const { isConnected, balance: walletBalance, refreshBalance } = useWallet();
-  const { state } = useApp();
+  const { accountBalance, fetchAccountBalance } = useTrades();
   
-  const demoBalance = state.userBalance;
+  const demoBalance = accountBalance?.demo_balance || 10000;
   const liveBalance = isConnected ? parseFloat(walletBalance || '0') : 0;
   const currentBalance = accountMode === 'demo' ? demoBalance : liveBalance;
+  const todayPnL = accountBalance?.today_pnl || 0;
 
   const handleModeToggle = () => {
     if (accountMode === 'demo') {
@@ -30,10 +31,9 @@ const AccountBalance = ({ accountMode, onModeChange }: AccountBalanceProps) => {
     onModeChange(accountMode === 'demo' ? 'live' : 'demo');
   };
 
-  const handleResetDemo = () => {
+  const handleResetDemo = async () => {
     if (accountMode === 'demo') {
-      // Reset demo account logic would go here
-      console.log('Demo account reset to $1000');
+      await fetchAccountBalance();
     }
   };
 
@@ -109,7 +109,11 @@ const AccountBalance = ({ accountMode, onModeChange }: AccountBalanceProps) => {
             </div>
             <div className="text-right">
               <p className="text-sm text-gray-600">Today's P&L</p>
-              <p className="text-lg font-semibold text-green-500">+$23.45</p>
+              <p className={`text-lg font-semibold ${
+                todayPnL >= 0 ? 'text-green-500' : 'text-red-500'
+              }`}>
+                {todayPnL >= 0 ? '+' : ''}${todayPnL.toFixed(2)}
+              </p>
             </div>
           </div>
 

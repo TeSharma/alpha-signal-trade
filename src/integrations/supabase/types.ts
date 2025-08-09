@@ -35,6 +35,39 @@ export type Database = {
         }
         Relationships: []
       }
+      account_balances: {
+        Row: {
+          created_at: string
+          demo_balance: number
+          id: string
+          live_balance: number
+          today_pnl: number
+          total_pnl: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          demo_balance?: number
+          id?: string
+          live_balance?: number
+          today_pnl?: number
+          total_pnl?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          demo_balance?: number
+          id?: string
+          live_balance?: number
+          today_pnl?: number
+          total_pnl?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       chat_rooms: {
         Row: {
           created_at: string
@@ -254,6 +287,99 @@ export type Database = {
         }
         Relationships: []
       }
+      trades: {
+        Row: {
+          account_mode: string
+          closed_at: string | null
+          contract_address: string | null
+          created_at: string
+          direction: string
+          entry_price: number
+          exit_price: number | null
+          id: string
+          lot_size: number
+          pair: string
+          pnl: number | null
+          status: string
+          stop_loss: number | null
+          take_profit: number | null
+          transaction_hash: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          account_mode?: string
+          closed_at?: string | null
+          contract_address?: string | null
+          created_at?: string
+          direction: string
+          entry_price: number
+          exit_price?: number | null
+          id?: string
+          lot_size: number
+          pair: string
+          pnl?: number | null
+          status?: string
+          stop_loss?: number | null
+          take_profit?: number | null
+          transaction_hash?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          account_mode?: string
+          closed_at?: string | null
+          contract_address?: string | null
+          created_at?: string
+          direction?: string
+          entry_price?: number
+          exit_price?: number | null
+          id?: string
+          lot_size?: number
+          pair?: string
+          pnl?: number | null
+          status?: string
+          stop_loss?: number | null
+          take_profit?: number | null
+          transaction_hash?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      trading_signals: {
+        Row: {
+          confidence: number
+          created_at: string
+          direction: string
+          id: string
+          pair: string
+          recommendation: string
+          signal_data: Json | null
+          user_id: string
+        }
+        Insert: {
+          confidence: number
+          created_at?: string
+          direction: string
+          id?: string
+          pair: string
+          recommendation: string
+          signal_data?: Json | null
+          user_id: string
+        }
+        Update: {
+          confidence?: number
+          created_at?: string
+          direction?: string
+          id?: string
+          pair?: string
+          recommendation?: string
+          signal_data?: Json | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_files: {
         Row: {
           bucket_id: string
@@ -301,6 +427,14 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      calculate_trade_pnl: {
+        Args: { p_trade_id: string; p_current_price: number }
+        Returns: number
+      }
+      close_trade: {
+        Args: { p_trade_id: string; p_exit_price: number }
+        Returns: string
+      }
       create_notification: {
         Args: {
           p_user_id: string

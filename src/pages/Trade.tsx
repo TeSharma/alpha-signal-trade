@@ -6,6 +6,8 @@ import MobileHeader from "@/components/layout/MobileHeader";
 import TradingForm from "@/components/trading/TradingForm";
 import MarketOverview from "@/components/trading/MarketOverview";
 import MobileTradingInterface from "@/components/trading/MobileTradingInterface";
+import TradeHistory from "@/components/trading/TradeHistory";
+import AccountBalance from "@/components/trading/AccountBalance";
 
 const Trade = () => {
   const [accountMode, setAccountMode] = useState<'demo' | 'live'>('demo');
@@ -30,11 +32,16 @@ const Trade = () => {
                 <p className="text-gray-600">Execute trades on synthetic forex pairs</p>
               </div>
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div className="lg:col-span-1">
+                <div className="lg:col-span-1 space-y-6">
+                  <AccountBalance 
+                    accountMode={accountMode} 
+                    onModeChange={setAccountMode} 
+                  />
                   <TradingForm accountMode={accountMode} />
                 </div>
-                <div className="lg:col-span-2">
+                <div className="lg:col-span-2 space-y-6">
                   <MarketOverview />
+                  <TradeHistory accountMode={accountMode} />
                 </div>
               </div>
             </div>

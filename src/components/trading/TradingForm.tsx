@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { TrendingUp, TrendingDown, Calculator } from "lucide-react";
 import { connectToBlockchain, getContractInstance, getWeb3 } from '@/lib/web3';
+import { useTrades } from '@/hooks/useTrades';
 
 interface TradingFormProps {
   accountMode: 'demo' | 'live';
@@ -27,6 +28,7 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
   const [takeProfit, setTakeProfit] = useState('');
   const [signalResponse, setSignalResponse] = useState<AISignalResponse | null>(null);
   const [isLoadingSignal, setIsLoadingSignal] = useState(false);
+  const { createTrade, accountBalance } = useTrades();
 
   const forexPairs = [
     { pair: 'GBP/JPY', price: '188.25', change: '+0.45%' },
@@ -38,64 +40,71 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
   const selectedPairData = forexPairs.find(p => p.pair === selectedPair);
 
   const handleSubmitTrade = async () => {
-    const tradeData = {
-      pair: selectedPair,
-      direction: tradeDirection,
-      lotSize: parseFloat(lotSize),
-      stopLoss: stopLoss ? parseFloat(stopLoss) : null,
-      takeProfit: takeProfit ? parseFloat(takeProfit) : null,
-      accountMode
-    };
-
-    if (accountMode === 'demo') {
-      console.log('Demo trade submitted:', tradeData);
-      setIsLoadingSignal(true);
-      try {
-        const response = await checkAISignal(selectedPair, tradeDirection);
-        setSignalResponse(response);
-        console.log('AI Signal:', response);
-        if (response.confidence > 70) {
-          console.log('Strong signal - would execute trade in live mode');
-        }
-      } catch (error) {
-        console.error('Error checking AI signal:', error);
-      } finally {
-        setIsLoadingSignal(false);
-      }
-      return;
-    }
-
+    const currentPrice = parseFloat(selectedPairData?.price || '0');
+    
+    setIsLoadingSignal(true);
     try {
-      const isConnected = await connectToBlockchain();
-      if (!isConnected) {
-        console.error('Failed to connect to blockchain');
-        return;
+      // Check AI signal first
+      const response = await checkAISignal(selectedPair, tradeDirection);
+      setSignalResponse(response);
+
+      // Create trade in database
+      const tradeResult = await createTrade({
+        pair: selectedPair,
+        direction: tradeDirection,
+        lot_size: parseFloat(lotSize),
+        entry_price: currentPrice,
+        stop_loss: stopLoss ? parseFloat(stopLoss) : undefined,
+        take_profit: takeProfit ? parseFloat(takeProfit) : undefined,
+        account_mode: accountMode
+      });
+
+      if (accountMode === 'live' && tradeResult) {
+        // Handle blockchain transaction for live trades
+        try {
+          const isConnected = await connectToBlockchain();
+          if (!isConnected) {
+            console.error('Failed to connect to blockchain');
+            return;
+          }
+
+          const contractAddress = '0x...'; // Replace with actual contract address
+          const contractAbi = []; // Replace with actual ABI
+          const contract = getContractInstance(contractAddress, contractAbi);
+
+          const web3 = getWeb3();
+          const accounts = await web3.eth.getAccounts();
+          const tx = await contract.methods.openPosition(
+            selectedPair,
+            parseFloat(lotSize),
+            currentPrice,
+            stopLoss ? parseFloat(stopLoss) : 0,
+            takeProfit ? parseFloat(takeProfit) : 0
+          ).send({ from: accounts[0] });
+
+          console.log('Blockchain transaction successful:', tx);
+        } catch (error) {
+          console.error('Blockchain error:', error);
+        }
       }
 
-      const contractAddress = '0x...'; // Replace with actual contract address
-      const contractAbi = []; // Replace with actual ABI
-      const contract = getContractInstance(contractAddress, contractAbi);
-
-      const web3 = getWeb3();
-      const accounts = await web3.eth.getAccounts();
-      const tx = await contract.methods.openPosition(
-        tradeData.pair,
-        tradeData.lotSize,
-        parseFloat(selectedPairData?.price || '0'), // Current price
-        tradeData.stopLoss || 0,
-        tradeData.takeProfit || 0
-      ).send({ from: accounts[0] });
-
-      console.log('Transaction successful:', tx);
+      // Reset form
+      setLotSize('0.1');
+      setStopLoss('');
+      setTakeProfit('');
     } catch (error) {
       console.error('Error submitting trade:', error);
+    } finally {
+      setIsLoadingSignal(false);
     }
   };
 
   const calculateLotSize = () => {
-    const balance = accountMode === 'demo' ? 1000 : 2547.83;
+    const balance = accountMode === 'demo' 
+      ? (accountBalance?.demo_balance || 10000) 
+      : (accountBalance?.live_balance || 0);
     const riskPercent = 2; // 2% risk
-    const suggestedLot = (balance * (riskPercent / 100) / 100).toFixed(2);
+    const suggestedLot = (balance * (riskPercent / 100) / 10000).toFixed(2);
     setLotSize(suggestedLot);
   };
 
