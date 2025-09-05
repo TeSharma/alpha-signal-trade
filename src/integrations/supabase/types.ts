@@ -68,6 +68,51 @@ export type Database = {
         }
         Relationships: []
       }
+      bridge_transactions: {
+        Row: {
+          amount: number
+          asset: string
+          created_at: string
+          dest_tx_hash: string | null
+          from_chain: string
+          id: string
+          initiated_by: string | null
+          metadata: Json | null
+          source_tx_hash: string | null
+          status: string
+          to_chain: string
+          updated_at: string
+        }
+        Insert: {
+          amount: number
+          asset?: string
+          created_at?: string
+          dest_tx_hash?: string | null
+          from_chain: string
+          id?: string
+          initiated_by?: string | null
+          metadata?: Json | null
+          source_tx_hash?: string | null
+          status?: string
+          to_chain: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          asset?: string
+          created_at?: string
+          dest_tx_hash?: string | null
+          from_chain?: string
+          id?: string
+          initiated_by?: string | null
+          metadata?: Json | null
+          source_tx_hash?: string | null
+          status?: string
+          to_chain?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       chat_rooms: {
         Row: {
           created_at: string
@@ -101,6 +146,54 @@ export type Database = {
           name?: string
           requires_verification?: boolean
           updated_at?: string
+        }
+        Relationships: []
+      }
+      deposits: {
+        Row: {
+          amount: number
+          asset: string
+          chain: string
+          confirmed_at: string | null
+          created_at: string
+          from_address: string | null
+          id: string
+          metadata: Json | null
+          status: string
+          to_address: string | null
+          tx_hash: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          asset?: string
+          chain: string
+          confirmed_at?: string | null
+          created_at?: string
+          from_address?: string | null
+          id?: string
+          metadata?: Json | null
+          status?: string
+          to_address?: string | null
+          tx_hash?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          asset?: string
+          chain?: string
+          confirmed_at?: string | null
+          created_at?: string
+          from_address?: string | null
+          id?: string
+          metadata?: Json | null
+          status?: string
+          to_address?: string | null
+          tx_hash?: string | null
+          updated_at?: string
+          user_id?: string
         }
         Relationships: []
       }
@@ -242,7 +335,9 @@ export type Database = {
           email: string | null
           full_name: string | null
           id: number
+          l2_address: string | null
           location: string | null
+          tron_address: string | null
           updated_at: string | null
           user_id: string
           username: string | null
@@ -253,7 +348,9 @@ export type Database = {
           email?: string | null
           full_name?: string | null
           id?: never
+          l2_address?: string | null
           location?: string | null
+          tron_address?: string | null
           updated_at?: string | null
           user_id: string
           username?: string | null
@@ -264,7 +361,9 @@ export type Database = {
           email?: string | null
           full_name?: string | null
           id?: never
+          l2_address?: string | null
           location?: string | null
+          tron_address?: string | null
           updated_at?: string | null
           user_id?: string
           username?: string | null
@@ -300,6 +399,8 @@ export type Database = {
           lot_size: number
           pair: string
           pnl: number | null
+          settlement_chain: string | null
+          source_chain: string | null
           status: string
           stop_loss: number | null
           take_profit: number | null
@@ -319,6 +420,8 @@ export type Database = {
           lot_size: number
           pair: string
           pnl?: number | null
+          settlement_chain?: string | null
+          source_chain?: string | null
           status?: string
           stop_loss?: number | null
           take_profit?: number | null
@@ -338,6 +441,8 @@ export type Database = {
           lot_size?: number
           pair?: string
           pnl?: number | null
+          settlement_chain?: string | null
+          source_chain?: string | null
           status?: string
           stop_loss?: number | null
           take_profit?: number | null
@@ -417,6 +522,54 @@ export type Database = {
           id?: string
           is_public?: boolean | null
           mime_type?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      withdrawals: {
+        Row: {
+          amount: number
+          asset: string
+          chain: string
+          created_at: string
+          destination_address: string
+          fee: number | null
+          id: string
+          metadata: Json | null
+          processed_at: string | null
+          status: string
+          tx_hash: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          asset?: string
+          chain: string
+          created_at?: string
+          destination_address: string
+          fee?: number | null
+          id?: string
+          metadata?: Json | null
+          processed_at?: string | null
+          status?: string
+          tx_hash?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          asset?: string
+          chain?: string
+          created_at?: string
+          destination_address?: string
+          fee?: number | null
+          id?: string
+          metadata?: Json | null
+          processed_at?: string | null
+          status?: string
+          tx_hash?: string | null
           updated_at?: string
           user_id?: string
         }

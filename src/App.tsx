@@ -12,6 +12,7 @@ import Signals from "./pages/Signals";
 import Community from "./pages/Community";
 import Education from "./pages/Education";
 import Account from "./pages/Account";
+import Wallet from "./pages/Wallet";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 import ForgotPassword from "./pages/ForgotPassword";
@@ -59,6 +60,11 @@ const App = () => (
           <Route path="/account" element={
             <AuthGuard>
               <Account />
+            </AuthGuard>
+          } />
+          <Route path="/wallet" element={
+            <AuthGuard>
+              <Wallet />
             </AuthGuard>
           } />
           <Route path="/signup" element={<Signup />} />
