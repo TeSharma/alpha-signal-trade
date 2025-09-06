@@ -1,15 +1,21 @@
-const TronWeb = require('tronweb');
+// @ts-ignore - TronWeb types are complex, using any for simplicity
+const TronWeb = (window as any).TronWeb || null;
 
 const TRON_FULL_NODE = 'https://api.trongrid.io';
 const TRON_SOLIDITY_NODE = 'https://api.trongrid.io';
 const TRON_EVENT_SERVER = 'https://api.trongrid.io';
 
-// TronWeb instance for reading data
-export const tronWeb = new TronWeb(
-  TRON_FULL_NODE,
-  TRON_SOLIDITY_NODE,
-  TRON_EVENT_SERVER
-);
+// TronWeb instance for reading data (will be initialized when TronWeb is available)
+export let tronWeb: any = null;
+
+// Initialize TronWeb when available
+if (typeof window !== 'undefined' && TronWeb) {
+  tronWeb = new TronWeb(
+    TRON_FULL_NODE,
+    TRON_SOLIDITY_NODE,
+    TRON_EVENT_SERVER
+  );
+}
 
 export const connectTronWallet = async () => {
   if (!window.tronWeb) {
