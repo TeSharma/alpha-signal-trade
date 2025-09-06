@@ -1,8 +1,7 @@
 
 import React from 'react';
-import { Button } from "@/components/ui/button";
-import { Wallet } from "lucide-react";
 import ResponsiveNav from "./ResponsiveNav";
+import { WalletConnectButton } from "@/components/wallet/WalletConnectButton";
 
 const Sidebar = () => {
   return (
@@ -20,10 +19,7 @@ const Sidebar = () => {
 
       {/* Wallet Connection */}
       <div className="p-4 border-b border-gray-200">
-        <Button variant="outline" className="w-full" size="sm">
-          <Wallet className="h-4 w-4 mr-2" />
-          Connect Wallet
-        </Button>
+        <WalletConnectButton />
       </div>
 
       {/* Navigation Menu */}

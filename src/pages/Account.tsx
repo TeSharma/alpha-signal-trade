@@ -9,6 +9,7 @@ import { SecuritySettings } from "@/components/settings/SecuritySettings";
 import { AppearanceSettings } from "@/components/settings/AppearanceSettings";
 import { NotificationPreferences } from "@/components/notifications/NotificationPreferences";
 import WalletStatus from "@/components/wallet/WalletStatus";
+import { TronWalletConnect } from "@/components/wallet/TronWalletConnect";
 
 const Account = () => {
   const [accountMode, setAccountMode] = useState<'demo' | 'live'>('demo');
@@ -47,7 +48,10 @@ const DesktopAccount = ({ accountMode }: { accountMode: 'demo' | 'live' }) => (
       </div>
 
       {/* Wallet Status */}
-      <WalletStatus />
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <WalletStatus />
+        <TronWalletConnect />
+      </div>
 
       <Tabs defaultValue="profile" className="space-y-6">
         <TabsList className="grid w-full grid-cols-4">

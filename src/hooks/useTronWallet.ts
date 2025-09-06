@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { connectTronWallet, getTronBalance, getUSDTBalance, setupTronEventListeners } from '@/lib/tronweb';
+import { useApp } from '@/contexts/AppContext';
 
 interface TronWalletState {
   isConnected: boolean;
@@ -11,6 +12,7 @@ interface TronWalletState {
 }
 
 export const useTronWallet = () => {
+  const { setWalletConnected } = useApp();
   const [walletState, setWalletState] = useState<TronWalletState>({
     isConnected: false,
     address: null,
@@ -37,6 +39,7 @@ export const useTronWallet = () => {
           usdtBalance,
           error: null
         }));
+        setWalletConnected(true);
       } catch (error) {
         console.error('Error checking Tron wallet:', error);
         setWalletState(prev => ({
@@ -45,7 +48,7 @@ export const useTronWallet = () => {
         }));
       }
     }
-  }, []);
+  }, [setWalletConnected]);
 
   const connectWallet = useCallback(async () => {
     setWalletState(prev => ({ ...prev, isConnecting: true, error: null }));
@@ -65,6 +68,7 @@ export const useTronWallet = () => {
         isConnecting: false,
         error: null
       });
+      setWalletConnected(true);
     } catch (error: any) {
       setWalletState(prev => ({
         ...prev,
@@ -72,7 +76,7 @@ export const useTronWallet = () => {
         error: error.message || 'Failed to connect wallet'
       }));
     }
-  }, []);
+  }, [setWalletConnected]);
 
   const disconnectWallet = useCallback(() => {
     setWalletState({
@@ -83,7 +87,8 @@ export const useTronWallet = () => {
       isConnecting: false,
       error: null
     });
-  }, []);
+    setWalletConnected(false);
+  }, [setWalletConnected]);
 
   const refreshBalances = useCallback(async () => {
     if (walletState.address) {
