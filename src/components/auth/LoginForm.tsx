@@ -6,15 +6,19 @@ import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
 import { useNavigate } from 'react-router-dom'
 import { Link } from 'react-router-dom'
+import { useToast } from '@/components/ui/use-toast'
+import { Eye, EyeOff } from 'lucide-react'
 import authIllustration from '@/assets/auth-illustration.jpg'
 
 export const LoginForm = () => {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [rememberMe, setRememberMe] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const navigate = useNavigate()
+  const { toast } = useToast()
 
   const handleGoogleLogin = async () => {
     const { error } = await supabase.auth.signInWithOAuth({
@@ -40,8 +44,17 @@ export const LoginForm = () => {
 
     if (error) {
       setError(error.message)
+      toast({
+        title: 'Sign in failed',
+        description: error.message,
+        variant: 'destructive'
+      })
     } else {
-      navigate('/')
+      toast({
+        title: 'Welcome back!',
+        description: 'You have successfully signed in.',
+      })
+      navigate('/dashboard')
     }
 
     setLoading(false)
@@ -105,16 +118,31 @@ export const LoginForm = () => {
 
             <div>
               <Label htmlFor="password" className="text-gray-700 font-medium">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                placeholder="Enter your password"
-                className="h-12 mt-2"
-                autoComplete="current-password"
-              />
+              <div className="relative mt-2">
+                <Input
+                  id="password"
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  placeholder="Enter your password"
+                  className="h-12 pr-10"
+                  autoComplete="current-password"
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                  onClick={() => setShowPassword(!showPassword)}
+                >
+                  {showPassword ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
+                </Button>
+              </div>
             </div>
 
             <div className="flex items-center justify-between">

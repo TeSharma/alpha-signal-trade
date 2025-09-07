@@ -6,6 +6,8 @@ import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
 import { useNavigate } from 'react-router-dom'
 import { Link } from 'react-router-dom'
+import { useToast } from '@/components/ui/use-toast'
+import { Eye, EyeOff, Check, X } from 'lucide-react'
 import authIllustration from '@/assets/auth-illustration.jpg'
 
 export const SignupForm = () => {
@@ -16,10 +18,21 @@ export const SignupForm = () => {
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [rememberMe, setRememberMe] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [loading, setLoading] = useState(false)
   const navigate = useNavigate()
+  const { toast } = useToast()
+
+  // Password validation helpers
+  const passwordValidation = {
+    length: password.length >= 8,
+    match: password === confirmPassword && confirmPassword.length > 0,
+    hasUpper: /[A-Z]/.test(password),
+    hasNumber: /\d/.test(password)
+  }
 
   const handleGoogleSignup = async () => {
     const { error } = await supabase.auth.signInWithOAuth({
@@ -78,10 +91,24 @@ export const SignupForm = () => {
     
     if (signupError) {
       setError(signupError.message)
+      toast({
+        title: 'Sign up failed',
+        description: signupError.message,
+        variant: 'destructive'
+      })
     } else if (data?.user?.identities?.length === 0) {
       setError('User already registered')
+      toast({
+        title: 'Sign up failed',
+        description: 'User already registered',
+        variant: 'destructive'
+      })
     } else {
       setSuccess('Account created successfully! Check your email for verification link')
+      toast({
+        title: 'Account created!',
+        description: 'Check your email for verification link to complete registration.',
+      })
     }
 
     setLoading(false)
@@ -188,28 +215,110 @@ export const SignupForm = () => {
 
               <div>
                 <Label htmlFor="password" className="text-gray-700 font-medium">Password</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  placeholder="Min. 8 characters"
-                  className="h-12 mt-2"
-                />
+                <div className="relative mt-2">
+                  <Input
+                    id="password"
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    placeholder="Min. 8 characters"
+                    className="h-12 pr-10"
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                    onClick={() => setShowPassword(!showPassword)}
+                  >
+                    {showPassword ? (
+                      <EyeOff className="h-4 w-4" />
+                    ) : (
+                      <Eye className="h-4 w-4" />
+                    )}
+                  </Button>
+                </div>
+                
+                {/* Password validation indicators */}
+                {password.length > 0 && (
+                  <div className="mt-2 space-y-1">
+                    <div className="flex items-center gap-2 text-sm">
+                      {passwordValidation.length ? (
+                        <Check className="h-3 w-3 text-green-600" />
+                      ) : (
+                        <X className="h-3 w-3 text-red-600" />
+                      )}
+                      <span className={passwordValidation.length ? 'text-green-600' : 'text-red-600'}>
+                        At least 8 characters
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2 text-sm">
+                      {passwordValidation.hasUpper ? (
+                        <Check className="h-3 w-3 text-green-600" />
+                      ) : (
+                        <X className="h-3 w-3 text-red-600" />
+                      )}
+                      <span className={passwordValidation.hasUpper ? 'text-green-600' : 'text-red-600'}>
+                        One uppercase letter
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2 text-sm">
+                      {passwordValidation.hasNumber ? (
+                        <Check className="h-3 w-3 text-green-600" />
+                      ) : (
+                        <X className="h-3 w-3 text-red-600" />
+                      )}
+                      <span className={passwordValidation.hasNumber ? 'text-green-600' : 'text-red-600'}>
+                        One number
+                      </span>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div>
                 <Label htmlFor="confirmPassword" className="text-gray-700 font-medium">Confirm Password</Label>
-                <Input
-                  id="confirmPassword"
-                  type="password"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  required
-                  placeholder="Confirm your password"
-                  className="h-12 mt-2"
-                />
+                <div className="relative mt-2">
+                  <Input
+                    id="confirmPassword"
+                    type={showConfirmPassword ? 'text' : 'password'}
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    required
+                    placeholder="Confirm your password"
+                    className="h-12 pr-10"
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  >
+                    {showConfirmPassword ? (
+                      <EyeOff className="h-4 w-4" />
+                    ) : (
+                      <Eye className="h-4 w-4" />
+                    )}
+                  </Button>
+                </div>
+                
+                {/* Password match indicator */}
+                {confirmPassword.length > 0 && (
+                  <div className="mt-2">
+                    <div className="flex items-center gap-2 text-sm">
+                      {passwordValidation.match ? (
+                        <Check className="h-3 w-3 text-green-600" />
+                      ) : (
+                        <X className="h-3 w-3 text-red-600" />
+                      )}
+                      <span className={passwordValidation.match ? 'text-green-600' : 'text-red-600'}>
+                        Passwords match
+                      </span>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
