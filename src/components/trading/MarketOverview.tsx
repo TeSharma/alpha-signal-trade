@@ -1,28 +1,61 @@
 
-import React from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { TrendingUp, TrendingDown, BarChart3 } from "lucide-react";
+import React, { useState } from 'react'
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { TrendingUp, TrendingDown, BarChart3, Wifi, WifiOff, RefreshCw } from "lucide-react"
+import { useMarketData } from '@/hooks/useMarketData'
 
 const MarketOverview = () => {
-  const marketData = [
-    { pair: 'GBP/JPY', price: '188.25', change: '+0.45%', changeValue: '+0.84', volume: '2.1B' },
-    { pair: 'EUR/USD', price: '1.0842', change: '-0.12%', changeValue: '-0.0013', volume: '4.2B' },
-    { pair: 'USD/JPY', price: '149.75', change: '+0.23%', changeValue: '+0.34', volume: '3.8B' },
-    { pair: 'GBP/USD', price: '1.2567', change: '+0.18%', changeValue: '+0.0023', volume: '2.9B' },
-    { pair: 'AUD/USD', price: '0.6745', change: '-0.08%', changeValue: '-0.0005', volume: '1.5B' },
-    { pair: 'USD/CAD', price: '1.3412', change: '+0.15%', changeValue: '+0.0020', volume: '1.8B' },
-  ];
+  const { prices, isConnected, updatePrices } = useMarketData()
+  const [selectedTimeframe, setSelectedTimeframe] = useState('1m')
+
+  const timeframes = ['1m', '5m', '15m', '1h', '4h', '1d']
 
   return (
     <div className="space-y-6">
       {/* TradingView Chart Placeholder */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <BarChart3 className="h-5 w-5" />
-            Live Chart
-          </CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center gap-2">
+              <BarChart3 className="h-5 w-5" />
+              Live Chart
+            </CardTitle>
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1">
+                {isConnected ? (
+                  <Wifi className="h-4 w-4 text-green-500" />
+                ) : (
+                  <WifiOff className="h-4 w-4 text-red-500" />
+                )}
+                <span className={`text-xs ${isConnected ? 'text-green-500' : 'text-red-500'}`}>
+                  {isConnected ? 'Live' : 'Disconnected'}
+                </span>
+              </div>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={updatePrices}
+                className="h-6 w-6 p-0"
+              >
+                <RefreshCw className="h-3 w-3" />
+              </Button>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            {timeframes.map((tf) => (
+              <Button
+                key={tf}
+                variant={selectedTimeframe === tf ? "default" : "outline"}
+                size="sm"
+                onClick={() => setSelectedTimeframe(tf)}
+                className="h-6 text-xs"
+              >
+                {tf}
+              </Button>
+            ))}
+          </div>
         </CardHeader>
         <CardContent>
           <div className="bg-gray-100 rounded-lg p-8 text-center h-96 flex items-center justify-center">
@@ -45,17 +78,25 @@ const MarketOverview = () => {
       {/* Market Overview */}
       <Card>
         <CardHeader>
-          <CardTitle>Market Overview</CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle>Market Overview</CardTitle>
+            <div className="flex items-center gap-2 text-sm text-gray-500">
+              <div className="flex items-center gap-1">
+                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                Live Prices
+              </div>
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
           <div className="space-y-3">
-            {marketData.map((item) => (
-              <div key={item.pair} className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50 transition-colors">
+            {prices.slice(0, 6).map((item) => (
+              <div key={item.pair} className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50 transition-colors cursor-pointer">
                 <div className="flex items-center gap-3">
                   <div className={`p-2 rounded-full ${
-                    item.change.startsWith('+') ? 'bg-green-100' : 'bg-red-100'
+                    item.changePercent >= 0 ? 'bg-green-100' : 'bg-red-100'
                   }`}>
-                    {item.change.startsWith('+') ? (
+                    {item.changePercent >= 0 ? (
                       <TrendingUp className="h-4 w-4 text-green-600" />
                     ) : (
                       <TrendingDown className="h-4 w-4 text-red-600" />
@@ -69,14 +110,17 @@ const MarketOverview = () => {
                 <div className="text-right">
                   <p className="font-semibold">{item.price}</p>
                   <div className="flex items-center gap-2">
-                    <Badge variant={item.change.startsWith('+') ? 'default' : 'destructive'}>
-                      {item.change}
+                    <Badge variant={item.changePercent >= 0 ? 'default' : 'destructive'}>
+                      {item.changePercent >= 0 ? '+' : ''}{item.changePercent}%
                     </Badge>
                     <span className={`text-sm ${
-                      item.change.startsWith('+') ? 'text-green-500' : 'text-red-500'
+                      item.changePercent >= 0 ? 'text-green-500' : 'text-red-500'
                     }`}>
-                      {item.changeValue}
+                      {item.changePercent >= 0 ? '+' : ''}{item.change}
                     </span>
+                  </div>
+                  <div className="text-xs text-gray-500 mt-1">
+                    Spread: {item.spread}
                   </div>
                 </div>
               </div>

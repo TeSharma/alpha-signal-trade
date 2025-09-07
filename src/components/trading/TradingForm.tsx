@@ -1,13 +1,16 @@
 
-import React, { useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
-import { TrendingUp, TrendingDown, Calculator } from "lucide-react";
-import { connectToBlockchain, getContractInstance, getWeb3 } from '@/lib/web3';
-import { useTrades } from '@/hooks/useTrades';
+import React, { useState, useEffect } from 'react'
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Badge } from "@/components/ui/badge"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { TrendingUp, TrendingDown, Calculator, Activity, Zap } from "lucide-react"
+import { connectToBlockchain, getContractInstance, getWeb3 } from '@/lib/web3'
+import { useTrades } from '@/hooks/useTrades'
+import { useMarketData } from '@/hooks/useMarketData'
+import { useToast } from '@/components/ui/use-toast'
 
 interface TradingFormProps {
   accountMode: 'demo' | 'live';
@@ -21,43 +24,65 @@ interface AISignalResponse {
 }
 
 const TradingForm = ({ accountMode }: TradingFormProps) => {
-  const [selectedPair, setSelectedPair] = useState('GBP/JPY');
-  const [tradeDirection, setTradeDirection] = useState<'buy' | 'sell'>('buy');
-  const [lotSize, setLotSize] = useState('0.1');
-  const [stopLoss, setStopLoss] = useState('');
-  const [takeProfit, setTakeProfit] = useState('');
-  const [signalResponse, setSignalResponse] = useState<AISignalResponse | null>(null);
-  const [isLoadingSignal, setIsLoadingSignal] = useState(false);
-  const { createTrade, accountBalance } = useTrades();
+  const [selectedPair, setSelectedPair] = useState('GBP/JPY')
+  const [tradeDirection, setTradeDirection] = useState<'buy' | 'sell'>('buy')
+  const [lotSize, setLotSize] = useState('0.1')
+  const [stopLoss, setStopLoss] = useState('')
+  const [takeProfit, setTakeProfit] = useState('')
+  const [orderType, setOrderType] = useState<'market' | 'limit'>('market')
+  const [limitPrice, setLimitPrice] = useState('')
+  const [signalResponse, setSignalResponse] = useState<AISignalResponse | null>(null)
+  const [isLoadingSignal, setIsLoadingSignal] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  
+  const { createTrade, accountBalance } = useTrades()
+  const { prices, getCurrentPrice, getBidPrice, getAskPrice } = useMarketData()
+  const { toast } = useToast()
 
-  const forexPairs = [
-    { pair: 'GBP/JPY', price: '188.25', change: '+0.45%' },
-    { pair: 'EUR/USD', price: '1.0842', change: '-0.12%' },
-    { pair: 'USD/JPY', price: '149.75', change: '+0.23%' },
-    { pair: 'GBP/USD', price: '1.2567', change: '+0.18%' },
-  ];
-
-  const selectedPairData = forexPairs.find(p => p.pair === selectedPair);
+  const selectedPairData = prices.find(p => p.pair === selectedPair)
+  const currentPrice = getCurrentPrice(selectedPair)
+  const bidPrice = getBidPrice(selectedPair)
+  const askPrice = getAskPrice(selectedPair)
 
   const handleSubmitTrade = async () => {
-    const currentPrice = parseFloat(selectedPairData?.price || '0');
+    if (isSubmitting) return
     
-    setIsLoadingSignal(true);
+    setIsSubmitting(true)
+    setIsLoadingSignal(true)
+    
     try {
+      // Validate inputs
+      if (!lotSize || parseFloat(lotSize) <= 0) {
+        toast({
+          title: 'Invalid lot size',
+          description: 'Please enter a valid lot size',
+          variant: 'destructive'
+        })
+        return
+      }
+
+      // Get execution price based on order type and direction
+      let executionPrice = currentPrice
+      if (orderType === 'market') {
+        executionPrice = tradeDirection === 'buy' ? askPrice : bidPrice
+      } else if (orderType === 'limit' && limitPrice) {
+        executionPrice = parseFloat(limitPrice)
+      }
+
       // Check AI signal first
-      const response = await checkAISignal(selectedPair, tradeDirection);
-      setSignalResponse(response);
+      const response = await checkAISignal(selectedPair, tradeDirection)
+      setSignalResponse(response)
 
       // Create trade in database
       const tradeResult = await createTrade({
         pair: selectedPair,
         direction: tradeDirection,
         lot_size: parseFloat(lotSize),
-        entry_price: currentPrice,
+        entry_price: executionPrice,
         stop_loss: stopLoss ? parseFloat(stopLoss) : undefined,
         take_profit: takeProfit ? parseFloat(takeProfit) : undefined,
         account_mode: accountMode
-      });
+      })
 
       if (accountMode === 'live' && tradeResult) {
         // Handle blockchain transaction for live trades
@@ -88,16 +113,20 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
         }
       }
 
-      // Reset form
-      setLotSize('0.1');
-      setStopLoss('');
-      setTakeProfit('');
+      // Reset form on success
+      if (tradeResult) {
+        setLotSize('0.1')
+        setStopLoss('')
+        setTakeProfit('')
+        setLimitPrice('')
+      }
     } catch (error) {
-      console.error('Error submitting trade:', error);
+      console.error('Error submitting trade:', error)
     } finally {
-      setIsLoadingSignal(false);
+      setIsLoadingSignal(false)
+      setIsSubmitting(false)
     }
-  };
+  }
 
   const calculateLotSize = () => {
     const balance = accountMode === 'demo' 
@@ -123,7 +152,7 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
         <div className="space-y-2">
           <Label>Currency Pair</Label>
           <div className="grid grid-cols-2 gap-2">
-            {forexPairs.map((pair) => (
+            {prices.slice(0, 4).map((pair) => (
               <Button
                 key={pair.pair}
                 variant={selectedPair === pair.pair ? 'default' : 'outline'}
@@ -132,12 +161,39 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
               >
                 <span className="font-semibold">{pair.pair}</span>
                 <span className="text-xs">{pair.price}</span>
-                <span className={`text-xs ${pair.change.startsWith('+') ? 'text-green-500' : 'text-red-500'}`}>
-                  {pair.change}
+                <span className={`text-xs ${pair.changePercent >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                  {pair.changePercent >= 0 ? '+' : ''}{pair.changePercent}%
                 </span>
               </Button>
             ))}
           </div>
+          
+          {/* Current Price Display */}
+          {selectedPairData && (
+            <div className="bg-blue-50 rounded-lg p-3 space-y-2">
+              <div className="flex justify-between items-center">
+                <span className="text-sm font-medium">Current Price</span>
+                <div className="flex items-center gap-1">
+                  <Activity className="h-3 w-3 text-blue-500" />
+                  <span className="text-xs text-blue-500">Live</span>
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-2 text-sm">
+                <div className="text-center">
+                  <div className="text-xs text-gray-500">Bid</div>
+                  <div className="font-mono font-semibold text-red-600">{bidPrice.toFixed(5)}</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-xs text-gray-500">Price</div>
+                  <div className="font-mono font-semibold">{currentPrice.toFixed(5)}</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-xs text-gray-500">Ask</div>
+                  <div className="font-mono font-semibold text-green-600">{askPrice.toFixed(5)}</div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Trade Direction */}
@@ -163,6 +219,34 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
           </div>
         </div>
 
+        {/* Order Type */}
+        <div className="space-y-2">
+          <Label>Order Type</Label>
+          <Tabs value={orderType} onValueChange={(value) => setOrderType(value as 'market' | 'limit')}>
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="market">Market</TabsTrigger>
+              <TabsTrigger value="limit">Limit</TabsTrigger>
+            </TabsList>
+            <TabsContent value="market" className="space-y-2">
+              <div className="text-sm text-gray-600">
+                Execute immediately at current market price
+              </div>
+            </TabsContent>
+            <TabsContent value="limit" className="space-y-2">
+              <div className="text-sm text-gray-600 mb-2">
+                Execute when price reaches your specified level
+              </div>
+              <Input
+                type="number"
+                value={limitPrice}
+                onChange={(e) => setLimitPrice(e.target.value)}
+                placeholder="Enter limit price"
+                step="0.00001"
+              />
+            </TabsContent>
+          </Tabs>
+        </div>
+
         {/* Lot Size */}
         <div className="space-y-2">
           <div className="flex items-center justify-between">
@@ -180,6 +264,9 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
             step="0.01"
             min="0.01"
           />
+          <div className="text-xs text-gray-500">
+            Position value: ${(parseFloat(lotSize || '0') * currentPrice * 100000).toLocaleString()}
+          </div>
         </div>
 
         {/* Stop Loss */}
@@ -256,7 +343,7 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
           className="w-full" 
           size="lg"
           onClick={handleSubmitTrade}
-          disabled={isLoadingSignal}
+          disabled={isLoadingSignal || isSubmitting}
         >
           {isLoadingSignal ? (
             <span className="flex items-center">
@@ -264,10 +351,20 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
               </svg>
-              Analyzing Signal...
+              {orderType === 'market' ? 'Executing...' : 'Placing Order...'}
             </span>
           ) : (
-            `Place ${tradeDirection.toUpperCase()} Order`
+            <span className="flex items-center">
+              {orderType === 'market' ? (
+                <Zap className="h-4 w-4 mr-2" />
+              ) : (
+                <Activity className="h-4 w-4 mr-2" />
+              )}
+              {orderType === 'market' 
+                ? `${tradeDirection.toUpperCase()} ${selectedPair}` 
+                : `Place ${tradeDirection.toUpperCase()} Limit`
+              }
+            </span>
           )}
         </Button>
       </CardContent>
