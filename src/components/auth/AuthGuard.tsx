@@ -1,64 +1,46 @@
 import { useEffect, useState } from 'react'
-import { useNavigate, useLocation } from 'react-router-dom'
-import { useAuthState } from '@/hooks/useAuthState'
+import { useNavigate } from 'react-router-dom'
+import { supabase } from '@/integrations/supabase/client'
 import { useToast } from '@/components/ui/use-toast'
-import { Loader2, Shield } from 'lucide-react'
+import { Loader2 } from 'lucide-react'
 
 export const AuthGuard = ({ children }: { children: React.ReactNode }) => {
   const navigate = useNavigate()
-  const location = useLocation()
   const { toast } = useToast()
-  const { user, session, loading } = useAuthState()
-  const [hasChecked, setHasChecked] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
-    if (!loading && !hasChecked) {
-      setHasChecked(true)
-      
-      if (!session || !user) {
-        toast({
-          title: 'Authentication required',
-          description: 'Please sign in to access this page',
-          variant: 'destructive'
-        })
+    const checkAuth = async () => {
+      try {
+        const { data: { session }, error } = await supabase.auth.getSession()
         
-        // Store the intended destination for redirect after login
-        const intendedPath = location.pathname + location.search
-        navigate(`/login?redirect=${encodeURIComponent(intendedPath)}`)
+        if (error || !session) {
+          toast({
+            title: 'Authentication required',
+            description: 'Please sign in to access this page',
+            variant: 'destructive'
+          })
+          navigate('/login')
+        }
+      } catch (error) {
+        console.error('Auth check error:', error)
+        navigate('/login')
+      } finally {
+        setIsLoading(false)
       }
     }
-  }, [loading, session, user, hasChecked, navigate, toast, location])
+    checkAuth()
+  }, [navigate, toast])
 
-  if (loading || !hasChecked) {
+  if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-[hsl(var(--auth-bg))] to-white">
-        <div className="flex flex-col items-center gap-6 p-8 bg-[hsl(var(--auth-card))] rounded-2xl shadow-lg border border-[hsl(var(--border))]">
-          <div className="relative">
-            <Shield className="h-12 w-12 text-[hsl(var(--auth-gradient-from))] animate-pulse" />
-            <Loader2 className="h-6 w-6 animate-spin text-[hsl(var(--auth-gradient-to))] absolute -top-1 -right-1" />
-          </div>
-          
-          <div className="text-center space-y-2">
-            <h3 className="text-lg font-semibold text-foreground">
-              Verifying access...
-            </h3>
-            <p className="text-sm text-muted-foreground">
-              Please wait while we check your authentication
-            </p>
-          </div>
-          
-          <div className="flex space-x-1">
-            <div className="w-2 h-2 bg-[hsl(var(--auth-gradient-from))] rounded-full animate-bounce"></div>
-            <div className="w-2 h-2 bg-[hsl(var(--auth-gradient-from))] rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-            <div className="w-2 h-2 bg-[hsl(var(--auth-gradient-from))] rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-          </div>
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+          <p className="text-gray-600">Checking authentication...</p>
         </div>
       </div>
     )
-  }
-
-  if (!session || !user) {
-    return null // Will redirect in useEffect
   }
 
   return <>{children}</>
