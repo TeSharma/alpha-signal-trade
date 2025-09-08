@@ -115,20 +115,22 @@ export const SignupForm = () => {
   }
 
   return (
-    <div className="min-h-screen flex">
+    <div className="min-h-screen flex bg-gradient-to-br from-[hsl(var(--auth-bg))] to-white">
       {/* Left side - Form */}
-      <div className="flex-1 flex items-center justify-center p-8 bg-white">
-        <div className="w-full max-w-md space-y-6">
-          <div className="space-y-2">
-            <h1 className="text-3xl font-bold text-gray-900">Sign up 🔑</h1>
-            <p className="text-gray-500">Enter details to create your account</p>
+      <div className="flex-1 flex items-center justify-center p-4 sm:p-8">
+        <div className="w-full max-w-md space-y-6 bg-[hsl(var(--auth-card))] p-8 rounded-2xl shadow-lg border border-[hsl(var(--border))]">
+          <div className="space-y-2 text-center">
+            <h1 className="text-3xl font-bold bg-gradient-to-r from-[hsl(var(--auth-gradient-from))] to-[hsl(var(--auth-gradient-to))] bg-clip-text text-transparent">
+              Join us today 🔑
+            </h1>
+            <p className="text-muted-foreground">Create your account and start trading</p>
           </div>
 
           {/* Google Signup Button */}
           <Button
             type="button"
             variant="outline"
-            className="w-full h-12 text-gray-700 border-gray-200 hover:bg-gray-50"
+            className="w-full h-12 hover:bg-accent/50 border-border relative overflow-hidden group"
             onClick={handleGoogleSignup}
           >
             <svg className="w-5 h-5 mr-3" viewBox="0 0 24 24">
@@ -335,16 +337,23 @@ export const SignupForm = () => {
 
             <Button 
               type="submit" 
-              className="w-full h-12 bg-blue-600 hover:bg-blue-700 text-white font-medium" 
+              className="w-full h-12 bg-gradient-to-r from-[hsl(var(--auth-gradient-from))] to-[hsl(var(--auth-gradient-to))] hover:opacity-90 transition-all duration-200 font-medium shadow-lg"
               disabled={loading}
             >
-              {loading ? 'Creating account...' : 'Sign up'}
+              {loading ? (
+                <div className="flex items-center gap-2">
+                  <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full"></div>
+                  Creating account...
+                </div>
+              ) : (
+                'Create account'
+              )}
             </Button>
 
-            <div className="text-center text-sm text-gray-600">
+            <div className="text-center text-sm text-muted-foreground">
               Already have an account?{' '}
-              <Link to="/login" className="text-blue-600 hover:underline font-medium">
-                Login now
+              <Link to="/login" className="text-[hsl(var(--auth-gradient-from))] hover:underline font-medium transition-colors">
+                Sign in now
               </Link>
             </div>
           </form>
