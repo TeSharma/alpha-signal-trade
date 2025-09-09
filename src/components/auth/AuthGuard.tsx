@@ -1,47 +1,52 @@
-import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { supabase } from '@/integrations/supabase/client'
-import { useToast } from '@/components/ui/use-toast'
-import { Loader2 } from 'lucide-react'
+import { useAuthState } from '@/hooks/useAuthState'
+import { Navigate, useLocation } from 'react-router-dom'
+import { ReactNode } from 'react'
 
-export const AuthGuard = ({ children }: { children: React.ReactNode }) => {
-  const navigate = useNavigate()
-  const { toast } = useToast()
-  const [isLoading, setIsLoading] = useState(true)
+interface AuthGuardProps {
+  children: ReactNode
+  redirectTo?: string
+}
 
-  useEffect(() => {
-    const checkAuth = async () => {
-      try {
-        const { data: { session }, error } = await supabase.auth.getSession()
-        
-        if (error || !session) {
-          toast({
-            title: 'Authentication required',
-            description: 'Please sign in to access this page',
-            variant: 'destructive'
-          })
-          navigate('/login')
-        }
-      } catch (error) {
-        console.error('Auth check error:', error)
-        navigate('/login')
-      } finally {
-        setIsLoading(false)
-      }
-    }
-    checkAuth()
-  }, [navigate, toast])
-
-  if (isLoading) {
+export const AuthGuard = ({ children, redirectTo = '/login' }: AuthGuardProps) => {
+  const { user, loading } = useAuthState()
+  const location = useLocation()
+  
+  if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="flex flex-col items-center gap-4">
-          <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
-          <p className="text-gray-600">Checking authentication...</p>
+      <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-[hsl(var(--auth-bg))] to-white">
+        <div className="text-center space-y-4">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
+          <p className="text-muted-foreground">Loading...</p>
         </div>
       </div>
     )
   }
+  
+  if (!user) {
+    return <Navigate to={redirectTo} state={{ from: location }} replace />
+  }
+  
+  return <>{children}</>
+}
 
+// Reverse auth guard - redirects authenticated users away from auth pages
+export const GuestGuard = ({ children }: { children: ReactNode }) => {
+  const { user, loading } = useAuthState()
+  
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-[hsl(var(--auth-bg))] to-white">
+        <div className="text-center space-y-4">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
+          <p className="text-muted-foreground">Loading...</p>
+        </div>
+      </div>
+    )
+  }
+  
+  if (user) {
+    return <Navigate to="/dashboard" replace />
+  }
+  
   return <>{children}</>
 }

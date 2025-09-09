@@ -1,5 +1,10 @@
 import { SignupForm } from '@/components/auth/SignupForm'
+import { GuestGuard } from '@/components/auth/AuthGuard'
 
 export default function SignupPage() {
-  return <SignupForm />
+  return (
+    <GuestGuard>
+      <SignupForm />
+    </GuestGuard>
+  )
 }

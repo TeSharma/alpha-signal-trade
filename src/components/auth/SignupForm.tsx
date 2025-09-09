@@ -109,6 +109,10 @@ export const SignupForm = () => {
         title: 'Account created!',
         description: 'Check your email for verification link to complete registration.',
       })
+      // Redirect to verification page with email
+      setTimeout(() => {
+        navigate(`/verify-email?email=${encodeURIComponent(email)}`)
+      }, 1500)
     }
 
     setLoading(false)
