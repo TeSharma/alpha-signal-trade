@@ -9,29 +9,43 @@ import { Link } from 'react-router-dom'
 import { useToast } from '@/components/ui/use-toast'
 import { Eye, EyeOff, Check, X } from 'lucide-react'
 import authIllustration from '@/assets/auth-illustration.jpg'
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { signupSchema, type SignupFormData } from '@/lib/validation'
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form'
 
 export const SignupForm = () => {
-  const [firstName, setFirstName] = useState('')
-  const [lastName, setLastName] = useState('')
-  const [email, setEmail] = useState('')
-  const [location, setLocation] = useState('')
-  const [password, setPassword] = useState('')
-  const [confirmPassword, setConfirmPassword] = useState('')
-  const [rememberMe, setRememberMe] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
-  const [error, setError] = useState('')
-  const [success, setSuccess] = useState('')
   const [loading, setLoading] = useState(false)
   const navigate = useNavigate()
   const { toast } = useToast()
 
+  const form = useForm<SignupFormData>({
+    resolver: zodResolver(signupSchema),
+    defaultValues: {
+      firstName: '',
+      lastName: '',
+      email: '',
+      location: '',
+      password: '',
+      confirmPassword: '',
+      rememberMe: false
+    },
+    mode: 'onChange' // Enable real-time validation
+  })
+
+  // Watch password for real-time validation display
+  const watchedPassword = form.watch('password')
+  const watchedConfirmPassword = form.watch('confirmPassword')
+
   // Password validation helpers
   const passwordValidation = {
-    length: password.length >= 8,
-    match: password === confirmPassword && confirmPassword.length > 0,
-    hasUpper: /[A-Z]/.test(password),
-    hasNumber: /\d/.test(password)
+    length: watchedPassword.length >= 8,
+    match: watchedPassword === watchedConfirmPassword && watchedConfirmPassword.length > 0,
+    hasUpper: /[A-Z]/.test(watchedPassword),
+    hasNumber: /\d/.test(watchedPassword),
+    hasSpecial: /[^A-Za-z0-9]/.test(watchedPassword)
   }
 
   const handleGoogleSignup = async () => {
@@ -42,76 +56,61 @@ export const SignupForm = () => {
       }
     })
     if (error) {
-      setError(error.message)
+      toast({
+        title: 'Sign up failed',
+        description: error.message,
+        variant: 'destructive'
+      })
     }
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const onSubmit = async (data: SignupFormData) => {
     setLoading(true)
-    setError('')
 
-    if (!firstName.trim() || !lastName.trim()) {
-      setError('First and last name are required')
-      setLoading(false)
-      return
-    }
+    const fullName = `${data.firstName} ${data.lastName}`
 
-    if (!location.trim()) {
-      setError('Location is required')
-      setLoading(false)
-      return
-    }
-
-    if (password !== confirmPassword) {
-      setError('Passwords do not match')
-      setLoading(false)
-      return
-    }
-
-    if (password.length < 8) {
-      setError('Password must be at least 8 characters')
-      setLoading(false)
-      return
-    }
-
-    const fullName = `${firstName} ${lastName}`
-
-    const { data, error: signupError } = await supabase.auth.signUp({
-      email,
-      password,
+    const { data: signupData, error: signupError } = await supabase.auth.signUp({
+      email: data.email,
+      password: data.password,
       options: {
         emailRedirectTo: `${window.location.origin}/`,
         data: {
           full_name: fullName,
-          location: location
+          location: data.location
         }
       }
     })
     
     if (signupError) {
-      setError(signupError.message)
+      // Set field-specific errors
+      if (signupError.message.includes('already registered')) {
+        form.setError('email', { message: 'This email is already registered' })
+      } else if (signupError.message.includes('Password')) {
+        form.setError('password', { message: signupError.message })
+      } else {
+        form.setError('root', { message: signupError.message })
+      }
+      
       toast({
         title: 'Sign up failed',
         description: signupError.message,
         variant: 'destructive'
       })
-    } else if (data?.user?.identities?.length === 0) {
-      setError('User already registered')
+    } else if (signupData?.user?.identities?.length === 0) {
+      form.setError('email', { message: 'This email is already registered' })
       toast({
         title: 'Sign up failed',
         description: 'User already registered',
         variant: 'destructive'
       })
     } else {
-      setSuccess('Account created successfully! Check your email for verification link')
       toast({
         title: 'Account created!',
         description: 'Check your email for verification link to complete registration.',
       })
       // Redirect to verification page with email
       setTimeout(() => {
-        navigate(`/verify-email?email=${encodeURIComponent(email)}`)
+        navigate(`/verify-email?email=${encodeURIComponent(data.email)}`)
       }, 1500)
     }
 
@@ -155,212 +154,261 @@ export const SignupForm = () => {
             </div>
           </div>
 
-          {error && (
+          {form.formState.errors.root && (
             <div className="bg-red-50 text-red-600 p-3 rounded-md text-sm">
-              {error}
+              {form.formState.errors.root.message}
             </div>
           )}
 
-          {success && (
-            <div className="bg-green-50 text-green-600 p-3 rounded-md text-sm">
-              {success}
-            </div>
-          )}
-
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-4">
-              <div>
-                <Label htmlFor="firstName" className="text-gray-700 font-medium">Your name</Label>
-                <div className="grid grid-cols-2 gap-3 mt-2">
-                  <Input
-                    id="firstName"
-                    type="text"
-                    value={firstName}
-                    onChange={(e) => setFirstName(e.target.value)}
-                    required
-                    placeholder="First name"
-                    className="h-12"
-                  />
-                  <Input
-                    id="lastName"
-                    type="text"
-                    value={lastName}
-                    onChange={(e) => setLastName(e.target.value)}
-                    required
-                    placeholder="Last name"
-                    className="h-12"
-                  />
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+              <div className="space-y-4">
+                <div>
+                  <Label className="text-gray-700 font-medium">Your name</Label>
+                  <div className="grid grid-cols-2 gap-3 mt-2">
+                    <FormField
+                      control={form.control}
+                      name="firstName"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormControl>
+                            <Input
+                              placeholder="First name"
+                              className="h-12"
+                              {...field}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="lastName"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormControl>
+                            <Input
+                              placeholder="Last name"
+                              className="h-12"
+                              {...field}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
                 </div>
-              </div>
 
-              <div>
-                <Label htmlFor="email" className="text-gray-700 font-medium">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                  placeholder="your@email.com"
-                  className="h-12 mt-2"
+                <FormField
+                  control={form.control}
+                  name="email"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-gray-700 font-medium">Email</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="email"
+                          placeholder="your@email.com"
+                          className="h-12 mt-2"
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="location"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-gray-700 font-medium">Location</FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder="City, Country"
+                          className="h-12 mt-2"
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="password"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-gray-700 font-medium">Password</FormLabel>
+                      <FormControl>
+                        <div className="relative mt-2">
+                          <Input
+                            type={showPassword ? 'text' : 'password'}
+                            placeholder="Min. 8 characters"
+                            className="h-12 pr-10"
+                            {...field}
+                          />
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                            onClick={() => setShowPassword(!showPassword)}
+                          >
+                            {showPassword ? (
+                              <EyeOff className="h-4 w-4" />
+                            ) : (
+                              <Eye className="h-4 w-4" />
+                            )}
+                          </Button>
+                        </div>
+                      </FormControl>
+                      <FormMessage />
+                      
+                      {/* Password validation indicators */}
+                      {watchedPassword.length > 0 && (
+                        <div className="mt-2 space-y-1">
+                          <div className="flex items-center gap-2 text-sm">
+                            {passwordValidation.length ? (
+                              <Check className="h-3 w-3 text-green-600" />
+                            ) : (
+                              <X className="h-3 w-3 text-red-600" />
+                            )}
+                            <span className={passwordValidation.length ? 'text-green-600' : 'text-red-600'}>
+                              At least 8 characters
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2 text-sm">
+                            {passwordValidation.hasUpper ? (
+                              <Check className="h-3 w-3 text-green-600" />
+                            ) : (
+                              <X className="h-3 w-3 text-red-600" />
+                            )}
+                            <span className={passwordValidation.hasUpper ? 'text-green-600' : 'text-red-600'}>
+                              One uppercase letter
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2 text-sm">
+                            {passwordValidation.hasNumber ? (
+                              <Check className="h-3 w-3 text-green-600" />
+                            ) : (
+                              <X className="h-3 w-3 text-red-600" />
+                            )}
+                            <span className={passwordValidation.hasNumber ? 'text-green-600' : 'text-red-600'}>
+                              One number
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2 text-sm">
+                            {passwordValidation.hasSpecial ? (
+                              <Check className="h-3 w-3 text-green-600" />
+                            ) : (
+                              <X className="h-3 w-3 text-red-600" />
+                            )}
+                            <span className={passwordValidation.hasSpecial ? 'text-green-600' : 'text-red-600'}>
+                              One special character
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="confirmPassword"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-gray-700 font-medium">Confirm Password</FormLabel>
+                      <FormControl>
+                        <div className="relative mt-2">
+                          <Input
+                            type={showConfirmPassword ? 'text' : 'password'}
+                            placeholder="Confirm your password"
+                            className="h-12 pr-10"
+                            {...field}
+                          />
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                            onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                          >
+                            {showConfirmPassword ? (
+                              <EyeOff className="h-4 w-4" />
+                            ) : (
+                              <Eye className="h-4 w-4" />
+                            )}
+                          </Button>
+                        </div>
+                      </FormControl>
+                      <FormMessage />
+                      
+                      {/* Password match indicator */}
+                      {watchedConfirmPassword.length > 0 && (
+                        <div className="mt-2">
+                          <div className="flex items-center gap-2 text-sm">
+                            {passwordValidation.match ? (
+                              <Check className="h-3 w-3 text-green-600" />
+                            ) : (
+                              <X className="h-3 w-3 text-red-600" />
+                            )}
+                            <span className={passwordValidation.match ? 'text-green-600' : 'text-red-600'}>
+                              Passwords match
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                    </FormItem>
+                  )}
                 />
               </div>
 
-              <div>
-                <Label htmlFor="location" className="text-gray-700 font-medium">Location</Label>
-                <Input
-                  id="location"
-                  type="text"
-                  value={location}
-                  onChange={(e) => setLocation(e.target.value)}
-                  required
-                  placeholder="City, Country"
-                  className="h-12 mt-2"
-                />
-              </div>
-
-              <div>
-                <Label htmlFor="password" className="text-gray-700 font-medium">Password</Label>
-                <div className="relative mt-2">
-                  <Input
-                    id="password"
-                    type={showPassword ? 'text' : 'password'}
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    required
-                    placeholder="Min. 8 characters"
-                    className="h-12 pr-10"
-                  />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
-                    onClick={() => setShowPassword(!showPassword)}
-                  >
-                    {showPassword ? (
-                      <EyeOff className="h-4 w-4" />
-                    ) : (
-                      <Eye className="h-4 w-4" />
-                    )}
-                  </Button>
-                </div>
-                
-                {/* Password validation indicators */}
-                {password.length > 0 && (
-                  <div className="mt-2 space-y-1">
-                    <div className="flex items-center gap-2 text-sm">
-                      {passwordValidation.length ? (
-                        <Check className="h-3 w-3 text-green-600" />
-                      ) : (
-                        <X className="h-3 w-3 text-red-600" />
-                      )}
-                      <span className={passwordValidation.length ? 'text-green-600' : 'text-red-600'}>
-                        At least 8 characters
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2 text-sm">
-                      {passwordValidation.hasUpper ? (
-                        <Check className="h-3 w-3 text-green-600" />
-                      ) : (
-                        <X className="h-3 w-3 text-red-600" />
-                      )}
-                      <span className={passwordValidation.hasUpper ? 'text-green-600' : 'text-red-600'}>
-                        One uppercase letter
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2 text-sm">
-                      {passwordValidation.hasNumber ? (
-                        <Check className="h-3 w-3 text-green-600" />
-                      ) : (
-                        <X className="h-3 w-3 text-red-600" />
-                      )}
-                      <span className={passwordValidation.hasNumber ? 'text-green-600' : 'text-red-600'}>
-                        One number
-                      </span>
-                    </div>
+              <FormField
+                control={form.control}
+                name="rememberMe"
+                render={({ field }) => (
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id="remember"
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
+                    />
+                    <Label htmlFor="remember" className="text-sm text-gray-700">
+                      Remember me
+                    </Label>
                   </div>
                 )}
-              </div>
-
-              <div>
-                <Label htmlFor="confirmPassword" className="text-gray-700 font-medium">Confirm Password</Label>
-                <div className="relative mt-2">
-                  <Input
-                    id="confirmPassword"
-                    type={showConfirmPassword ? 'text' : 'password'}
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    required
-                    placeholder="Confirm your password"
-                    className="h-12 pr-10"
-                  />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
-                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                  >
-                    {showConfirmPassword ? (
-                      <EyeOff className="h-4 w-4" />
-                    ) : (
-                      <Eye className="h-4 w-4" />
-                    )}
-                  </Button>
-                </div>
-                
-                {/* Password match indicator */}
-                {confirmPassword.length > 0 && (
-                  <div className="mt-2">
-                    <div className="flex items-center gap-2 text-sm">
-                      {passwordValidation.match ? (
-                        <Check className="h-3 w-3 text-green-600" />
-                      ) : (
-                        <X className="h-3 w-3 text-red-600" />
-                      )}
-                      <span className={passwordValidation.match ? 'text-green-600' : 'text-red-600'}>
-                        Passwords match
-                      </span>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="flex items-center space-x-2">
-              <Checkbox
-                id="remember"
-                checked={rememberMe}
-                onCheckedChange={(checked) => setRememberMe(checked as boolean)}
               />
-              <Label htmlFor="remember" className="text-sm text-gray-700">
-                Remember me
-              </Label>
-            </div>
 
-            <Button 
-              type="submit" 
-              className="w-full h-12 bg-gradient-to-r from-[hsl(var(--auth-gradient-from))] to-[hsl(var(--auth-gradient-to))] hover:opacity-90 transition-all duration-200 font-medium shadow-lg"
-              disabled={loading}
-            >
-              {loading ? (
-                <div className="flex items-center gap-2">
-                  <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full"></div>
-                  Creating account...
-                </div>
-              ) : (
-                'Create account'
-              )}
-            </Button>
+              <Button 
+                type="submit" 
+                className="w-full h-12 bg-gradient-to-r from-[hsl(var(--auth-gradient-from))] to-[hsl(var(--auth-gradient-to))] hover:opacity-90 transition-all duration-200 font-medium shadow-lg"
+                disabled={loading}
+              >
+                {loading ? (
+                  <div className="flex items-center gap-2">
+                    <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full"></div>
+                    Creating account...
+                  </div>
+                ) : (
+                  'Create account'
+                )}
+              </Button>
 
-            <div className="text-center text-sm text-muted-foreground">
-              Already have an account?{' '}
-              <Link to="/login" className="text-[hsl(var(--auth-gradient-from))] hover:underline font-medium transition-colors">
-                Sign in now
-              </Link>
-            </div>
-          </form>
+              <div className="text-center text-sm text-muted-foreground">
+                Already have an account?{' '}
+                <Link to="/login" className="text-[hsl(var(--auth-gradient-from))] hover:underline font-medium transition-colors">
+                  Sign in now
+                </Link>
+              </div>
+            </form>
+          </Form>
         </div>
       </div>
 

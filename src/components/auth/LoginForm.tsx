@@ -9,16 +9,25 @@ import { Link } from 'react-router-dom'
 import { useToast } from '@/components/ui/use-toast'
 import { Eye, EyeOff } from 'lucide-react'
 import authIllustration from '@/assets/auth-illustration.jpg'
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { loginSchema, type LoginFormData } from '@/lib/validation'
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form'
 
 export const LoginForm = () => {
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [rememberMe, setRememberMe] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
-  const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const navigate = useNavigate()
   const { toast } = useToast()
+
+  const form = useForm<LoginFormData>({
+    resolver: zodResolver(loginSchema),
+    defaultValues: {
+      email: '',
+      password: '',
+      rememberMe: false
+    }
+  })
 
   const handleGoogleLogin = async () => {
     const { error } = await supabase.auth.signInWithOAuth({
@@ -28,22 +37,33 @@ export const LoginForm = () => {
       }
     })
     if (error) {
-      setError(error.message)
+      toast({
+        title: 'Sign in failed',
+        description: error.message,
+        variant: 'destructive'
+      })
     }
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const onSubmit = async (data: LoginFormData) => {
     setLoading(true)
-    setError('')
 
     const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
+      email: data.email,
+      password: data.password,
     })
 
     if (error) {
-      setError(error.message)
+      // Set field-specific errors
+      if (error.message.includes('Invalid login credentials')) {
+        form.setError('email', { message: 'Invalid email or password' })
+        form.setError('password', { message: 'Invalid email or password' })
+      } else if (error.message.includes('Email not confirmed')) {
+        form.setError('email', { message: 'Please verify your email before signing in' })
+      } else {
+        form.setError('root', { message: error.message })
+      }
+      
       toast({
         title: 'Sign in failed',
         description: error.message,
@@ -97,97 +117,117 @@ export const LoginForm = () => {
             </div>
           </div>
 
-          {error && (
+          {form.formState.errors.root && (
             <div className="bg-red-50 text-red-600 p-3 rounded-md text-sm">
-              {error}
+              {form.formState.errors.root.message}
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <Label htmlFor="email" className="text-gray-700 font-medium">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                placeholder="your@email.com"
-                className="h-12 mt-2"
-                autoComplete="username"
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+              <FormField
+                control={form.control}
+                name="email"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-gray-700 font-medium">Email</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="email"
+                        placeholder="your@email.com"
+                        className="h-12 mt-2"
+                        autoComplete="username"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
               />
-            </div>
 
-            <div>
-              <Label htmlFor="password" className="text-gray-700 font-medium">Password</Label>
-              <div className="relative mt-2">
-                <Input
-                  id="password"
-                  type={showPassword ? 'text' : 'password'}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  placeholder="Enter your password"
-                  className="h-12 pr-10"
-                  autoComplete="current-password"
-                />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
-                  onClick={() => setShowPassword(!showPassword)}
-                >
-                  {showPassword ? (
-                    <EyeOff className="h-4 w-4" />
-                  ) : (
-                    <Eye className="h-4 w-4" />
+              <FormField
+                control={form.control}
+                name="password"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-gray-700 font-medium">Password</FormLabel>
+                    <FormControl>
+                      <div className="relative mt-2">
+                        <Input
+                          type={showPassword ? 'text' : 'password'}
+                          placeholder="Enter your password"
+                          className="h-12 pr-10"
+                          autoComplete="current-password"
+                          {...field}
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                          onClick={() => setShowPassword(!showPassword)}
+                        >
+                          {showPassword ? (
+                            <EyeOff className="h-4 w-4" />
+                          ) : (
+                            <Eye className="h-4 w-4" />
+                          )}
+                        </Button>
+                      </div>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <div className="flex items-center justify-between">
+                <FormField
+                  control={form.control}
+                  name="rememberMe"
+                  render={({ field }) => (
+                    <div className="flex items-center space-x-2">
+                      <Checkbox
+                        id="remember"
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                      />
+                      <Label htmlFor="remember" className="text-sm text-gray-700">
+                        Remember me
+                      </Label>
+                    </div>
                   )}
-                </Button>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="remember"
-                  checked={rememberMe}
-                  onCheckedChange={(checked) => setRememberMe(checked as boolean)}
                 />
-                <Label htmlFor="remember" className="text-sm text-gray-700">
-                  Remember me
-                </Label>
+                <Link 
+                  to="/forgot-password" 
+                  className="text-sm text-[hsl(var(--auth-gradient-from))] hover:underline transition-colors"
+                >
+                  Forgot password?
+                </Link>
               </div>
-              <Link 
-                to="/forgot-password" 
-                className="text-sm text-[hsl(var(--auth-gradient-from))] hover:underline transition-colors"
+
+              <Button 
+                type="submit" 
+                className="w-full h-12 bg-gradient-to-r from-[hsl(var(--auth-gradient-from))] to-[hsl(var(--auth-gradient-to))] hover:opacity-90 transition-all duration-200 font-medium shadow-lg"
+                disabled={loading}
               >
-                Forgot password?
-              </Link>
-            </div>
+                {loading ? (
+                  <div className="flex items-center gap-2">
+                    <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full"></div>
+                    Signing in...
+                  </div>
+                ) : (
+                  'Sign in'
+                )}
+              </Button>
 
-            <Button 
-              type="submit" 
-              className="w-full h-12 bg-gradient-to-r from-[hsl(var(--auth-gradient-from))] to-[hsl(var(--auth-gradient-to))] hover:opacity-90 transition-all duration-200 font-medium shadow-lg"
-              disabled={loading}
-            >
-              {loading ? (
-                <div className="flex items-center gap-2">
-                  <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full"></div>
-                  Signing in...
-                </div>
-              ) : (
-                'Sign in'
-              )}
-            </Button>
-
-            <div className="text-center text-sm text-muted-foreground">
-              Don't have an account?{' '}
-              <Link to="/signup" className="text-[hsl(var(--auth-gradient-from))] hover:underline font-medium transition-colors">
-                Sign up now
-              </Link>
-            </div>
-          </form>
+              <div className="text-center text-sm text-muted-foreground">
+                Don't have an account?{' '}
+                <Link to="/signup" className="text-[hsl(var(--auth-gradient-from))] hover:underline font-medium transition-colors">
+                  Sign up now
+                </Link>
+              </div>
+            </form>
+          </Form>
         </div>
       </div>
 
