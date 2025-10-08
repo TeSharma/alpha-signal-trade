@@ -4,7 +4,10 @@ import axios from 'axios';
 const HEDERA_MIRROR_NODE_URL = 'https://mainnet-public.mirrornode.hedera.com/api/v1';
 const HEDERA_TESTNET_URL = 'https://testnet.mirrornode.hedera.com/api/v1';
 
-// Use testnet during development, mainnet in production
+// Operator credentials for testnet (read-only account ID is public)
+export const HEDERA_OPERATOR_ID = '0.0.6900218';
+
+// Use testnet for development
 const BASE_URL = import.meta.env.MODE === 'production' 
   ? HEDERA_MIRROR_NODE_URL 
   : HEDERA_TESTNET_URL;

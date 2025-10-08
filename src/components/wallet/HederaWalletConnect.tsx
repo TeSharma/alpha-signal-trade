@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { useHederaWallet } from '@/hooks/useHederaWallet';
 import { Wallet, RefreshCw, ExternalLink, CheckCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { isValidHederaAccountId } from '@/lib/hedera';
+import { isValidHederaAccountId, HEDERA_OPERATOR_ID } from '@/lib/hedera';
 
 export const HederaWalletConnect = () => {
   const { 
@@ -58,10 +58,10 @@ export const HederaWalletConnect = () => {
           )}
           
           <div className="space-y-2">
-            <Label htmlFor="accountId">Hedera Account ID</Label>
+            <Label htmlFor="accountId">Hedera Account ID (Testnet)</Label>
             <Input
               id="accountId"
-              placeholder="0.0.9961361"
+              placeholder={HEDERA_OPERATOR_ID}
               value={inputAccountId}
               onChange={(e) => {
                 setInputAccountId(e.target.value);
@@ -72,6 +72,9 @@ export const HederaWalletConnect = () => {
             {validationError && (
               <p className="text-sm text-destructive">{validationError}</p>
             )}
+            <p className="text-xs text-muted-foreground">
+              Your testnet account: {HEDERA_OPERATOR_ID}
+            </p>
           </div>
           
           <Button 
