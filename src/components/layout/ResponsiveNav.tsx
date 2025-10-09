@@ -8,7 +8,8 @@ import {
   Zap, 
   BookOpen, 
   User,
-  MessageCircle
+  MessageCircle,
+  Wallet
 } from "lucide-react";
 
 const ResponsiveNav = () => {
@@ -18,6 +19,7 @@ const ResponsiveNav = () => {
   const menuItems = [
     { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { path: '/trade', label: 'Trade', icon: TrendingUp },
+    { path: '/wallet', label: 'Wallet', icon: Wallet },
     { path: '/signals', label: 'Signals', icon: Zap },
     { path: '/community', label: 'Community', icon: MessageCircle },
     { path: '/education', label: 'Education', icon: BookOpen },
