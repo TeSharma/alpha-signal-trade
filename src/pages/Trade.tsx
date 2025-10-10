@@ -8,6 +8,8 @@ import MarketOverview from "@/components/trading/MarketOverview";
 import MobileTradingInterface from "@/components/trading/MobileTradingInterface";
 import TradeHistory from "@/components/trading/TradeHistory";
 import AccountBalance from "@/components/trading/AccountBalance";
+import { DeploymentGuide } from "@/components/trading/DeploymentGuide";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const Trade = () => {
   const [accountMode, setAccountMode] = useState<'demo' | 'live'>('demo');
@@ -31,19 +33,32 @@ const Trade = () => {
                 <h1 className="text-3xl font-bold text-gray-900">Trade</h1>
                 <p className="text-gray-600">Execute trades on synthetic forex pairs</p>
               </div>
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div className="lg:col-span-1 space-y-6">
-                  <AccountBalance 
-                    accountMode={accountMode} 
-                    onModeChange={setAccountMode} 
-                  />
-                  <TradingForm accountMode={accountMode} />
-                </div>
-                <div className="lg:col-span-2 space-y-6">
-                  <MarketOverview />
-                  <TradeHistory accountMode={accountMode} />
-                </div>
-              </div>
+              <Tabs defaultValue="trading" className="w-full">
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="trading">Trading Interface</TabsTrigger>
+                  <TabsTrigger value="deployment">Smart Contracts</TabsTrigger>
+                </TabsList>
+                
+                <TabsContent value="trading" className="mt-6">
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <div className="lg:col-span-1 space-y-6">
+                      <AccountBalance 
+                        accountMode={accountMode} 
+                        onModeChange={setAccountMode} 
+                      />
+                      <TradingForm accountMode={accountMode} />
+                    </div>
+                    <div className="lg:col-span-2 space-y-6">
+                      <MarketOverview />
+                      <TradeHistory accountMode={accountMode} />
+                    </div>
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="deployment" className="mt-6">
+                  <DeploymentGuide />
+                </TabsContent>
+              </Tabs>
             </div>
           </main>
         </div>

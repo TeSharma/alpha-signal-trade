@@ -7,6 +7,7 @@ import { TransactionHistory } from '@/components/wallet/TransactionHistory';
 import { HederaWalletConnect } from '@/components/wallet/HederaWalletConnect';
 import Sidebar from '@/components/layout/Sidebar';
 import ResponsiveNav from '@/components/layout/ResponsiveNav';
+import { TokenBalances } from '@/components/trading/TokenBalances';
 
 export default function Wallet() {
   return (
@@ -28,8 +29,9 @@ export default function Wallet() {
             </div>
 
             <Tabs defaultValue="wallets" className="space-y-6">
-              <TabsList className="grid w-full grid-cols-4">
+              <TabsList className="grid w-full grid-cols-5">
                 <TabsTrigger value="wallets">Wallets</TabsTrigger>
+                <TabsTrigger value="tokens">Tokens</TabsTrigger>
                 <TabsTrigger value="deposit">Deposit</TabsTrigger>
                 <TabsTrigger value="withdraw">Withdraw</TabsTrigger>
                 <TabsTrigger value="history">History</TabsTrigger>
@@ -50,6 +52,10 @@ export default function Wallet() {
                     <HederaWalletConnect />
                   </div>
                 </div>
+              </TabsContent>
+
+              <TabsContent value="tokens" className="space-y-6">
+                <TokenBalances />
               </TabsContent>
 
               <TabsContent value="deposit" className="space-y-6">
