@@ -13,8 +13,8 @@ const POLYGON_PRICE_FEEDS = {
   "NZD/USD": "0xa302a0B8a499fD0f00449df0a490DedE21105955",
 };
 
-// For Mumbai testnet, use these addresses (example - verify current addresses)
-const MUMBAI_PRICE_FEEDS = {
+// For Amoy testnet, use these addresses (example - verify current addresses)
+const AMOY_PRICE_FEEDS = {
   "EUR/USD": "0x7d7356bF6Ee5CDeC22B216581E48eCC700D0497A",
   "GBP/USD": "0x099a2540848573e94fb1Ca0Fa420b00acbBc845a",
   "USD/JPY": "0xD647a6fC9BC6402301583C91decC5989d8Bc382D",
@@ -42,8 +42,18 @@ async function main() {
   console.log("👤 Deployer address:", deployer.address);
   console.log("💰 Deployer balance:", ethers.utils.formatEther(await deployer.getBalance()), "MATIC\n");
 
-  // Determine which price feeds to use
-  const priceFeeds = network.chainId === 137 ? POLYGON_PRICE_FEEDS : MUMBAI_PRICE_FEEDS;
+  // Determine which price feeds to use based on network
+  let priceFeeds;
+  if (network.chainId === 137) {
+    console.log("📍 Deploying to Polygon Mainnet");
+    priceFeeds = POLYGON_PRICE_FEEDS;
+  } else if (network.chainId === 80002) {
+    console.log("📍 Deploying to Amoy Testnet");
+    priceFeeds = AMOY_PRICE_FEEDS;
+  } else {
+    console.log("⚠️ Unknown network, using Amoy price feeds as default");
+    priceFeeds = AMOY_PRICE_FEEDS;
+  }
 
   const deployedAddresses: DeployedAddresses = {
     network: network.name,
@@ -167,7 +177,7 @@ export const TRADING_PLATFORM_ADDRESS = '${deployedAddresses.tradingPlatform}';
   console.log("📚 Next Steps:");
   console.log("1. Update src/hooks/useTokenContracts.ts with the new addresses");
   console.log("2. Verify contracts on PolygonScan (optional):");
-  console.log(`   npx hardhat verify --network ${network.name === 'maticmum' ? 'mumbai' : 'polygon'} <CONTRACT_ADDRESS>`);
+  console.log(`   npx hardhat verify --network ${network.chainId === 80002 ? 'amoy' : 'polygon'} <CONTRACT_ADDRESS>`);
   console.log("3. Test the integration on your frontend\n");
 }
 
