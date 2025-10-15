@@ -97,5 +97,18 @@
     "typescript": "^5.5.3",
     "typescript-eslint": "^8.0.1",
     "vite": "^5.4.1"
-  }
+  },
+  "description": "SHarma: Decentralized Forex Trading Platform\r Build a decentralized Forex trading platform leveraging blockchain technology, enabling secure, transparent, and censorship-resistant transactions.",
+  "main": "eslint.config.js",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/TeSharma/alpha-signal-trade.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/TeSharma/alpha-signal-trade/issues"
+  },
+  "homepage": "https://github.com/TeSharma/alpha-signal-trade#readme"
 }
