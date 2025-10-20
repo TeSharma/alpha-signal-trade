@@ -1,6 +1,8 @@
-import { ethers } from "hardhat";
+import hre from "hardhat";
 import * as fs from "fs";
 import * as path from "path";
+
+const { ethers } = hre;
 
 // Chainlink Price Feed addresses for Polygon Mainnet
 const POLYGON_PRICE_FEEDS = {
