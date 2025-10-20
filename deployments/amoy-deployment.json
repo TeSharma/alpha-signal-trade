@@ -1,0 +1,9 @@
+{
+  "network": "amoy",
+  "chainId": "80002",
+  "deployer": "0x09C2B58F6004176bD83cc000d804eD3c1041754E",
+  "TokenizedCurrency": "0x7Ffe9d94e805cE4A32B41a94F9f902783BAcD7B3",
+  "PriceOracle": "0xa5dA44c2f1f5A0C85f3F196395664f482c4C6d7f",
+  "TradingPlatform": "0xc0e8B7EF54e57460DeE0B8d1eb127b732e18ab39",
+  "timestamp": "2025-10-20T06:19:25.624Z"
+}
