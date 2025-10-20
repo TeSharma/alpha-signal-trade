@@ -1,8 +1,6 @@
 import { ethers } from "hardhat";
-import * as hre from "hardhat";
 import * as fs from "fs";
 import * as path from "path";
-
 
 // Chainlink Price Feed addresses for Polygon Mainnet
 const POLYGON_PRICE_FEEDS = {
@@ -15,7 +13,7 @@ const POLYGON_PRICE_FEEDS = {
   "NZD/USD": "0xa302a0B8a499fD0f00449df0a490DedE21105955",
 };
 
-// For Amoy testnet, use these addresses (example - verify current addresses)
+// For Amoy testnet
 const AMOY_PRICE_FEEDS = {
   "EUR/USD": "0x7d7356bF6Ee5CDeC22B216581E48eCC700D0497A",
   "GBP/USD": "0x099a2540848573e94fb1Ca0Fa420b00acbBc845a",
@@ -39,24 +37,18 @@ async function main() {
 
   const [deployer] = await ethers.getSigners();
   const network = await ethers.provider.getNetwork();
-  
-  console.log("📍 Network:", network.name, `(Chain ID: ${network.chainId})`);
-  console.log("👤 Deployer address:", deployer.address);
-  console.log("💰 Deployer balance:", ethers.formatEther(await deployer.getBalance()), "MATIC\n");
 
+  console.log(`📍 Network: ${network.name} (Chain ID: ${network.chainId})`);
+  console.log(`👤 Deployer: ${deployer.address}`);
+  console.log(`💰 Balance: ${ethers.formatEther(await deployer.getBalance())} MATIC\n`);
 
-  // Determine which price feeds to use based on network
-  let priceFeeds;
-  if (network.chainId === 137) {
-    console.log("📍 Deploying to Polygon Mainnet");
-    priceFeeds = POLYGON_PRICE_FEEDS;
-  } else if (network.chainId === 80002) {
-    console.log("📍 Deploying to Amoy Testnet");
-    priceFeeds = AMOY_PRICE_FEEDS;
-  } else {
-    console.log("⚠️ Unknown network, using Amoy price feeds as default");
-    priceFeeds = AMOY_PRICE_FEEDS;
-  }
+  // Select price feeds
+  const priceFeeds =
+    network.chainId === 137
+      ? POLYGON_PRICE_FEEDS
+      : network.chainId === 80002
+      ? AMOY_PRICE_FEEDS
+      : AMOY_PRICE_FEEDS;
 
   const deployedAddresses: DeployedAddresses = {
     network: network.name,
@@ -66,9 +58,9 @@ async function main() {
     timestamp: new Date().toISOString(),
   };
 
-  // Step 1: Deploy Token Contracts
-  console.log("📦 Step 1: Deploying Tokenized Currency Contracts...\n");
-  
+  // Step 1: Deploy Tokenized Currencies
+  console.log("📦 Step 1: Deploying TokenizedCurrency contracts...\n");
+
   const currencies = [
     { name: "Tokenized USD", symbol: "tUSD", decimals: 6 },
     { name: "Tokenized Euro", symbol: "tEUR", decimals: 6 },
@@ -81,80 +73,65 @@ async function main() {
   ];
 
   const TokenizedCurrency = await ethers.getContractFactory("TokenizedCurrency");
-  
+
   for (const currency of currencies) {
-    console.log(`   Deploying ${currency.symbol}...`);
-    const token = await TokenizedCurrency.deploy(
-      currency.name,
-      currency.symbol,
-      currency.decimals
-    );
-    await token.deployed();
-    deployedAddresses.tokens[currency.symbol] = token.address;
-    console.log(`   ✅ ${currency.symbol} deployed at: ${token.address}`);
+    console.log(`   🚀 Deploying ${currency.symbol}...`);
+    const token = await TokenizedCurrency.deploy(currency.name, currency.symbol, currency.decimals);
+    await token.waitForDeployment();
+    const address = await token.getAddress();
+    deployedAddresses.tokens[currency.symbol] = address;
+    console.log(`   ✅ ${currency.symbol} deployed at: ${address}`);
   }
 
-  console.log("\n📦 Step 2: Deploying PriceOracle Contract...\n");
-  
+  // Step 2: Deploy PriceOracle
+  console.log("\n📦 Step 2: Deploying PriceOracle...\n");
   const PriceOracle = await ethers.getContractFactory("PriceOracle");
   const oracle = await PriceOracle.deploy();
-  await oracle.deployed();
-  deployedAddresses.oracle = oracle.address;
-  console.log(`   ✅ PriceOracle deployed at: ${oracle.address}`);
+  await oracle.waitForDeployment();
+  const oracleAddress = await oracle.getAddress();
+  deployedAddresses.oracle = oracleAddress;
+  console.log(`   ✅ PriceOracle deployed at: ${oracleAddress}`);
 
-  // Configure price feeds
-  console.log("\n   🔗 Configuring Chainlink price feeds...");
-  for (const [pair, feedAddress] of Object.entries(priceFeeds)) {
-    console.log(`      Setting ${pair} feed...`);
-    const tx = await oracle.setPriceFeed(pair, feedAddress);
+  // Configure feeds
+  console.log("\n   🔗 Setting up Chainlink price feeds...");
+  for (const [pair, feed] of Object.entries(priceFeeds)) {
+    const tx = await oracle.setPriceFeed(pair, feed);
     await tx.wait();
-    console.log(`      ✅ ${pair} configured`);
+    console.log(`      ✅ ${pair} → ${feed}`);
   }
 
-  console.log("\n📦 Step 3: Deploying TradingPlatform Contract...\n");
-  
+  // Step 3: Deploy TradingPlatform
+  console.log("\n📦 Step 3: Deploying TradingPlatform...\n");
   const TradingPlatform = await ethers.getContractFactory("TradingPlatform");
   const platform = await TradingPlatform.deploy(
-    oracle.address,
-    deployedAddresses.tokens.tUSD // Using tUSD as collateral token
+    oracleAddress,
+    deployedAddresses.tokens.tUSD // Collateral token
   );
-  await platform.deployed();
-  deployedAddresses.tradingPlatform = platform.address;
-  console.log(`   ✅ TradingPlatform deployed at: ${platform.address}`);
+  await platform.waitForDeployment();
+  const platformAddress = await platform.getAddress();
+  deployedAddresses.tradingPlatform = platformAddress;
+  console.log(`   ✅ TradingPlatform deployed at: ${platformAddress}`);
 
+  // Step 4: Grant MINTER_ROLE
   console.log("\n📦 Step 4: Granting MINTER_ROLE to TradingPlatform...\n");
-  
   for (const [symbol, address] of Object.entries(deployedAddresses.tokens)) {
-    console.log(`   Granting role for ${symbol}...`);
     const token = TokenizedCurrency.attach(address);
     const MINTER_ROLE = await token.MINTER_ROLE();
-    const tx = await token.grantRole(MINTER_ROLE, platform.address);
+    const tx = await token.grantRole(MINTER_ROLE, platformAddress);
     await tx.wait();
-    console.log(`   ✅ ${symbol} minter role granted`);
+    console.log(`   ✅ Granted MINTER_ROLE for ${symbol}`);
   }
 
-  // Save deployment addresses
+  // Save results
   const outputPath = path.join(__dirname, "../deployed-addresses.json");
   fs.writeFileSync(outputPath, JSON.stringify(deployedAddresses, null, 2));
-  console.log(`\n💾 Deployment addresses saved to: deployed-addresses.json`);
+  console.log(`\n💾 Saved deployment addresses to deployed-addresses.json`);
 
-  // Generate TypeScript config for frontend
-  console.log("\n📝 Generating frontend configuration...\n");
-  
+  // Frontend config
   const frontendConfig = `// Auto-generated on ${deployedAddresses.timestamp}
 // Network: ${deployedAddresses.network}
 
-export const TOKEN_ADDRESSES = {
-  tUSD: '${deployedAddresses.tokens.tUSD}',
-  tEUR: '${deployedAddresses.tokens.tEUR}',
-  tGBP: '${deployedAddresses.tokens.tGBP}',
-  tJPY: '${deployedAddresses.tokens.tJPY}',
-  tAUD: '${deployedAddresses.tokens.tAUD}',
-  tCAD: '${deployedAddresses.tokens.tCAD}',
-  tCHF: '${deployedAddresses.tokens.tCHF}',
-  tNZD: '${deployedAddresses.tokens.tNZD}',
-} as const;
-
+export const TOKEN_ADDRESSES = ${JSON.stringify(deployedAddresses.tokens, null, 2)} as const;
 export const ORACLE_ADDRESS = '${deployedAddresses.oracle}';
 export const TRADING_PLATFORM_ADDRESS = '${deployedAddresses.tradingPlatform}';
 `;
@@ -164,30 +141,12 @@ export const TRADING_PLATFORM_ADDRESS = '${deployedAddresses.tradingPlatform}';
   fs.writeFileSync(configPath, frontendConfig);
   console.log(`   ✅ Frontend config saved to: src/config/contracts.ts`);
 
-  console.log("\n✨ Deployment Complete! ✨\n");
-  console.log("📋 Summary:");
-  console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-  console.log("Network:", deployedAddresses.network);
-  console.log("\nTokenized Currencies:");
-  Object.entries(deployedAddresses.tokens).forEach(([symbol, address]) => {
-    console.log(`  ${symbol}: ${address}`);
-  });
-  console.log("\nCore Contracts:");
-  console.log(`  PriceOracle: ${deployedAddresses.oracle}`);
-  console.log(`  TradingPlatform: ${deployedAddresses.tradingPlatform}`);
-  console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
-  
-  console.log("📚 Next Steps:");
-  console.log("1. Update src/hooks/useTokenContracts.ts with the new addresses");
-  console.log("2. Verify contracts on PolygonScan (optional):");
-  console.log(`   npx hardhat verify --network ${network.chainId === 80002 ? 'amoy' : 'polygon'} <CONTRACT_ADDRESS>`);
-  console.log("3. Test the integration on your frontend\n");
+  console.log("\n✨ Deployment Complete ✨\n");
+  console.log(deployedAddresses);
 }
 
-main()
-  .then(() => process.exit(0))
-  .catch((error) => {
-    console.error("❌ Deployment failed:");
-    console.error(error);
-    process.exit(1);
-  });
+main().catch((err) => {
+  console.error("❌ Deployment failed:");
+  console.error(err);
+  process.exitCode = 1;
+});
