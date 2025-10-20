@@ -1,6 +1,8 @@
 import { ethers } from "hardhat";
+import * as hre from "hardhat";
 import * as fs from "fs";
 import * as path from "path";
+
 
 // Chainlink Price Feed addresses for Polygon Mainnet
 const POLYGON_PRICE_FEEDS = {
@@ -40,7 +42,8 @@ async function main() {
   
   console.log("📍 Network:", network.name, `(Chain ID: ${network.chainId})`);
   console.log("👤 Deployer address:", deployer.address);
-  console.log("💰 Deployer balance:", ethers.utils.formatEther(await deployer.getBalance()), "MATIC\n");
+  console.log("💰 Deployer balance:", ethers.formatEther(await deployer.getBalance()), "MATIC\n");
+
 
   // Determine which price feeds to use based on network
   let priceFeeds;

@@ -1,10 +1,8 @@
-import { HardhatUserConfig } from "hardhat/config";
-import "@nomicfoundation/hardhat-toolbox";
-import * as dotenv from "dotenv";
+require("dotenv").config();
+require("@nomicfoundation/hardhat-toolbox");
 
-dotenv.config();
-
-const config: HardhatUserConfig = {
+/** @type import('hardhat/config').HardhatUserConfig */
+const config = {
   solidity: {
     version: "0.8.20",
     settings: {
@@ -15,19 +13,16 @@ const config: HardhatUserConfig = {
     },
   },
   networks: {
-    // Polygon Mainnet
     polygon: {
       url: process.env.POLYGON_RPC_URL || "https://polygon-rpc.com/",
       accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
       chainId: 137,
     },
-    // Polygon Amoy Testnet
     amoy: {
       url: process.env.AMOY_RPC_URL || "https://rpc-amoy.polygon.technology/",
       accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
       chainId: 80002,
     },
-    // Hardhat local network
     hardhat: {
       chainId: 31337,
     },
@@ -46,4 +41,4 @@ const config: HardhatUserConfig = {
   },
 };
 
-export default config;
+module.exports = config;
