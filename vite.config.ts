@@ -1,4 +1,3 @@
-
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react-swc';
 import path from 'path';
@@ -13,13 +12,36 @@ export default defineConfig(({ mode }) => {
       port: 8080,
     },
     plugins: [
-      react(),
+      react({
+        tsDecorators: true,
+      }),
       mode === 'development' && componentTagger(),
     ].filter(Boolean),
     resolve: {
       alias: {
         '@': path.resolve(__dirname, './src'),
       },
+    },
+    esbuild: {
+      // Override tsconfig.json for the build - use React JSX settings
+      jsx: 'automatic',
+      target: 'es2020',
+      tsconfigRaw: {
+        compilerOptions: {
+          jsx: 'react-jsx',
+          jsxImportSource: 'react',
+          target: 'ES2020',
+          module: 'ESNext',
+          moduleResolution: 'bundler',
+          baseUrl: '.',
+          paths: {
+            '@/*': ['./src/*'],
+          },
+        },
+      },
+    },
+    build: {
+      target: 'es2020',
     },
     define: {
       'process.env': {

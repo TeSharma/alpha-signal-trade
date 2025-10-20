@@ -1,10 +1,8 @@
-import "@nomicfoundation/hardhat-toolbox";
-import { HardhatUserConfig } from "hardhat/config";
-import * as dotenv from "dotenv";
+require("@nomicfoundation/hardhat-toolbox");
+require("dotenv/config");
 
-dotenv.config();
-
-const config: HardhatUserConfig = {
+/** @type import('hardhat/config').HardhatUserConfig */
+module.exports = {
   solidity: {
     version: "0.8.20",
     settings: {
@@ -15,19 +13,16 @@ const config: HardhatUserConfig = {
     },
   },
   networks: {
-    // Polygon Mainnet
     polygon: {
       url: process.env.POLYGON_RPC_URL || "https://polygon-rpc.com/",
       accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
       chainId: 137,
     },
-    // Polygon Amoy Testnet
     amoy: {
       url: process.env.AMOY_RPC_URL || "https://rpc-amoy.polygon.technology/",
       accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
       chainId: 80002,
     },
-    // Hardhat Local Network
     hardhat: {
       chainId: 31337,
     },
@@ -38,14 +33,10 @@ const config: HardhatUserConfig = {
     cache: "./cache",
     artifacts: "./artifacts",
   },
-  // ✅ Correct syntax for Hardhat v3
   etherscan: {
-    apiKey: process.env.POLYGONSCAN_API_KEY || "",
-  },
-  // Optional: automatically verify contracts after deployment
-  sourcify: {
-    enabled: true,
+    apiKey: {
+      polygon: process.env.POLYGONSCAN_API_KEY || "",
+      polygonAmoy: process.env.POLYGONSCAN_API_KEY || "",
+    },
   },
 };
-
-export default config;
