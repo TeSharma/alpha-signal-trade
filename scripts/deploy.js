@@ -1,6 +1,6 @@
-import hre from "hardhat";
-import * as fs from "fs";
-import * as path from "path";
+const hre = require("hardhat");
+const fs = require("fs");
+const path = require("path");
 
 const { ethers } = hre;
 
@@ -26,14 +26,6 @@ const AMOY_PRICE_FEEDS = {
   "NZD/USD": "0xa302a0B8a499fD0f00449df0a490DedE21105955",
 };
 
-interface DeployedAddresses {
-  network: string;
-  tokens: { [key: string]: string };
-  oracle: string;
-  tradingPlatform: string;
-  timestamp: string;
-}
-
 async function main() {
   console.log("🚀 Starting deployment process...\n");
 
@@ -52,14 +44,13 @@ async function main() {
   console.log(`👤 Deployer address: ${deployer.address}`);
   console.log(`💰 Balance: ${hre.ethers.formatEther(balance)} MATIC\n`);
 
-    // 🧱 Deploy TokenizedCurrency
-console.log("📦 Deploying TokenizedCurrency...");
-const TokenizedCurrency = await hre.ethers.getContractFactory("TokenizedCurrency");
-const tokenizedCurrency = await TokenizedCurrency.deploy("Tokenized USD", "tUSD", 6);
-await tokenizedCurrency.waitForDeployment();
-const tokenAddress = await tokenizedCurrency.getAddress();
-console.log(`✅ TokenizedCurrency deployed at: ${tokenAddress}\n`);
-
+  // 🧱 Deploy TokenizedCurrency
+  console.log("📦 Deploying TokenizedCurrency...");
+  const TokenizedCurrency = await hre.ethers.getContractFactory("TokenizedCurrency");
+  const tokenizedCurrency = await TokenizedCurrency.deploy("Tokenized USD", "tUSD", 6);
+  await tokenizedCurrency.waitForDeployment();
+  const tokenAddress = await tokenizedCurrency.getAddress();
+  console.log(`✅ TokenizedCurrency deployed at: ${tokenAddress}\n`);
 
   // 🧱 Deploy PriceOracle
   console.log("📊 Deploying PriceOracle...");
@@ -83,7 +74,7 @@ console.log(`✅ TokenizedCurrency deployed at: ${tokenAddress}\n`);
 
   const deploymentData = {
     network: network.name,
-    chainId: network.chainId,
+    chainId: Number(network.chainId),
     deployer: deployer.address,
     TokenizedCurrency: tokenAddress,
     PriceOracle: oracleAddress,
@@ -91,16 +82,19 @@ console.log(`✅ TokenizedCurrency deployed at: ${tokenAddress}\n`);
     timestamp: new Date().toISOString(),
   };
 
+  const safeJSON = JSON.stringify(
+    deploymentData,
+    (key, value) => (typeof value === "bigint" ? value.toString() : value),
+    2
+  );
+
   fs.writeFileSync(
     path.join(deploymentsDir, `${network.name}-deployment.json`),
-    JSON.stringify(deploymentData, (key, value) =>
-      typeof value === "bigint" ? value.toString() : value,
-    2)
+    safeJSON
   );
 
   console.log("📝 Deployment data saved successfully!");
   console.log("🎉 Deployment completed!\n");
-
 }
 
 main().catch((error) => {
