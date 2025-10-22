@@ -69,6 +69,17 @@ console.log(`✅ TokenizedCurrency deployed at: ${tokenAddress}\n`);
   const oracleAddress = await priceOracle.getAddress();
   console.log(`✅ PriceOracle deployed at: ${oracleAddress}\n`);
 
+  // 🔧 Configure PriceOracle with Chainlink price feeds
+  console.log("🔧 Configuring PriceOracle with Chainlink feeds...");
+  const priceFeeds = network.chainId === 137n ? POLYGON_PRICE_FEEDS : AMOY_PRICE_FEEDS;
+  
+  for (const [pair, feedAddress] of Object.entries(priceFeeds)) {
+    console.log(`  Setting ${pair} feed: ${feedAddress}`);
+    const tx = await priceOracle.setPriceFeed(pair, feedAddress);
+    await tx.wait();
+  }
+  console.log(`✅ Configured ${Object.keys(priceFeeds).length} price feeds\n`);
+
   // 🧱 Deploy TradingPlatform
   console.log("💹 Deploying TradingPlatform...");
   const TradingPlatform = await hre.ethers.getContractFactory("TradingPlatform");
