@@ -91,9 +91,6 @@ export const useTradingPlatform = (web3: Web3 | null, account: string) => {
 
   const getTradingContract = useCallback(() => {
     if (!web3) return null;
-    if (TRADING_PLATFORM_ADDRESS === '0x0000000000000000000000000000000000000000') {
-      return null;
-    }
     return new web3.eth.Contract(TRADING_PLATFORM_ABI as any, TRADING_PLATFORM_ADDRESS);
   }, [web3]);
 
