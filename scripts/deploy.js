@@ -1,6 +1,38 @@
 import hre from "hardhat";
-import fs from "fs";
-import path from "path";
+import * as fs from "fs";
+import * as path from "path";
+
+const { ethers } = hre;
+
+// Chainlink Price Feed addresses for Polygon Mainnet
+const POLYGON_PRICE_FEEDS = {
+  "EUR/USD": "0x73366Fe0AA0Ded304479862808e02506FE556a98",
+  "GBP/USD": "0x099a2540848573e94fb1Ca0Fa420b00acbBc845a",
+  "USD/JPY": "0xD647a6fC9BC6402301583C91decC5989d8Bc382D",
+  "AUD/USD": "0x062Df9C4efd2030e243ffCc398b652e8b8F95C6f",
+  "USD/CAD": "0xACA44ABb8B04D07D883202F99FA5E3c53ed57Fb5",
+  "USD/CHF": "0xc76f762CedF0F78a439727861628E0fdfE1e70c2",
+  "NZD/USD": "0xa302a0B8a499fD0f00449df0a490DedE21105955",
+};
+
+// For Amoy testnet
+const AMOY_PRICE_FEEDS = {
+  "EUR/USD": "0x7d7356bF6Ee5CDeC22B216581E48eCC700D0497A",
+  "GBP/USD": "0x099a2540848573e94fb1Ca0Fa420b00acbBc845a",
+  "USD/JPY": "0xD647a6fC9BC6402301583C91decC5989d8Bc382D",
+  "AUD/USD": "0x062Df9C4efd2030e243ffCc398b652e8b8F95C6f",
+  "USD/CAD": "0xACA44ABb8B04D07D883202F99FA5E3c53ed57Fb5",
+  "USD/CHF": "0xc76f762CedF0F78a439727861628E0fdfE1e70c2",
+  "NZD/USD": "0xa302a0B8a499fD0f00449df0a490DedE21105955",
+};
+
+interface DeployedAddresses {
+  network: string;
+  tokens: { [key: string]: string };
+  oracle: string;
+  tradingPlatform: string;
+  timestamp: string;
+}
 
 async function main() {
   console.log("🚀 Starting deployment process...\n");
