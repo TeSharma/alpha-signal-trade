@@ -14,6 +14,7 @@ export default defineConfig(({ mode }) => {
     plugins: [
       react({
         tsDecorators: true,
+        tsconfig: './tsconfig.app.json',
       }),
       mode === 'development' && componentTagger(),
     ].filter(Boolean),
