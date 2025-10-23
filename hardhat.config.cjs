@@ -1,5 +1,8 @@
 require("@nomicfoundation/hardhat-toolbox");
 require("dotenv/config");
+const { execSync } = require("child_process");
+const fs = require("fs");
+const path = require("path");
 
 /** @type import('hardhat/config').HardhatUserConfig */
 module.exports = {
@@ -40,3 +43,23 @@ module.exports = {
     },
   },
 };
+
+// --- AUTO-ABI EXTRACTION HOOK ---
+task("compile", "Compiles the entire project and auto-extracts ABIs", async (_, hre, runSuper) => {
+  // Run the normal Hardhat compile process
+  await runSuper();
+
+  const scriptPath = path.join(__dirname, "extract-abi-and-addresses.js");
+
+  if (fs.existsSync(scriptPath)) {
+    console.log("\n🔄 Running ABI extraction script...");
+    try {
+      execSync(`node "${scriptPath}"`, { stdio: "inherit" });
+      console.log("✅ ABI extraction completed successfully!");
+    } catch (err) {
+      console.error("❌ ABI extraction failed:", err.message);
+    }
+  } else {
+    console.warn("⚠️ ABI extraction script not found — skipping.");
+  }
+});
