@@ -49,8 +49,9 @@ export const TOKEN_ADDRESSES = {
   tNZD: '0x0000000000000000000000000000000000000000',
 };
 
-export const ORACLE_ADDRESS = '0xa5dA44c2f1f5A0C85f3F196395664f482c4C6d7f';
-export const TRADING_PLATFORM_ADDRESS = '0xc0e8B7EF54e57460DeE0B8d1eb127b732e18ab39';
+// Updated to use the latest deployed addresses from contracts.ts
+export const ORACLE_ADDRESS = '0x08f2bfA91c52F3c71dBa9bDdAB7F1774578fBA5A';
+export const TRADING_PLATFORM_ADDRESS = '0x81183d41147a9c45924D89b164645D4134B79FE5';
 
 interface TokenBalance {
   symbol: string;

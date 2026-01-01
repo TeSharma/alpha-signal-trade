@@ -7,10 +7,10 @@ import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { TrendingUp, TrendingDown, Calculator, Activity, Zap } from "lucide-react"
-import { connectToBlockchain, getContractInstance, getWeb3 } from '@/lib/web3'
 import { useTrades } from '@/hooks/useTrades'
 import { useMarketData } from '@/hooks/useMarketData'
 import { useToast } from '@/components/ui/use-toast'
+import { CONTRACT_ADDRESSES } from '@/config/contracts'
 
 interface TradingFormProps {
   accountMode: 'demo' | 'live';
@@ -87,29 +87,66 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
       if (accountMode === 'live' && tradeResult) {
         // Handle blockchain transaction for live trades
         try {
-          const isConnected = await connectToBlockchain();
-          if (!isConnected) {
-            console.error('Failed to connect to blockchain');
+          if (typeof window.ethereum === 'undefined') {
+            toast({
+              title: 'Wallet Required',
+              description: 'Please connect MetaMask to trade in live mode',
+              variant: 'destructive'
+            });
             return;
           }
 
-          const contractAddress = '0x...'; // Replace with actual contract address
-          const contractAbi = []; // Replace with actual ABI
-          const contract = getContractInstance(contractAddress, contractAbi);
-
-          const web3 = getWeb3();
+          const Web3 = (await import('web3')).default;
+          const web3 = new Web3(window.ethereum);
+          await window.ethereum.request({ method: 'eth_requestAccounts' });
           const accounts = await web3.eth.getAccounts();
+
+          // Use the deployed TradingPlatform contract
+          const contractAddress = CONTRACT_ADDRESSES.amoy.TradingPlatform;
+          const TRADING_PLATFORM_ABI = [
+            {
+              inputs: [
+                { name: 'pair', type: 'string' },
+                { name: 'isLong', type: 'bool' },
+                { name: 'collateralAmount', type: 'uint256' },
+                { name: 'leverage', type: 'uint256' },
+                { name: 'stopLoss', type: 'uint256' },
+                { name: 'takeProfit', type: 'uint256' }
+              ],
+              name: 'openPosition',
+              outputs: [{ name: '', type: 'uint256' }],
+              stateMutability: 'nonpayable',
+              type: 'function'
+            }
+          ];
+
+          const contract = new web3.eth.Contract(TRADING_PLATFORM_ABI as any, contractAddress);
+          
+          const collateralWei = web3.utils.toWei(lotSize, 'mwei'); // 6 decimals for stablecoins
+          const stopLossWei = stopLoss ? web3.utils.toWei(stopLoss, 'ether') : '0';
+          const takeProfitWei = takeProfit ? web3.utils.toWei(takeProfit, 'ether') : '0';
+
           const tx = await contract.methods.openPosition(
             selectedPair,
-            parseFloat(lotSize),
-            currentPrice,
-            stopLoss ? parseFloat(stopLoss) : 0,
-            takeProfit ? parseFloat(takeProfit) : 0
+            tradeDirection === 'buy', // isLong
+            collateralWei,
+            1, // leverage (1x for now)
+            stopLossWei,
+            takeProfitWei
           ).send({ from: accounts[0] });
 
           console.log('Blockchain transaction successful:', tx);
-        } catch (error) {
+          toast({
+            title: 'Trade Executed on Chain',
+            description: `Transaction hash: ${tx.transactionHash?.slice(0, 10)}...`,
+          });
+        } catch (error: any) {
           console.error('Blockchain error:', error);
+          toast({
+            title: 'Blockchain Error',
+            description: error.message || 'Failed to execute on-chain transaction',
+            variant: 'destructive'
+          });
         }
       }
 
