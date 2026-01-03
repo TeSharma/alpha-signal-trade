@@ -194,6 +194,32 @@ export const useTrades = () => {
     }
   };
 
+  const cancelTrade = async (tradeId: string) => {
+    try {
+      const { data, error } = await supabase.rpc('cancel_trade', {
+        p_trade_id: tradeId
+      });
+
+      if (error) throw error;
+
+      toast({
+        title: "Trade Cancelled",
+        description: "Your trade has been cancelled successfully",
+      });
+
+      await fetchTrades();
+      return data;
+    } catch (error) {
+      console.error('Error cancelling trade:', error);
+      toast({
+        title: "Error",
+        description: "Failed to cancel trade",
+        variant: "destructive"
+      });
+      return null;
+    }
+  };
+
   useEffect(() => {
     const initializeData = async () => {
       setLoading(true);
@@ -238,6 +264,7 @@ export const useTrades = () => {
     loading,
     createTrade,
     closeTrade,
+    cancelTrade,
     updatePnL,
     fetchTrades,
     fetchAccountBalance
