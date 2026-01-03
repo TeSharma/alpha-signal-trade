@@ -67,10 +67,15 @@ export const useOraclePrice = () => {
 
   const getOracleContract = useCallback(() => {
     if (!web3) return null;
-    if (ORACLE_ADDRESS === '0x0000000000000000000000000000000000000000') {
+
+    const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
+    const oracleAddress = (ORACLE_ADDRESS as unknown as string).toLowerCase();
+
+    if (oracleAddress === ZERO_ADDRESS) {
       return null; // Oracle not deployed yet
     }
-    return new web3.eth.Contract(ORACLE_ABI as any, ORACLE_ADDRESS);
+
+    return new web3.eth.Contract(ORACLE_ABI as any, oracleAddress);
   }, [web3]);
 
   const fetchPrice = async (pair: string): Promise<OraclePriceData | null> => {

@@ -220,6 +220,42 @@ export const useTrades = () => {
     }
   };
 
+  const resetDemoBalance = async () => {
+    try {
+      const { data: user } = await supabase.auth.getUser();
+      if (!user.user) return null;
+
+      const { data, error } = await supabase
+        .from('account_balances')
+        .update({
+          demo_balance: 10000,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('user_id', user.user.id)
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      toast({
+        title: 'Demo reset',
+        description: 'Demo balance has been reset to $10,000',
+      });
+
+      await fetchAccountBalance();
+      return data;
+    } catch (error) {
+      console.error('Error resetting demo balance:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to reset demo balance',
+        variant: 'destructive',
+      });
+      return null;
+    }
+  };
+
+
   useEffect(() => {
     const initializeData = async () => {
       setLoading(true);
@@ -265,6 +301,7 @@ export const useTrades = () => {
     createTrade,
     closeTrade,
     cancelTrade,
+    resetDemoBalance,
     updatePnL,
     fetchTrades,
     fetchAccountBalance
