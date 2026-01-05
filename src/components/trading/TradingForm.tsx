@@ -52,6 +52,8 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
   const currentPrice = getCurrentPrice(selectedPair)
   const bidPrice = getBidPrice(selectedPair)
   const askPrice = getAskPrice(selectedPair)
+
+  const handleSubmitTrade = async () => {
     if (isSubmitting) return
     
     setIsSubmitting(true)
