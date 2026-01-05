@@ -356,7 +356,6 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
           className="w-full" 
           size="lg"
           onClick={handleSubmitTrade}
-          disabled={isLoadingSignal || isSubmitting}
           disabled={isLoadingSignal || isSubmitting || onChainLoading || approvalPending}
         >
           {approvalPending ? (
