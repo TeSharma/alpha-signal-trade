@@ -584,6 +584,7 @@ export type Database = {
         Args: { p_current_price: number; p_trade_id: string }
         Returns: number
       }
+      cancel_trade: { Args: { p_trade_id: string }; Returns: string }
       close_trade: {
         Args: { p_exit_price: number; p_trade_id: string }
         Returns: string

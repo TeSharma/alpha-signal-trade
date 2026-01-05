@@ -16,7 +16,7 @@ interface TradeHistoryProps {
 }
 
 const TradeHistory = ({ accountMode }: TradeHistoryProps) => {
-  const { trades, closeTrade, updatePnL } = useTrades()
+  const { trades, closeTrade, cancelTrade, updatePnL } = useTrades()
   const { getCurrentPrice } = useMarketData()
   const { toast } = useToast()
   const [activeTab, setActiveTab] = useState('open')
@@ -52,6 +52,10 @@ const TradeHistory = ({ accountMode }: TradeHistoryProps) => {
         description: `${trade.pair} ${trade.direction} position closed`,
       })
     }
+  }
+
+  const handleCancelTrade = async (trade: Trade) => {
+    await cancelTrade(trade.id)
   }
 
   const calculateCurrentPnL = (trade: Trade) => {
@@ -96,28 +100,54 @@ const TradeHistory = ({ accountMode }: TradeHistoryProps) => {
             <Badge variant="outline">{trade.lot_size} lots</Badge>
           </div>
           {isOpen && (
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button variant="outline" size="sm">
-                  <X className="h-4 w-4 mr-1" />
-                  Close
-                </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Close Trade</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    Are you sure you want to close this {trade.pair} {trade.direction} position at current market price ({currentPrice.toFixed(5)})?
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Cancel</AlertDialogCancel>
-                  <AlertDialogAction onClick={() => handleCloseTrade(trade)}>
-                    Close Trade
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
+            <div className="flex gap-2">
+              {/* Cancel Trade Button - Cancels without affecting balance */}
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button variant="ghost" size="sm" className="text-orange-600 hover:text-orange-700 hover:bg-orange-50">
+                    Cancel
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Cancel Trade</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Are you sure you want to cancel this {trade.pair} {trade.direction} position? This will remove the trade without affecting your balance.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Keep Trade</AlertDialogCancel>
+                    <AlertDialogAction onClick={() => handleCancelTrade(trade)} className="bg-orange-600 hover:bg-orange-700">
+                      Cancel Trade
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+
+              {/* Close Trade Button - Closes at market price and updates balance */}
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button variant="outline" size="sm">
+                    <X className="h-4 w-4 mr-1" />
+                    Close
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Close Trade</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Are you sure you want to close this {trade.pair} {trade.direction} position at current market price ({currentPrice.toFixed(5)})? This will update your balance with the P&L.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Keep Open</AlertDialogCancel>
+                    <AlertDialogAction onClick={() => handleCloseTrade(trade)}>
+                      Close Trade
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </div>
           )}
         </div>
 

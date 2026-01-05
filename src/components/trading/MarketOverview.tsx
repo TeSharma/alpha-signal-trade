@@ -1,13 +1,12 @@
-
 import React, { useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { TrendingUp, TrendingDown, BarChart3, Wifi, WifiOff, RefreshCw } from "lucide-react"
+import { TrendingUp, TrendingDown, BarChart3, Wifi, WifiOff, RefreshCw, Zap } from "lucide-react"
 import { useMarketData } from '@/hooks/useMarketData'
 
 const MarketOverview = () => {
-  const { prices, isConnected, updatePrices } = useMarketData()
+  const { prices, isConnected, oracleAvailable, updatePrices, isLoading } = useMarketData()
   const [selectedTimeframe, setSelectedTimeframe] = useState('1m')
 
   const timeframes = ['1m', '5m', '15m', '1h', '4h', '1d']
@@ -37,10 +36,17 @@ const MarketOverview = () => {
                 variant="ghost" 
                 size="sm" 
                 onClick={updatePrices}
+                disabled={isLoading}
                 className="h-6 w-6 p-0"
               >
-                <RefreshCw className="h-3 w-3" />
+                <RefreshCw className={`h-3 w-3 ${isLoading ? 'animate-spin' : ''}`} />
               </Button>
+              {oracleAvailable && (
+                <Badge variant="outline" className="text-xs flex items-center gap-1">
+                  <Zap className="h-3 w-3 text-yellow-500" />
+                  Chainlink
+                </Badge>
+              )}
             </div>
           </div>
           <div className="flex gap-2">
@@ -108,7 +114,14 @@ const MarketOverview = () => {
                   </div>
                 </div>
                 <div className="text-right">
-                  <p className="font-semibold">{item.price}</p>
+                  <div className="flex items-center justify-end gap-1">
+                    <p className="font-semibold">{item.price}</p>
+                    {item.isOraclePrice && (
+                      <span title="Chainlink Oracle">
+                        <Zap className="h-3 w-3 text-yellow-500" />
+                      </span>
+                    )}
+                  </div>
                   <div className="flex items-center gap-2">
                     <Badge variant={item.changePercent >= 0 ? 'default' : 'destructive'}>
                       {item.changePercent >= 0 ? '+' : ''}{item.changePercent}%

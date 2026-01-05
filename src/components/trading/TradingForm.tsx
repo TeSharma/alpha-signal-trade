@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -6,11 +5,12 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { TrendingUp, TrendingDown, Calculator, Activity, Zap } from "lucide-react"
-import { connectToBlockchain, getContractInstance, getWeb3 } from '@/lib/web3'
+import { TrendingUp, TrendingDown, Calculator, Activity, Zap, Link } from "lucide-react"
 import { useTrades } from '@/hooks/useTrades'
 import { useMarketData } from '@/hooks/useMarketData'
+import { useOnChainTrading } from '@/hooks/useOnChainTrading'
 import { useToast } from '@/components/ui/use-toast'
+import { CONTRACT_ADDRESSES } from '@/config/contracts'
 
 interface TradingFormProps {
   accountMode: 'demo' | 'live';
@@ -36,8 +36,17 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
   const [isSubmitting, setIsSubmitting] = useState(false)
   
   const { createTrade, accountBalance } = useTrades()
-  const { prices, getCurrentPrice, getBidPrice, getAskPrice } = useMarketData()
+  const { prices, getCurrentPrice, getBidPrice, getAskPrice, oracleAvailable } = useMarketData()
+  const { openPosition: openOnChainPosition, isLoading: onChainLoading, approvalPending, getCollateralBalance } = useOnChainTrading()
   const { toast } = useToast()
+  const [collateralBalance, setCollateralBalance] = useState('0')
+
+  // Fetch collateral balance for live mode
+  useEffect(() => {
+    if (accountMode === 'live') {
+      getCollateralBalance().then(setCollateralBalance);
+    }
+  }, [accountMode, getCollateralBalance]);
 
   const selectedPairData = prices.find(p => p.pair === selectedPair)
   const currentPrice = getCurrentPrice(selectedPair)
@@ -85,31 +94,19 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
       })
 
       if (accountMode === 'live' && tradeResult) {
-        // Handle blockchain transaction for live trades
-        try {
-          const isConnected = await connectToBlockchain();
-          if (!isConnected) {
-            console.error('Failed to connect to blockchain');
-            return;
-          }
+        // Execute on-chain using the hook
+        const txHash = await openOnChainPosition({
+          pair: selectedPair,
+          isLong: tradeDirection === 'buy',
+          collateral: lotSize, // Using lot size as collateral for simplicity
+          leverage: 1,
+          stopLoss: stopLoss ? parseFloat(stopLoss) : undefined,
+          takeProfit: takeProfit ? parseFloat(takeProfit) : undefined
+        });
 
-          const contractAddress = '0x...'; // Replace with actual contract address
-          const contractAbi = []; // Replace with actual ABI
-          const contract = getContractInstance(contractAddress, contractAbi);
-
-          const web3 = getWeb3();
-          const accounts = await web3.eth.getAccounts();
-          const tx = await contract.methods.openPosition(
-            selectedPair,
-            parseFloat(lotSize),
-            currentPrice,
-            stopLoss ? parseFloat(stopLoss) : 0,
-            takeProfit ? parseFloat(takeProfit) : 0
-          ).send({ from: accounts[0] });
-
-          console.log('Blockchain transaction successful:', tx);
-        } catch (error) {
-          console.error('Blockchain error:', error);
+        if (txHash) {
+          // Update collateral balance after trade
+          getCollateralBalance().then(setCollateralBalance);
         }
       }
 
@@ -142,9 +139,17 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
       <CardHeader>
         <CardTitle className="flex items-center justify-between">
           <span>Place Trade</span>
-          <Badge variant={accountMode === 'demo' ? 'default' : 'destructive'}>
-            {accountMode}
-          </Badge>
+          <div className="flex items-center gap-2">
+            {accountMode === 'live' && parseFloat(collateralBalance) > 0 && (
+              <Badge variant="outline" className="text-xs">
+                <Link className="h-3 w-3 mr-1" />
+                {collateralBalance} tUSD
+              </Badge>
+            )}
+            <Badge variant={accountMode === 'demo' ? 'default' : 'destructive'}>
+              {accountMode}
+            </Badge>
+          </div>
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -170,12 +175,20 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
           
           {/* Current Price Display */}
           {selectedPairData && (
-            <div className="bg-blue-50 rounded-lg p-3 space-y-2">
+            <div className="bg-blue-50 dark:bg-blue-950 rounded-lg p-3 space-y-2">
               <div className="flex justify-between items-center">
                 <span className="text-sm font-medium">Current Price</span>
-                <div className="flex items-center gap-1">
-                  <Activity className="h-3 w-3 text-blue-500" />
-                  <span className="text-xs text-blue-500">Live</span>
+                <div className="flex items-center gap-2">
+                  {selectedPairData.isOraclePrice && (
+                    <Badge variant="outline" className="text-xs flex items-center gap-1">
+                      <Zap className="h-3 w-3 text-yellow-500" />
+                      Oracle
+                    </Badge>
+                  )}
+                  <div className="flex items-center gap-1">
+                    <Activity className="h-3 w-3 text-blue-500" />
+                    <span className="text-xs text-blue-500">Live</span>
+                  </div>
                 </div>
               </div>
               <div className="grid grid-cols-3 gap-2 text-sm">
@@ -343,18 +356,27 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
           className="w-full" 
           size="lg"
           onClick={handleSubmitTrade}
-          disabled={isLoadingSignal || isSubmitting}
+          disabled={isLoadingSignal || isSubmitting || onChainLoading || approvalPending}
         >
-          {isLoadingSignal ? (
+          {approvalPending ? (
             <span className="flex items-center">
               <svg className="animate-spin -ml-1 mr-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
               </svg>
-              {orderType === 'market' ? 'Executing...' : 'Placing Order...'}
+              Approving Token...
+            </span>
+          ) : isLoadingSignal || onChainLoading ? (
+            <span className="flex items-center">
+              <svg className="animate-spin -ml-1 mr-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              {accountMode === 'live' ? 'Executing On-Chain...' : 'Executing...'}
             </span>
           ) : (
             <span className="flex items-center">
+              {accountMode === 'live' && <Link className="h-4 w-4 mr-2" />}
               {orderType === 'market' ? (
                 <Zap className="h-4 w-4 mr-2" />
               ) : (

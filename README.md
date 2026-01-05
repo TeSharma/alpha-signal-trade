@@ -38,3 +38,11 @@ This project demonstrates a basic Hardhat use case. It comes with a sample contr
 
 Hardhat Commands
 shell npx hardhat help npx hardhat test REPORT_GAS=true npx hardhat test npx hardhat node npx hardhat ignition deploy ./ignition/modules/Lock.js
+
+Hedera certificate
+https://drive.google.com/file/d/1JPIjkihACoW6nw2NSaVaR9_Plq2YJFo2/view?usp=drive_link
+
+Pitch deck
+https://docs.google.com/presentation/d/1UpqVc-y4riml77aRPHGAhSsRN0DV1Luz/edit?usp=drive_link&ouid=115276089874407529396&rtpof=true&sd=true
+
+

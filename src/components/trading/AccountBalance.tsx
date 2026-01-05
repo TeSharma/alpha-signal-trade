@@ -15,9 +15,11 @@ interface AccountBalanceProps {
 }
 
 const AccountBalance = ({ accountMode, onModeChange }: AccountBalanceProps) => {
-  const { accountBalance } = useTrades()
+  const { accountBalance, resetDemoBalance } = useTrades()
   const { state } = useApp()
   const [showBalance, setShowBalance] = useState(true)
+
+  const walletNativeBalance = state.isWalletConnected ? (state.userBalance || 0) : 0
 
   const currentBalance = accountMode === 'demo' 
     ? (accountBalance?.demo_balance || 10000)
@@ -40,6 +42,11 @@ const AccountBalance = ({ accountMode, onModeChange }: AccountBalanceProps) => {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2
     }).format(amount)
+  }
+
+  const formatNativeBalance = (amount: number) => {
+    if (!showBalance) return '****'
+    return `${amount.toFixed(4)} MATIC`
   }
 
   const formatPnL = (amount: number) => {
@@ -95,13 +102,17 @@ const AccountBalance = ({ accountMode, onModeChange }: AccountBalanceProps) => {
         {/* Current Balance */}
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <span className="text-sm text-gray-600">Current Balance</span>
+            <span className="text-sm text-gray-600">
+              {accountMode === 'live' ? 'Wallet Balance (MATIC)' : 'Current Balance'}
+            </span>
             <Badge variant={accountMode === 'demo' ? 'default' : 'destructive'}>
               {accountMode.toUpperCase()}
             </Badge>
           </div>
           <div className="text-3xl font-bold">
-            {formatCurrency(currentBalance)}
+            {accountMode === 'live'
+              ? formatNativeBalance(walletNativeBalance)
+              : formatCurrency(currentBalance)}
           </div>
           
           {/* Wallet Connection Status */}
@@ -111,6 +122,14 @@ const AccountBalance = ({ accountMode, onModeChange }: AccountBalanceProps) => {
               <span className={state.isWalletConnected ? 'text-green-600' : 'text-red-600'}>
                 {state.isWalletConnected ? 'Wallet Connected' : 'Wallet Not Connected'}
               </span>
+            </div>
+          )}
+
+          {accountMode === 'demo' && (
+            <div>
+              <Button variant="outline" size="sm" onClick={() => resetDemoBalance()}>
+                Reset Demo Balance
+              </Button>
             </div>
           )}
         </div>
