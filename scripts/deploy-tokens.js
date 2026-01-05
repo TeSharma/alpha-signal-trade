@@ -3,7 +3,7 @@ const fs = require("fs");
 const path = require("path");
 
 // Existing TradingPlatform address on Amoy
-const TRADING_PLATFORM_ADDRESS = "0x81183d41147a9c45924D89b164645D4134B79FE5";
+const TRADING_PLATFORM_ADDRESS = "0xE13B97E70AF997dEaB3EAa28Ab88cCd362734729";
 
 // Token configurations to deploy
 const TOKENS = [

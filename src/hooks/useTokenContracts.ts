@@ -39,7 +39,7 @@ const ERC20_ABI = [
 
 // Deployed contract addresses on Amoy testnet
 export const TOKEN_ADDRESSES = {
-  tUSD: '0x7Ffe9d94e805cE4A32B41a94F9f902783BAcD7B3',
+  tUSD: '0xdb204732615f1EC2bDb1Aae2032bC9DE7aA8c164',
   tEUR: '0x0000000000000000000000000000000000000000', // Not yet deployed
   tGBP: '0x0000000000000000000000000000000000000000',
   tJPY: '0x0000000000000000000000000000000000000000',
@@ -49,9 +49,9 @@ export const TOKEN_ADDRESSES = {
   tNZD: '0x0000000000000000000000000000000000000000',
 };
 
-// Updated to use the latest deployed addresses from contracts.ts
-export const ORACLE_ADDRESS = '0x08f2bfA91c52F3c71dBa9bDdAB7F1774578fBA5A';
-export const TRADING_PLATFORM_ADDRESS = '0x81183d41147a9c45924D89b164645D4134B79FE5';
+// Updated to use the latest deployed addresses
+export const ORACLE_ADDRESS = '0x8063A3901b9053f911fFE3da4bAF754B640A0744';
+export const TRADING_PLATFORM_ADDRESS = '0xE13B97E70AF997dEaB3EAa28Ab88cCd362734729';
 
 interface TokenBalance {
   symbol: string;
