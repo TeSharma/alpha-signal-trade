@@ -1,2 +1,0 @@
-(await ethers.getSigners())[0]?.address
-(await ethers.getSigners()).length
