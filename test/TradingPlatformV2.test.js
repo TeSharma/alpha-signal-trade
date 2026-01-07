@@ -18,21 +18,21 @@ describe("TradingPlatformV2", function () {
   });
 
   beforeEach(async function () {
-    // Deploy mock collateral token (tUSD)
-    const TokenizedCurrency = await ethers.getContractFactory("TokenizedCurrency");
+    // Deploy mock collateral token (tUSD) - use fully qualified name
+    const TokenizedCurrency = await ethers.getContractFactory("src/contracts/TokenizedCurrency.sol:TokenizedCurrency");
     collateralToken = await TokenizedCurrency.deploy("Test USD", "tUSD");
     await collateralToken.waitForDeployment();
 
-    // Deploy mock price oracle
-    MockPriceOracle = await ethers.getContractFactory("MockPriceOracleV2");
+    // Deploy mock price oracle - use fully qualified name
+    MockPriceOracle = await ethers.getContractFactory("src/contracts/MockPriceOracleV2.sol:MockPriceOracleV2");
     priceOracle = await MockPriceOracle.deploy();
     await priceOracle.waitForDeployment();
 
     // Set initial price
     await priceOracle.setPrice(PAIR_ID, INITIAL_PRICE);
 
-    // Deploy TradingPlatformV2
-    const TradingPlatformV2 = await ethers.getContractFactory("TradingPlatformV2");
+    // Deploy TradingPlatformV2 - use fully qualified name
+    const TradingPlatformV2 = await ethers.getContractFactory("src/contracts/TradingPlatformV2.sol:TradingPlatformV2");
     tradingPlatform = await TradingPlatformV2.deploy(
       await priceOracle.getAddress(),
       await collateralToken.getAddress()
