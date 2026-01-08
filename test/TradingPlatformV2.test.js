@@ -5,9 +5,10 @@ describe("TradingPlatformV2", function () {
   let owner, trader1, trader2, liquidator;
   let collateralToken, priceOracle, tradingPlatform;
   
+  const TOKEN_DECIMALS = 6;
   const PAIR_ID = ethers.keccak256(ethers.toUtf8Bytes("EUR/USD"));
   const INITIAL_PRICE = ethers.parseUnits("1.08", 8); // EUR/USD = 1.08
-  const MARGIN = ethers.parseUnits("100", 18); // 100 tUSD
+  const MARGIN = ethers.parseUnits("100", TOKEN_DECIMALS); // 100 tUSD
   const LEVERAGE = 10n;
 
   // Mock price oracle for testing
@@ -18,9 +19,9 @@ describe("TradingPlatformV2", function () {
   });
 
   beforeEach(async function () {
-    // Deploy mock collateral token (tUSD) - use fully qualified name
+    // Deploy mock collateral token (tUSD) - use fully qualified name with 3 args
     const TokenizedCurrency = await ethers.getContractFactory("src/contracts/TokenizedCurrency.sol:TokenizedCurrency");
-    collateralToken = await TokenizedCurrency.deploy("Test USD", "tUSD");
+    collateralToken = await TokenizedCurrency.deploy("Test USD", "tUSD", TOKEN_DECIMALS);
     await collateralToken.waitForDeployment();
 
     // Deploy mock price oracle - use fully qualified name
@@ -39,9 +40,16 @@ describe("TradingPlatformV2", function () {
     );
     await tradingPlatform.waitForDeployment();
 
-    // Mint tokens to traders
-    await collateralToken.mint(trader1.address, ethers.parseUnits("10000", 18));
-    await collateralToken.mint(trader2.address, ethers.parseUnits("10000", 18));
+    // Mint tokens to traders (with reason parameter)
+    await collateralToken.mint(trader1.address, ethers.parseUnits("10000", TOKEN_DECIMALS), "test mint");
+    await collateralToken.mint(trader2.address, ethers.parseUnits("10000", TOKEN_DECIMALS), "test mint");
+
+    // Mint liquidity to trading platform for profit payouts
+    await collateralToken.mint(
+      await tradingPlatform.getAddress(),
+      ethers.parseUnits("1000000", TOKEN_DECIMALS),
+      "platform liquidity"
+    );
 
     // Approve trading platform
     await collateralToken.connect(trader1).approve(
