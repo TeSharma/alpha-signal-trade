@@ -33,7 +33,7 @@ jobs:
 
       - name: Create GitHub Issue (Test)
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           gh issue create \
             --title "Automated Test Issue" \
