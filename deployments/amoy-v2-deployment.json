@@ -1,0 +1,25 @@
+{
+  "network": "amoy",
+  "chainId": 80002,
+  "deployedAt": "2026-01-08T12:53:15.907Z",
+  "deployer": "0x09C2B58F6004176bD83cc000d804eD3c1041754E",
+  "contracts": {
+    "PriceOracleV2": "0x5e6038c073B8EB7d7b03Cc56503006183fe64eA1",
+    "TradingPlatformV2": "0x735C78c95da6284244771F66B5aA4c0BE38fb7c7",
+    "CollateralToken": "0xdb204732615f1EC2bDb1Aae2032bC9DE7aA8c164"
+  },
+  "pairIds": {
+    "EUR/USD": "0xa9226449042e36bf6865099eec57482aa55e3ad026c315a0e4a692b776c318ca",
+    "GBP/USD": "0xfd121bde813a3463e16ad2a4ea4103a6a122fbe2cdb07a80d4d293be07bb29fa",
+    "USD/JPY": "0x35b8bafff3570683af968b8d36b91b1a19465141d9712425e9f76c68ff8cb152",
+    "AUD/USD": "0xf4940d379cdb765b9e0430725c0c9efb14a767ce50a687ac4658cce705407380",
+    "USD/CAD": "0xd3b12a91111fc4b35285b5350562b4b8353360c3330bc3ca852090433c817821",
+    "USD/CHF": "0x7d0be2bc20e4a7a7732b6da47387db5bed436ba00057071eccfd35834419e5ec",
+    "NZD/USD": "0x8ec6b8f902e41a6caca5bfa7f3a89b4f99d679617c85b51ae6180f7eaace2c0f"
+  },
+  "configuration": {
+    "maxLeverage": 50,
+    "maintenanceMarginBps": 1000,
+    "maxProfitBps": 30000
+  }
+}

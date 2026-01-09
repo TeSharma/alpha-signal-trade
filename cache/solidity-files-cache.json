@@ -1,6 +1,42 @@
 {
   "_format": "hh-sol-cache-2",
   "files": {
+    "C:\\Users\\USER\\sharma\\alpha-signal-trade\\src\\contracts\\MockPriceOracleV2.sol": {
+      "lastModificationDate": 1767680661497,
+      "contentHash": "9e4cf2353a4a1f028096354fb1f7a46f",
+      "sourceName": "src/contracts/MockPriceOracleV2.sol",
+      "solcConfig": {
+        "version": "0.8.20",
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        "^0.8.20"
+      ],
+      "artifacts": [
+        "MockPriceOracleV2"
+      ]
+    },
     "C:\\Users\\USER\\sharma\\alpha-signal-trade\\src\\contracts\\PriceOracle.sol": {
       "lastModificationDate": 1760934237773,
       "contentHash": "e202f740cd8d9b3e246d513f1d9c14d4",
@@ -606,6 +642,86 @@
       ],
       "artifacts": [
         "IERC165"
+      ]
+    },
+    "C:\\Users\\USER\\sharma\\alpha-signal-trade\\src\\contracts\\TradingPlatformV2.sol": {
+      "lastModificationDate": 1767785273397,
+      "contentHash": "91c9d2957f8afae3bd5561880cc9da99",
+      "sourceName": "src/contracts/TradingPlatformV2.sol",
+      "solcConfig": {
+        "version": "0.8.20",
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [
+        "@openzeppelin/contracts/utils/ReentrancyGuard.sol",
+        "@openzeppelin/contracts/access/Ownable.sol",
+        "@openzeppelin/contracts/token/ERC20/IERC20.sol"
+      ],
+      "versionPragmas": [
+        "^0.8.20"
+      ],
+      "artifacts": [
+        "IPriceOracleV2",
+        "TradingPlatformV2"
+      ]
+    },
+    "C:\\Users\\USER\\sharma\\alpha-signal-trade\\src\\contracts\\PriceOracleV2.sol": {
+      "lastModificationDate": 1767680661497,
+      "contentHash": "e745bf34de102c11b51126a95bdff917",
+      "sourceName": "src/contracts/PriceOracleV2.sol",
+      "solcConfig": {
+        "version": "0.8.20",
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [
+        "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol",
+        "@openzeppelin/contracts/access/Ownable.sol"
+      ],
+      "versionPragmas": [
+        "^0.8.20"
+      ],
+      "artifacts": [
+        "PriceOracleV2"
       ]
     },
     "C:\\Users\\USER\\sharma\\alpha-signal-trade\\src\\contracts\\TradingContract.sol": {
