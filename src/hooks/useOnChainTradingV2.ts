@@ -2,9 +2,9 @@ import { useState, useCallback } from 'react';
 import Web3 from 'web3';
 import { useToast } from '@/hooks/use-toast';
 
-// V2 Contract addresses - will be updated after deployment
-export const TRADING_PLATFORM_V2_ADDRESS = '0x0000000000000000000000000000000000000000';
-export const PRICE_ORACLE_V2_ADDRESS = '0x0000000000000000000000000000000000000000';
+// V2 Contract addresses - DEPLOYED TO AMOY
+export const TRADING_PLATFORM_V2_ADDRESS = '0x735C78c95da6284244771F66B5aA4c0BE38fb7c7';
+export const PRICE_ORACLE_V2_ADDRESS = '0x5e6038c073B8EB7d7b03Cc56503006183fe64eA1';
 export const TUSD_ADDRESS = '0xdb204732615f1EC2bDb1Aae2032bC9DE7aA8c164';
 
 // TradingPlatformV2 ABI
