@@ -9,6 +9,7 @@ import MobileTradingInterface from "@/components/trading/MobileTradingInterface"
 import TradeHistory from "@/components/trading/TradeHistory";
 import AccountBalance from "@/components/trading/AccountBalance";
 import { DeploymentGuide } from "@/components/trading/DeploymentGuide";
+import V2PositionsPanel from "@/components/trading/V2PositionsPanel";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const Trade = () => {
@@ -50,6 +51,7 @@ const Trade = () => {
                     </div>
                     <div className="lg:col-span-2 space-y-6">
                       <MarketOverview />
+                      {accountMode === 'live' && <V2PositionsPanel />}
                       <TradeHistory accountMode={accountMode} />
                     </div>
                   </div>

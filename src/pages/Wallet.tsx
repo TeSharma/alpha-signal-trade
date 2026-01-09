@@ -8,6 +8,7 @@ import { HederaWalletConnect } from '@/components/wallet/HederaWalletConnect';
 import Sidebar from '@/components/layout/Sidebar';
 import ResponsiveNav from '@/components/layout/ResponsiveNav';
 import { TokenBalances } from '@/components/trading/TokenBalances';
+import TUSDFaucet from '@/components/wallet/TUSDFaucet';
 
 export default function Wallet() {
   return (
@@ -56,6 +57,7 @@ export default function Wallet() {
 
               <TabsContent value="tokens" className="space-y-6">
                 <TokenBalances />
+                <TUSDFaucet />
               </TabsContent>
 
               <TabsContent value="deposit" className="space-y-6">
