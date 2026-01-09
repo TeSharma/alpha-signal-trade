@@ -8,7 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { TrendingUp, TrendingDown, Calculator, Activity, Zap, Link } from "lucide-react"
 import { useTrades } from '@/hooks/useTrades'
 import { useMarketData } from '@/hooks/useMarketData'
-import { useOnChainTrading } from '@/hooks/useOnChainTrading'
+import { useOnChainTradingV2 } from '@/hooks/useOnChainTradingV2'
 import { useToast } from '@/components/ui/use-toast'
 import { CONTRACT_ADDRESSES } from '@/config/contracts'
 
@@ -37,7 +37,7 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
   
   const { createTrade, accountBalance } = useTrades()
   const { prices, getCurrentPrice, getBidPrice, getAskPrice, oracleAvailable } = useMarketData()
-  const { openPosition: openOnChainPosition, isLoading: onChainLoading, approvalPending, getCollateralBalance } = useOnChainTrading()
+  const { openPosition: openOnChainPositionV2, isLoading: onChainLoading, approvalPending, getCollateralBalance } = useOnChainTradingV2()
   const { toast } = useToast()
   const [collateralBalance, setCollateralBalance] = useState('0')
 
@@ -94,14 +94,12 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
       })
 
       if (accountMode === 'live' && tradeResult) {
-        // Execute on-chain using the hook
-        const txHash = await openOnChainPosition({
+        // Execute on-chain using the V2 hook
+        const txHash = await openOnChainPositionV2({
           pair: selectedPair,
-          isLong: tradeDirection === 'buy',
-          collateral: lotSize, // Using lot size as collateral for simplicity
-          leverage: 1,
-          stopLoss: stopLoss ? parseFloat(stopLoss) : undefined,
-          takeProfit: takeProfit ? parseFloat(takeProfit) : undefined
+          direction: tradeDirection,
+          margin: lotSize, // Using lot size as margin
+          leverage: 1
         });
 
         if (txHash) {
