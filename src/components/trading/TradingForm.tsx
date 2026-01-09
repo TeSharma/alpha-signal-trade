@@ -5,7 +5,8 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { TrendingUp, TrendingDown, Calculator, Activity, Zap, Link } from "lucide-react"
+import { Slider } from "@/components/ui/slider"
+import { TrendingUp, TrendingDown, Calculator, Activity, Zap, Link, AlertTriangle } from "lucide-react"
 import { useTrades } from '@/hooks/useTrades'
 import { useMarketData } from '@/hooks/useMarketData'
 import { useOnChainTradingV2 } from '@/hooks/useOnChainTradingV2'
@@ -24,9 +25,10 @@ interface AISignalResponse {
 }
 
 const TradingForm = ({ accountMode }: TradingFormProps) => {
-  const [selectedPair, setSelectedPair] = useState('GBP/JPY')
+  const [selectedPair, setSelectedPair] = useState('EUR/USD')
   const [tradeDirection, setTradeDirection] = useState<'buy' | 'sell'>('buy')
-  const [lotSize, setLotSize] = useState('0.1')
+  const [lotSize, setLotSize] = useState('10')
+  const [leverage, setLeverage] = useState(5)
   const [stopLoss, setStopLoss] = useState('')
   const [takeProfit, setTakeProfit] = useState('')
   const [orderType, setOrderType] = useState<'market' | 'limit'>('market')
@@ -37,16 +39,20 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
   
   const { createTrade, accountBalance } = useTrades()
   const { prices, getCurrentPrice, getBidPrice, getAskPrice, oracleAvailable } = useMarketData()
-  const { openPosition: openOnChainPositionV2, isLoading: onChainLoading, approvalPending, getCollateralBalance } = useOnChainTradingV2()
+  const { openPosition: openOnChainPositionV2, isLoading: onChainLoading, approvalPending, getCollateralBalance, getPlatformConfig } = useOnChainTradingV2()
   const { toast } = useToast()
   const [collateralBalance, setCollateralBalance] = useState('0')
+  const [maxLeverage, setMaxLeverage] = useState(50)
 
-  // Fetch collateral balance for live mode
+  // Fetch collateral balance and platform config for live mode
   useEffect(() => {
     if (accountMode === 'live') {
       getCollateralBalance().then(setCollateralBalance);
+      getPlatformConfig().then(config => {
+        if (config) setMaxLeverage(config.maxLeverage);
+      });
     }
-  }, [accountMode, getCollateralBalance]);
+  }, [accountMode, getCollateralBalance, getPlatformConfig]);
 
   const selectedPairData = prices.find(p => p.pair === selectedPair)
   const currentPrice = getCurrentPrice(selectedPair)
@@ -98,8 +104,8 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
         const txHash = await openOnChainPositionV2({
           pair: selectedPair,
           direction: tradeDirection,
-          margin: lotSize, // Using lot size as margin
-          leverage: 1
+          margin: lotSize,
+          leverage: leverage
         });
 
         if (txHash) {
@@ -258,10 +264,10 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
           </Tabs>
         </div>
 
-        {/* Lot Size */}
+        {/* Margin Amount */}
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <Label>Lot Size</Label>
+            <Label>{accountMode === 'live' ? 'Margin (tUSD)' : 'Lot Size'}</Label>
             <Button variant="ghost" size="sm" onClick={calculateLotSize}>
               <Calculator className="h-4 w-4 mr-1" />
               Calculate
@@ -271,14 +277,46 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
             type="number"
             value={lotSize}
             onChange={(e) => setLotSize(e.target.value)}
-            placeholder="0.1"
-            step="0.01"
-            min="0.01"
+            placeholder={accountMode === 'live' ? '10' : '0.1'}
+            step={accountMode === 'live' ? '1' : '0.01'}
+            min={accountMode === 'live' ? '1' : '0.01'}
           />
-          <div className="text-xs text-gray-500">
-            Position value: ${(parseFloat(lotSize || '0') * currentPrice * 100000).toLocaleString()}
+          <div className="text-xs text-muted-foreground">
+            {accountMode === 'live' 
+              ? `Position size: $${(parseFloat(lotSize || '0') * leverage).toLocaleString()}`
+              : `Position value: $${(parseFloat(lotSize || '0') * currentPrice * 100000).toLocaleString()}`
+            }
           </div>
         </div>
+
+        {/* Leverage Selector (Live mode only) */}
+        {accountMode === 'live' && (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <Label>Leverage</Label>
+              <Badge variant="outline" className="font-mono">{leverage}x</Badge>
+            </div>
+            <Slider
+              value={[leverage]}
+              onValueChange={(value) => setLeverage(value[0])}
+              min={1}
+              max={maxLeverage}
+              step={1}
+              className="w-full"
+            />
+            <div className="flex justify-between text-xs text-muted-foreground">
+              <span>1x</span>
+              <span className="text-center">Lower risk ← → Higher risk</span>
+              <span>{maxLeverage}x</span>
+            </div>
+            {leverage >= 20 && (
+              <div className="flex items-center gap-2 text-xs text-amber-600 bg-amber-50 dark:bg-amber-950/30 p-2 rounded">
+                <AlertTriangle className="h-3 w-3" />
+                High leverage increases liquidation risk
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Stop Loss */}
         <div className="space-y-2">
@@ -306,7 +344,7 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
 
         {/* Trade Summary */}
         {selectedPairData && (
-          <div className="bg-gray-50 rounded-lg p-3 space-y-2">
+          <div className="bg-muted rounded-lg p-3 space-y-2">
             <h4 className="font-semibold text-sm">Trade Summary</h4>
             <div className="space-y-1 text-sm">
               <div className="flex justify-between">
@@ -319,12 +357,29 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
                   {tradeDirection.toUpperCase()}
                 </span>
               </div>
+              {accountMode === 'live' ? (
+                <>
+                  <div className="flex justify-between">
+                    <span>Margin:</span>
+                    <span>{lotSize} tUSD</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Leverage:</span>
+                    <span>{leverage}x</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Position Size:</span>
+                    <span>${(parseFloat(lotSize || '0') * leverage).toLocaleString()}</span>
+                  </div>
+                </>
+              ) : (
+                <div className="flex justify-between">
+                  <span>Lot Size:</span>
+                  <span>{lotSize}</span>
+                </div>
+              )}
               <div className="flex justify-between">
-                <span>Lot Size:</span>
-                <span>{lotSize}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Current Price:</span>
+                <span>Entry Price:</span>
                 <span>{selectedPairData.price}</span>
               </div>
             </div>
