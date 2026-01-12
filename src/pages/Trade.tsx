@@ -10,6 +10,7 @@ import TradeHistory from "@/components/trading/TradeHistory";
 import AccountBalance from "@/components/trading/AccountBalance";
 import { DeploymentGuide } from "@/components/trading/DeploymentGuide";
 import V2PositionsPanel from "@/components/trading/V2PositionsPanel";
+import OracleStatus from "@/components/trading/OracleStatus";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const Trade = () => {
@@ -50,6 +51,11 @@ const Trade = () => {
                       <TradingForm accountMode={accountMode} />
                     </div>
                     <div className="lg:col-span-2 space-y-6">
+                      {accountMode === 'live' && (
+                        <div className="flex justify-end">
+                          <OracleStatus />
+                        </div>
+                      )}
                       <MarketOverview />
                       {accountMode === 'live' && <V2PositionsPanel />}
                       <TradeHistory accountMode={accountMode} />

@@ -76,6 +76,47 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
         return
       }
 
+      // Pre-trade validation for live mode
+      if (accountMode === 'live') {
+        // Check collateral balance
+        const balance = parseFloat(collateralBalance);
+        const requiredMargin = parseFloat(lotSize);
+        
+        if (balance < requiredMargin) {
+          toast({
+            title: 'Insufficient tUSD Balance',
+            description: `You need ${requiredMargin} tUSD but only have ${balance.toFixed(2)} tUSD. Visit the Wallet page to get test tokens from the faucet.`,
+            variant: 'destructive'
+          })
+          return
+        }
+
+        // Check if MetaMask is connected
+        if (typeof window.ethereum === 'undefined') {
+          toast({
+            title: 'Wallet Not Connected',
+            description: 'Please install and connect MetaMask to trade in live mode.',
+            variant: 'destructive'
+          })
+          return
+        }
+
+        // Check network (Polygon Amoy chainId: 80002)
+        try {
+          const chainId = await window.ethereum.request({ method: 'eth_chainId' });
+          if (chainId !== '0x13882') { // 80002 in hex
+            toast({
+              title: 'Wrong Network',
+              description: 'Please switch to Polygon Amoy testnet in MetaMask to trade.',
+              variant: 'destructive'
+            })
+            return
+          }
+        } catch (networkError) {
+          console.error('Network check error:', networkError);
+        }
+      }
+
       // Get execution price based on order type and direction
       let executionPrice = currentPrice
       if (orderType === 'market') {
@@ -121,8 +162,68 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
         setTakeProfit('')
         setLimitPrice('')
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error submitting trade:', error)
+      
+      // Parse error message for specific handling
+      const errorMessage = error?.message || 'Transaction failed';
+      
+      // User rejected transaction
+      if (error?.code === 4001 || errorMessage.includes('User denied') || errorMessage.includes('rejected')) {
+        toast({
+          title: 'Transaction Cancelled',
+          description: 'You cancelled the transaction in MetaMask.',
+          variant: 'default'
+        })
+        return
+      }
+      
+      // Insufficient balance
+      if (errorMessage.includes('insufficient') || errorMessage.includes('Insufficient')) {
+        toast({
+          title: 'Insufficient Balance',
+          description: 'Not enough tUSD. Get test tokens from the faucet on the Wallet page.',
+          variant: 'destructive'
+        })
+        return
+      }
+      
+      // Oracle/price feed errors
+      if (errorMessage.includes('oracle') || errorMessage.includes('price') || errorMessage.includes('stale')) {
+        toast({
+          title: 'Price Feed Unavailable',
+          description: 'Oracle price is unavailable or stale. Please try again in a moment.',
+          variant: 'destructive'
+        })
+        return
+      }
+      
+      // Network errors
+      if (errorMessage.includes('network') || errorMessage.includes('connection') || errorMessage.includes('timeout')) {
+        toast({
+          title: 'Network Error',
+          description: 'Check your internet connection and try again.',
+          variant: 'destructive'
+        })
+        return
+      }
+      
+      // Gas estimation failed (often means contract will revert)
+      if (errorMessage.includes('gas') || errorMessage.includes('execution reverted')) {
+        toast({
+          title: 'Transaction Failed',
+          description: 'The transaction would fail. Check your balance and try a smaller position.',
+          variant: 'destructive'
+        })
+        return
+      }
+      
+      // Generic fallback
+      toast({
+        title: 'Trade Failed',
+        description: errorMessage.length > 100 ? 'An unexpected error occurred. Please try again.' : errorMessage,
+        variant: 'destructive'
+      })
     } finally {
       setIsLoadingSignal(false)
       setIsSubmitting(false)
