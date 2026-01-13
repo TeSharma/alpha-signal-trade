@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -14,6 +13,7 @@ import { useTrades } from '@/hooks/useTrades';
 import { useMarketData } from '@/hooks/useMarketData';
 import { useOnChainTradingV2 } from '@/hooks/useOnChainTradingV2';
 import { useToast } from '@/hooks/use-toast';
+import { CHAIN_IDS, getMinimums, isMainnet } from '@/config/contracts';
 
 interface MobileTradingInterfaceProps {
   accountMode: 'demo' | 'live';
@@ -29,20 +29,36 @@ const MobileTradingInterface = ({ accountMode }: MobileTradingInterfaceProps) =>
   const [showChart, setShowChart] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [collateralBalance, setCollateralBalance] = useState('0');
+  const [currentChainId, setCurrentChainId] = useState<number>(CHAIN_IDS.amoy);
 
   const { createTrade, accountBalance } = useTrades();
   const { prices, getCurrentPrice, getBidPrice, getAskPrice } = useMarketData();
   const { openPosition: openOnChainPositionV2, isLoading: onChainLoading, approvalPending, getCollateralBalance, getPlatformConfig } = useOnChainTradingV2();
   const { toast } = useToast();
+  
+  // Get minimums based on current network
+  const networkMinimums = getMinimums(currentChainId);
+  const minMargin = networkMinimums.minMargin;
   const [maxLeverage, setMaxLeverage] = useState(50);
 
-  // Fetch collateral balance and platform config for live mode
+  // Fetch collateral balance, platform config, and chain ID for live mode
   useEffect(() => {
     if (accountMode === 'live') {
       getCollateralBalance().then(setCollateralBalance);
       getPlatformConfig().then(config => {
         if (config) setMaxLeverage(config.maxLeverage);
       });
+      
+      // Get current chain ID
+      if (window.ethereum) {
+        window.ethereum.request({ method: 'eth_chainId' })
+          .then((chainId: string) => setCurrentChainId(parseInt(chainId, 16)))
+          .catch(console.error);
+        
+        window.ethereum.on('chainChanged', (chainId: string) => {
+          setCurrentChainId(parseInt(chainId, 16));
+        });
+      }
     }
   }, [accountMode, getCollateralBalance, getPlatformConfig]);
 
@@ -57,10 +73,21 @@ const MobileTradingInterface = ({ accountMode }: MobileTradingInterfaceProps) =>
 
     try {
       // Validate inputs
-      if (!lotSize || parseFloat(lotSize) <= 0) {
+      const marginAmount = parseFloat(lotSize);
+      if (!lotSize || marginAmount <= 0) {
         toast({
           title: 'Invalid lot size',
           description: 'Please enter a valid lot size',
+          variant: 'destructive'
+        });
+        return;
+      }
+
+      // Mainnet minimum margin validation
+      if (accountMode === 'live' && isMainnet(currentChainId) && marginAmount < minMargin) {
+        toast({
+          title: 'Minimum Margin Required',
+          description: `Mainnet requires a minimum margin of ${minMargin} tUSD`,
           variant: 'destructive'
         });
         return;

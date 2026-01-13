@@ -11,7 +11,7 @@ import { useTrades } from '@/hooks/useTrades'
 import { useMarketData } from '@/hooks/useMarketData'
 import { useOnChainTradingV2 } from '@/hooks/useOnChainTradingV2'
 import { useToast } from '@/components/ui/use-toast'
-import { CONTRACT_ADDRESSES } from '@/config/contracts'
+import { CONTRACT_ADDRESSES, CHAIN_IDS, getMinimums, isMainnet } from '@/config/contracts'
 
 interface TradingFormProps {
   accountMode: 'demo' | 'live';
@@ -43,16 +43,33 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
   const { toast } = useToast()
   const [collateralBalance, setCollateralBalance] = useState('0')
   const [maxLeverage, setMaxLeverage] = useState(50)
+  const [currentChainId, setCurrentChainId] = useState<number>(CHAIN_IDS.amoy)
 
-  // Fetch collateral balance and platform config for live mode
+  // Fetch collateral balance, platform config, and chain ID for live mode
   useEffect(() => {
     if (accountMode === 'live') {
       getCollateralBalance().then(setCollateralBalance);
       getPlatformConfig().then(config => {
         if (config) setMaxLeverage(config.maxLeverage);
       });
+      
+      // Get current chain ID
+      if (window.ethereum) {
+        window.ethereum.request({ method: 'eth_chainId' })
+          .then((chainId: string) => setCurrentChainId(parseInt(chainId, 16)))
+          .catch(console.error);
+        
+        // Listen for chain changes
+        window.ethereum.on('chainChanged', (chainId: string) => {
+          setCurrentChainId(parseInt(chainId, 16));
+        });
+      }
     }
   }, [accountMode, getCollateralBalance, getPlatformConfig]);
+
+  // Get minimums based on current network
+  const networkMinimums = getMinimums(currentChainId);
+  const minMargin = networkMinimums.minMargin;
 
   const selectedPairData = prices.find(p => p.pair === selectedPair)
   const currentPrice = getCurrentPrice(selectedPair)
@@ -67,10 +84,21 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
     
     try {
       // Validate inputs
-      if (!lotSize || parseFloat(lotSize) <= 0) {
+      const marginAmount = parseFloat(lotSize);
+      if (!lotSize || marginAmount <= 0) {
         toast({
           title: 'Invalid lot size',
           description: 'Please enter a valid lot size',
+          variant: 'destructive'
+        })
+        return
+      }
+
+      // Mainnet minimum margin validation
+      if (accountMode === 'live' && isMainnet(currentChainId) && marginAmount < minMargin) {
+        toast({
+          title: 'Minimum Margin Required',
+          description: `Mainnet requires a minimum margin of ${minMargin} tUSD`,
           variant: 'destructive'
         })
         return
