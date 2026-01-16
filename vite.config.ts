@@ -43,6 +43,10 @@ export default defineConfig(({ mode }) => {
     },
     build: {
       target: 'es2020',
+      rollupOptions: {
+        // Exclude Solidity files from the build
+        external: (id) => id.endsWith('.sol'),
+      },
     },
     define: {
       'process.env': {

@@ -36,6 +36,10 @@ module.exports = {
     cache: "./cache",
     artifacts: "./artifacts",
   },
+  // Additional sources for contracts outside src/
+  sourcify: {
+    enabled: false,
+  },
   etherscan: {
     apiKey: {
       polygon: process.env.POLYGONSCAN_API_KEY || "",
