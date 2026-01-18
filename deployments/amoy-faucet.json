@@ -1,0 +1,17 @@
+{
+  "network": "amoy",
+  "deployedAt": "2026-01-18T09:29:28.873Z",
+  "deployer": "0x09C2B58F6004176bD83cc000d804eD3c1041754E",
+  "contracts": {
+    "TUSDFaucet": "0xE90D9CB8Da847aC2e37e0d54Eda2b2C57236159D",
+    "tUSD": "0xdb204732615f1EC2bDb1Aae2032bC9DE7aA8c164"
+  },
+  "configuration": {
+    "claimAmount": "1000 tUSD",
+    "claimCooldown": "24 hours"
+  },
+  "notes": [
+    "TESTNET ONLY - Remove for mainnet",
+    "Faucet has MINTER_ROLE: true"
+  ]
+}

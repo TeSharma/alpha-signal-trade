@@ -759,6 +759,45 @@
       "artifacts": [
         "TradingContract"
       ]
+    },
+    "C:\\Users\\USER\\sharma\\alpha-signal-trade\\src\\contracts\\TUSDFaucet.sol": {
+      "lastModificationDate": 1768348897636,
+      "contentHash": "777e1b36bda0fb8212c33f98d9651ae1",
+      "sourceName": "src/contracts/TUSDFaucet.sol",
+      "solcConfig": {
+        "version": "0.8.20",
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [
+        "@openzeppelin/contracts/access/Ownable.sol"
+      ],
+      "versionPragmas": [
+        "^0.8.20"
+      ],
+      "artifacts": [
+        "ITokenizedCurrency",
+        "TUSDFaucet"
+      ]
     }
   }
 }
