@@ -25,6 +25,20 @@ contract TradingPlatformV2 is ReentrancyGuard, Ownable {
     uint256 public nextPositionId = 1;
 
     /*//////////////////////////////////////////////////////////////
+                            PROTOCOL REVENUE
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice Protocol treasury address
+    address public treasury;
+
+    /// @notice Trading fees in basis points (1 bp = 0.01%)
+    uint256 public openFeeBps = 8;      // 0.08%
+    uint256 public closeFeeBps = 8;     // 0.08%
+
+    /// @notice Liquidation split - reward for liquidators
+    uint256 public liquidatorRewardBps = 3000; // 30%
+
+    /*//////////////////////////////////////////////////////////////
                                 DATA
     //////////////////////////////////////////////////////////////*/
 
@@ -33,7 +47,7 @@ contract TradingPlatformV2 is ReentrancyGuard, Ownable {
         bytes32 pairId;
         bool isLong;
 
-        uint256 margin;
+        uint256 margin;         // Net margin after open fee
         uint256 leverage;
         uint256 notional;
 
@@ -72,8 +86,21 @@ contract TradingPlatformV2 is ReentrancyGuard, Ownable {
     event PositionLiquidated(
         uint256 indexed id,
         address indexed trader,
-        uint256 price
+        address indexed liquidator,
+        uint256 price,
+        uint256 penalty
     );
+
+    event ProtocolFeeCollected(
+        uint256 indexed positionId,
+        address indexed trader,
+        uint256 amount,
+        string feeType
+    );
+
+    event TreasuryUpdated(address indexed oldTreasury, address indexed newTreasury);
+    event TradingFeesUpdated(uint256 openFeeBps, uint256 closeFeeBps);
+    event LiquidatorRewardUpdated(uint256 rewardBps);
 
     /*//////////////////////////////////////////////////////////////
                               CONSTRUCTOR
@@ -85,6 +112,7 @@ contract TradingPlatformV2 is ReentrancyGuard, Ownable {
 
         oracle = IPriceOracleV2(_oracle);
         collateralToken = IERC20(_collateralToken);
+        treasury = msg.sender; // Initialize treasury to deployer
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -102,13 +130,31 @@ contract TradingPlatformV2 is ReentrancyGuard, Ownable {
         require(margin > 0, "Margin too low");
         require(leverage > 0 && leverage <= maxLeverage, "Invalid leverage");
 
+        // Calculate and deduct open fee
+        uint256 openFee = (margin * openFeeBps) / 10_000;
+        uint256 netMargin = margin - openFee;
+        require(netMargin > 0, "Margin too small for fees");
+
         (uint256 price, uint256 updatedAt) = oracle.getPrice(pairId);
         require(price > 0, "Invalid price");
         require(block.timestamp - updatedAt <= priceTimeout, "Stale price");
 
-        collateralToken.transferFrom(msg.sender, address(this), margin);
+        // Transfer full margin from user
+        require(
+            collateralToken.transferFrom(msg.sender, address(this), margin),
+            "Transfer failed"
+        );
 
-        uint256 notional = margin * leverage;
+        // Transfer fee to treasury
+        if (openFee > 0 && treasury != address(0)) {
+            require(
+                collateralToken.transfer(treasury, openFee),
+                "Fee transfer failed"
+            );
+            emit ProtocolFeeCollected(nextPositionId, msg.sender, openFee, "open");
+        }
+
+        uint256 notional = netMargin * leverage;
         uint256 liquidationPrice = _calcLiquidationPrice(
             price,
             leverage,
@@ -121,7 +167,7 @@ contract TradingPlatformV2 is ReentrancyGuard, Ownable {
             trader: msg.sender,
             pairId: pairId,
             isLong: isLong,
-            margin: margin,
+            margin: netMargin,      // Store net margin after fee
             leverage: leverage,
             notional: notional,
             entryPrice: price,
@@ -138,7 +184,7 @@ contract TradingPlatformV2 is ReentrancyGuard, Ownable {
             msg.sender,
             pairId,
             isLong,
-            margin,
+            netMargin,
             leverage,
             price
         );
@@ -170,7 +216,29 @@ contract TradingPlatformV2 is ReentrancyGuard, Ownable {
 
         p.isOpen = false;
 
-        emit PositionLiquidated(id, p.trader, price);
+        // Split margin between liquidator and protocol
+        uint256 penalty = p.margin;
+        uint256 liquidatorReward = (penalty * liquidatorRewardBps) / 10_000;
+        uint256 protocolFee = penalty - liquidatorReward;
+
+        // Transfer reward to liquidator (caller)
+        if (liquidatorReward > 0) {
+            require(
+                collateralToken.transfer(msg.sender, liquidatorReward),
+                "Liquidator reward failed"
+            );
+        }
+
+        // Transfer protocol fee to treasury
+        if (protocolFee > 0 && treasury != address(0)) {
+            require(
+                collateralToken.transfer(treasury, protocolFee),
+                "Protocol fee failed"
+            );
+            emit ProtocolFeeCollected(id, p.trader, protocolFee, "liquidation");
+        }
+
+        emit PositionLiquidated(id, p.trader, msg.sender, price, penalty);
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -216,6 +284,26 @@ contract TradingPlatformV2 is ReentrancyGuard, Ownable {
         return _calculatePnL(p, price);
     }
 
+    /// @notice Calculate open fee for a given margin (for UI preview)
+    function calculateOpenFee(uint256 margin) external view returns (uint256) {
+        return (margin * openFeeBps) / 10_000;
+    }
+
+    /// @notice Calculate close fee for a given profit (for UI preview)
+    function calculateCloseFee(uint256 profit) external view returns (uint256) {
+        return (profit * closeFeeBps) / 10_000;
+    }
+
+    /// @notice Get all fee configuration
+    function getFeeConfig() external view returns (
+        address _treasury,
+        uint256 _openFeeBps,
+        uint256 _closeFeeBps,
+        uint256 _liquidatorRewardBps
+    ) {
+        return (treasury, openFeeBps, closeFeeBps, liquidatorRewardBps);
+    }
+
     /*//////////////////////////////////////////////////////////////
                           INTERNAL LOGIC
     //////////////////////////////////////////////////////////////*/
@@ -225,10 +313,37 @@ contract TradingPlatformV2 is ReentrancyGuard, Ownable {
         p.isOpen = false;
 
         int256 pnl = _calculatePnL(p, price);
+        uint256 closeFee = 0;
+
+        // Deduct fee only from profits
+        if (pnl > 0) {
+            closeFee = (uint256(pnl) * closeFeeBps) / 10_000;
+            pnl -= int256(closeFee);
+        }
+
+        // Calculate payout (margin + adjusted pnl)
         int256 payout = int256(p.margin) + pnl;
 
+        // Ensure payout is not negative
+        if (payout < 0) {
+            payout = 0;
+        }
+
+        // Transfer payout to trader
         if (payout > 0) {
-            collateralToken.transfer(p.trader, uint256(payout));
+            require(
+                collateralToken.transfer(p.trader, uint256(payout)),
+                "Transfer failed"
+            );
+        }
+
+        // Transfer close fee to treasury
+        if (closeFee > 0 && treasury != address(0)) {
+            require(
+                collateralToken.transfer(treasury, closeFee),
+                "Fee transfer failed"
+            );
+            emit ProtocolFeeCollected(id, p.trader, closeFee, "close");
         }
 
         emit PositionClosed(id, p.trader, price, pnl);
@@ -249,6 +364,12 @@ contract TradingPlatformV2 is ReentrancyGuard, Ownable {
         );
 
         if (rawPnl > maxProfit) return maxProfit;
+        
+        // Cap loss at margin
+        if (rawPnl < -int256(p.margin)) {
+            return -int256(p.margin);
+        }
+        
         return rawPnl;
     }
 
@@ -271,6 +392,30 @@ contract TradingPlatformV2 is ReentrancyGuard, Ownable {
     function setOracle(address _oracle) external onlyOwner {
         require(_oracle != address(0), "Invalid oracle");
         oracle = IPriceOracleV2(_oracle);
+    }
+
+    /// @notice Update protocol treasury address
+    function setTreasury(address _treasury) external onlyOwner {
+        require(_treasury != address(0), "Invalid treasury");
+        address oldTreasury = treasury;
+        treasury = _treasury;
+        emit TreasuryUpdated(oldTreasury, _treasury);
+    }
+
+    /// @notice Update trading fees (max 0.5% each)
+    function setTradingFees(uint256 _openFeeBps, uint256 _closeFeeBps) external onlyOwner {
+        require(_openFeeBps <= 50, "Open fee too high");  // Max 0.5%
+        require(_closeFeeBps <= 50, "Close fee too high"); // Max 0.5%
+        openFeeBps = _openFeeBps;
+        closeFeeBps = _closeFeeBps;
+        emit TradingFeesUpdated(_openFeeBps, _closeFeeBps);
+    }
+
+    /// @notice Update liquidator reward (max 50%)
+    function setLiquidatorReward(uint256 _rewardBps) external onlyOwner {
+        require(_rewardBps <= 5000, "Reward too high"); // Max 50%
+        liquidatorRewardBps = _rewardBps;
+        emit LiquidatorRewardUpdated(_rewardBps);
     }
 
     function setRiskParams(
