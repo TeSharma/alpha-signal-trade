@@ -22,7 +22,7 @@ function computePairId(pair) {
 }
 
 async function main() {
-  console.log("\n🚀 Starting TradingPlatformV2 deployment...\n");
+  console.log("\n🚀 Starting TradingPlatformV2 deployment with Revenue Model...\n");
 
   const network = hre.network.name;
   const chainId = (await hre.ethers.provider.getNetwork()).chainId;
@@ -59,12 +59,13 @@ async function main() {
   await setFeedsTx.wait();
   console.log(`✅ Configured ${pairIds.length} price feeds\n`);
 
-  // Deploy TradingPlatformV2
-  console.log("💹 Deploying TradingPlatformV2...");
+  // Deploy TradingPlatformV2 with Revenue Model
+  console.log("💹 Deploying TradingPlatformV2 with Revenue Model...");
   console.log(`  Using tUSD: ${TUSD_ADDRESS}`);
   console.log(`  Using Oracle: ${oracleV2Address}`);
+  console.log(`  Treasury will be set to: ${deployer.address}`);
   
-  const TradingPlatformV2 = await hre.ethers.getContractFactory("TradingPlatformV2");
+  const TradingPlatformV2 = await hre.ethers.getContractFactory("src/contracts/TradingPlatformV2.sol:TradingPlatformV2");
   const platformV2 = await TradingPlatformV2.deploy(oracleV2Address, TUSD_ADDRESS);
   await platformV2.waitForDeployment();
   const platformV2Address = await platformV2.getAddress();
@@ -77,12 +78,23 @@ async function main() {
   const maxLeverage = await platformV2.maxLeverage();
   const maintenanceMarginBps = await platformV2.maintenanceMarginBps();
   const maxProfitBps = await platformV2.maxProfitBps();
+  
+  // Verify fee configuration
+  const treasury = await platformV2.treasury();
+  const openFeeBps = await platformV2.openFeeBps();
+  const closeFeeBps = await platformV2.closeFeeBps();
+  const liquidatorRewardBps = await platformV2.liquidatorRewardBps();
 
   console.log(`  Oracle: ${configuredOracle}`);
   console.log(`  Collateral Token: ${configuredCollateral}`);
   console.log(`  Max Leverage: ${maxLeverage}x`);
   console.log(`  Maintenance Margin: ${Number(maintenanceMarginBps) / 100}%`);
-  console.log(`  Max Profit Cap: ${Number(maxProfitBps) / 100}%\n`);
+  console.log(`  Max Profit Cap: ${Number(maxProfitBps) / 100}%`);
+  console.log(`\n💰 Fee Configuration:`);
+  console.log(`  Treasury: ${treasury}`);
+  console.log(`  Open Fee: ${Number(openFeeBps) / 100}%`);
+  console.log(`  Close Fee: ${Number(closeFeeBps) / 100}%`);
+  console.log(`  Liquidator Reward: ${Number(liquidatorRewardBps) / 100}%\n`);
 
   // Test a price fetch
   console.log("📈 Testing price feeds...");
@@ -114,6 +126,12 @@ async function main() {
       maintenanceMarginBps: Number(maintenanceMarginBps),
       maxProfitBps: Number(maxProfitBps),
     },
+    feeConfiguration: {
+      treasury: treasury,
+      openFeeBps: Number(openFeeBps),
+      closeFeeBps: Number(closeFeeBps),
+      liquidatorRewardBps: Number(liquidatorRewardBps),
+    },
   };
 
   const deploymentsDir = path.join(__dirname, "..", "deployments");
@@ -130,18 +148,18 @@ async function main() {
   if (fs.existsSync(configPath)) {
     let configContent = fs.readFileSync(configPath, "utf8");
     
-    // Add V2 addresses if not already present
-    if (!configContent.includes("PriceOracleV2")) {
-      const insertPoint = configContent.lastIndexOf("};");
-      const v2Config = `
-  // V2 Contracts
-  PriceOracleV2: "${oracleV2Address}",
-  TradingPlatformV2: "${platformV2Address}",
-`;
-      configContent = configContent.slice(0, insertPoint) + v2Config + configContent.slice(insertPoint);
-      fs.writeFileSync(configPath, configContent);
-      console.log(`📝 Updated frontend config with V2 addresses`);
-    }
+    // Update V2 addresses
+    configContent = configContent.replace(
+      /PriceOracleV2: "[^"]*"/,
+      `PriceOracleV2: "${oracleV2Address}"`
+    );
+    configContent = configContent.replace(
+      /TradingPlatformV2: "[^"]*"/,
+      `TradingPlatformV2: "${platformV2Address}"`
+    );
+    
+    fs.writeFileSync(configPath, configContent);
+    console.log(`📝 Updated frontend config with V2 addresses`);
   }
 
   // Extract ABIs for frontend
@@ -166,17 +184,29 @@ async function main() {
     }
   }
 
-  console.log("\n🎉 TradingPlatformV2 deployment completed!");
+  console.log("\n🎉 TradingPlatformV2 deployment with Revenue Model completed!");
   console.log("\n📋 Summary:");
   console.log(`  PriceOracleV2:      ${oracleV2Address}`);
   console.log(`  TradingPlatformV2:  ${platformV2Address}`);
   console.log(`  Collateral (tUSD):  ${TUSD_ADDRESS}`);
+  console.log(`  Treasury:           ${treasury}`);
+  
+  console.log("\n💰 Fee Structure:");
+  console.log("  ┌─────────────────────┬─────────┬───────────────────┐");
+  console.log("  │ Fee Type            │ Rate    │ Recipient         │");
+  console.log("  ├─────────────────────┼─────────┼───────────────────┤");
+  console.log("  │ Open Fee            │ 0.08%   │ Treasury          │");
+  console.log("  │ Close Fee (profits) │ 0.08%   │ Treasury          │");
+  console.log("  │ Liquidation         │ 70%     │ Treasury          │");
+  console.log("  │ Liquidator Reward   │ 30%     │ Liquidator        │");
+  console.log("  └─────────────────────┴─────────┴───────────────────┘");
   
   console.log("\n🧪 Next Steps:");
   console.log("  1. Run unit tests: npx hardhat test test/TradingPlatformV2.test.js");
   console.log("  2. Mint tUSD tokens for testing");
   console.log("  3. Approve TradingPlatformV2 to spend tUSD");
   console.log("  4. Open a test position");
+  console.log("  5. (Optional) Set a different treasury: setTreasury(newAddress)");
 }
 
 main()

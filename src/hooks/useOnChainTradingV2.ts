@@ -1,13 +1,14 @@
 import { useState, useCallback } from 'react';
 import Web3 from 'web3';
 import { useToast } from '@/hooks/use-toast';
+import { CONTRACT_ADDRESSES, FEE_CONFIG } from '@/config/contracts';
 
-// V2 Contract addresses - DEPLOYED TO AMOY
-export const TRADING_PLATFORM_V2_ADDRESS = '0x735C78c95da6284244771F66B5aA4c0BE38fb7c7';
-export const PRICE_ORACLE_V2_ADDRESS = '0x5e6038c073B8EB7d7b03Cc56503006183fe64eA1';
-export const TUSD_ADDRESS = '0xdb204732615f1EC2bDb1Aae2032bC9DE7aA8c164';
+// V2 Contract addresses from config
+export const TRADING_PLATFORM_V2_ADDRESS = CONTRACT_ADDRESSES.amoy.TradingPlatformV2;
+export const PRICE_ORACLE_V2_ADDRESS = CONTRACT_ADDRESSES.amoy.PriceOracleV2;
+export const TUSD_ADDRESS = CONTRACT_ADDRESSES.amoy.TokenizedCurrency;
 
-// TradingPlatformV2 ABI
+// TradingPlatformV2 ABI (updated with fee functions)
 const TRADING_PLATFORM_V2_ABI = [
   {
     inputs: [
@@ -41,16 +42,18 @@ const TRADING_PLATFORM_V2_ABI = [
     outputs: [
       {
         components: [
+          { name: 'id', type: 'uint256' },
           { name: 'trader', type: 'address' },
           { name: 'pairId', type: 'bytes32' },
+          { name: 'isLong', type: 'bool' },
           { name: 'margin', type: 'uint256' },
           { name: 'leverage', type: 'uint256' },
           { name: 'entryPrice', type: 'uint256' },
           { name: 'liquidationPrice', type: 'uint256' },
-          { name: 'isLong', type: 'bool' },
+          { name: 'stopLoss', type: 'uint256' },
+          { name: 'takeProfit', type: 'uint256' },
           { name: 'isOpen', type: 'bool' },
-          { name: 'openedAt', type: 'uint256' },
-          { name: 'closedAt', type: 'uint256' }
+          { name: 'openedAt', type: 'uint256' }
         ],
         name: '',
         type: 'tuple'
@@ -98,6 +101,61 @@ const TRADING_PLATFORM_V2_ABI = [
     inputs: [],
     name: 'maxProfitBps',
     outputs: [{ name: '', type: 'uint256' }],
+    stateMutability: 'view',
+    type: 'function'
+  },
+  // Fee functions
+  {
+    inputs: [],
+    name: 'treasury',
+    outputs: [{ name: '', type: 'address' }],
+    stateMutability: 'view',
+    type: 'function'
+  },
+  {
+    inputs: [],
+    name: 'openFeeBps',
+    outputs: [{ name: '', type: 'uint256' }],
+    stateMutability: 'view',
+    type: 'function'
+  },
+  {
+    inputs: [],
+    name: 'closeFeeBps',
+    outputs: [{ name: '', type: 'uint256' }],
+    stateMutability: 'view',
+    type: 'function'
+  },
+  {
+    inputs: [],
+    name: 'liquidatorRewardBps',
+    outputs: [{ name: '', type: 'uint256' }],
+    stateMutability: 'view',
+    type: 'function'
+  },
+  {
+    inputs: [{ name: 'margin', type: 'uint256' }],
+    name: 'calculateOpenFee',
+    outputs: [{ name: '', type: 'uint256' }],
+    stateMutability: 'view',
+    type: 'function'
+  },
+  {
+    inputs: [{ name: 'profit', type: 'uint256' }],
+    name: 'calculateCloseFee',
+    outputs: [{ name: '', type: 'uint256' }],
+    stateMutability: 'view',
+    type: 'function'
+  },
+  {
+    inputs: [],
+    name: 'getFeeConfig',
+    outputs: [
+      { name: '_treasury', type: 'address' },
+      { name: '_openFeeBps', type: 'uint256' },
+      { name: '_closeFeeBps', type: 'uint256' },
+      { name: '_liquidatorRewardBps', type: 'uint256' }
+    ],
     stateMutability: 'view',
     type: 'function'
   }
@@ -192,6 +250,17 @@ export interface PlatformConfig {
   maxLeverage: number;
   maintenanceMarginBps: number;
   maxProfitBps: number;
+  treasury?: string;
+  openFeeBps?: number;
+  closeFeeBps?: number;
+  liquidatorRewardBps?: number;
+}
+
+export interface FeeInfo {
+  treasury: string;
+  openFeeBps: number;
+  closeFeeBps: number;
+  liquidatorRewardBps: number;
 }
 
 export const useOnChainTradingV2 = () => {
@@ -283,27 +352,75 @@ export const useOnChainTradingV2 = () => {
     }
   };
 
-  // Get platform configuration
+  // Get platform configuration including fees
   const getPlatformConfig = async (): Promise<PlatformConfig | null> => {
     try {
       const { web3 } = await getWeb3AndAccount();
       const contract = getTradingContract(web3);
 
-      const [maxLeverage, maintenanceMarginBps, maxProfitBps] = await Promise.all([
+      const [maxLeverage, maintenanceMarginBps, maxProfitBps, feeConfig] = await Promise.all([
         contract.methods.maxLeverage().call(),
         contract.methods.maintenanceMarginBps().call(),
         contract.methods.maxProfitBps().call(),
+        contract.methods.getFeeConfig().call().catch(() => null),
       ]);
 
-      return {
+      const config: PlatformConfig = {
         maxLeverage: Number(maxLeverage),
         maintenanceMarginBps: Number(maintenanceMarginBps),
         maxProfitBps: Number(maxProfitBps),
       };
+
+      // Add fee info if available (new contract)
+      if (feeConfig) {
+        config.treasury = (feeConfig as any)._treasury;
+        config.openFeeBps = Number((feeConfig as any)._openFeeBps);
+        config.closeFeeBps = Number((feeConfig as any)._closeFeeBps);
+        config.liquidatorRewardBps = Number((feeConfig as any)._liquidatorRewardBps);
+      }
+
+      return config;
     } catch (error) {
       console.error('Error fetching platform config:', error);
       return null;
     }
+  };
+
+  // Get fee configuration
+  const getFeeConfig = async (): Promise<FeeInfo | null> => {
+    try {
+      const { web3 } = await getWeb3AndAccount();
+      const contract = getTradingContract(web3);
+
+      const result: any = await contract.methods.getFeeConfig().call();
+      
+      return {
+        treasury: result._treasury,
+        openFeeBps: Number(result._openFeeBps),
+        closeFeeBps: Number(result._closeFeeBps),
+        liquidatorRewardBps: Number(result._liquidatorRewardBps),
+      };
+    } catch (error) {
+      console.error('Error fetching fee config:', error);
+      // Return default config from FEE_CONFIG
+      return {
+        treasury: '',
+        openFeeBps: FEE_CONFIG.openFeeBps,
+        closeFeeBps: FEE_CONFIG.closeFeeBps,
+        liquidatorRewardBps: FEE_CONFIG.liquidatorRewardBps,
+      };
+    }
+  };
+
+  // Calculate open fee (local calculation for UI preview)
+  const calculateOpenFee = (margin: number): number => {
+    return (margin * FEE_CONFIG.openFeeBps) / 10000;
+  };
+
+  // Calculate close fee (local calculation for UI preview)
+  const calculateCloseFee = (profit: number): number => {
+    if (profit <= 0) return 0;
+    return (profit * FEE_CONFIG.closeFeeBps) / 10000;
   };
 
   // Open a new position
@@ -334,9 +451,13 @@ export const useOnChainTradingV2 = () => {
       const marginWei = web3.utils.toWei(params.margin, 'mwei');
       const isLong = params.direction === 'buy';
 
+      // Calculate expected fee for display
+      const fee = calculateOpenFee(parseFloat(params.margin));
+      const netMargin = parseFloat(params.margin) - fee;
+
       toast({
         title: 'Opening Position',
-        description: 'Please confirm the transaction in MetaMask',
+        description: `Fee: ${fee.toFixed(2)} tUSD (0.08%) | Net margin: ${netMargin.toFixed(2)} tUSD`,
       });
 
       const tx = await contract.methods
@@ -371,7 +492,7 @@ export const useOnChainTradingV2 = () => {
 
       toast({
         title: 'Closing Position',
-        description: 'Please confirm the transaction in MetaMask',
+        description: 'Please confirm the transaction in MetaMask. A 0.08% fee applies to profits.',
       });
 
       const tx = await contract.methods
@@ -397,7 +518,7 @@ export const useOnChainTradingV2 = () => {
     }
   };
 
-  // Liquidate a position (anyone can call)
+  // Liquidate a position (anyone can call - earns 30% reward)
   const liquidatePosition = async (positionId: number): Promise<string | null> => {
     setIsLoading(true);
     try {
@@ -406,7 +527,7 @@ export const useOnChainTradingV2 = () => {
 
       toast({
         title: 'Liquidating Position',
-        description: 'Please confirm the transaction in MetaMask',
+        description: 'Please confirm. You will receive 30% of the liquidated margin as reward.',
       });
 
       const tx = await contract.methods
@@ -415,7 +536,7 @@ export const useOnChainTradingV2 = () => {
 
       toast({
         title: 'Position Liquidated',
-        description: `Position #${positionId} liquidated`,
+        description: `Position #${positionId} liquidated. 30% reward earned!`,
       });
 
       return tx.transactionHash as string;
@@ -468,7 +589,7 @@ export const useOnChainTradingV2 = () => {
             isLong: position.isLong,
             isOpen: position.isOpen,
             openedAt: Number(position.openedAt),
-            closedAt: Number(position.closedAt),
+            closedAt: 0,
             currentPnL: web3.utils.fromWei(pnl.toString(), 'mwei'),
           };
         })
@@ -521,7 +642,7 @@ export const useOnChainTradingV2 = () => {
             isLong: position.isLong,
             isOpen: position.isOpen,
             openedAt: Number(position.openedAt),
-            closedAt: Number(position.closedAt),
+            closedAt: 0,
             currentPnL,
           };
         })
@@ -564,7 +685,7 @@ export const useOnChainTradingV2 = () => {
         isLong: position.isLong,
         isOpen: position.isOpen,
         openedAt: Number(position.openedAt),
-        closedAt: Number(position.closedAt),
+        closedAt: 0,
         currentPnL,
       };
     } catch (error) {
@@ -584,6 +705,9 @@ export const useOnChainTradingV2 = () => {
     getPosition,
     getCollateralBalance,
     getPlatformConfig,
+    getFeeConfig,
+    calculateOpenFee,
+    calculateCloseFee,
     computePairId,
   };
 };
