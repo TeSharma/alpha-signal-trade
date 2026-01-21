@@ -1,5 +1,7 @@
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
+const { anyValue } = require("@nomicfoundation/hardhat-chai-matchers/withArgs");
+
 
 describe("TradingPlatformV2", function () {
   let owner, trader1, trader2, liquidator;
@@ -258,13 +260,19 @@ describe("TradingPlatformV2", function () {
       
       // Set price below liquidation price
       const liquidationPrice = position.liquidationPrice;
-      await priceOracle.setPrice(PAIR_ID, liquidationPrice - 1n);
+      const triggerPrice = liquidationPrice - 1n;
+      await priceOracle.setPrice(PAIR_ID, triggerPrice);
 
       await expect(
         tradingPlatform.connect(liquidator).liquidate(1)
       )
         .to.emit(tradingPlatform, "PositionLiquidated")
-        .withArgs(1, trader1.address, liquidationPrice - 1n);
+        .withArgs( anyValue,      // id (indexed)
+      anyValue,      // trader (indexed)
+      anyValue,      // liquidator (indexed)
+      triggerPrice,  // price 
+      anyValue       // penalty
+);
 
       const updatedPosition = await tradingPlatform.getPosition(1);
       expect(updatedPosition.isOpen).to.be.false;

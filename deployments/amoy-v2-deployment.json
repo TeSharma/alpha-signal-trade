@@ -1,11 +1,11 @@
 {
   "network": "amoy",
   "chainId": 80002,
-  "deployedAt": "2026-01-08T12:53:15.907Z",
+  "deployedAt": "2026-01-21T03:49:47.562Z",
   "deployer": "0x09C2B58F6004176bD83cc000d804eD3c1041754E",
   "contracts": {
-    "PriceOracleV2": "0x5e6038c073B8EB7d7b03Cc56503006183fe64eA1",
-    "TradingPlatformV2": "0x735C78c95da6284244771F66B5aA4c0BE38fb7c7",
+    "PriceOracleV2": "0x061127643995ecc686aFc3F2Cf411E0b5B30426f",
+    "TradingPlatformV2": "0x0c00a13CE1a1e48914Ec63C748d88A0aa8CfF8D8",
     "CollateralToken": "0xdb204732615f1EC2bDb1Aae2032bC9DE7aA8c164"
   },
   "pairIds": {
@@ -21,5 +21,11 @@
     "maxLeverage": 50,
     "maintenanceMarginBps": 1000,
     "maxProfitBps": 30000
+  },
+  "feeConfiguration": {
+    "treasury": "0x09C2B58F6004176bD83cc000d804eD3c1041754E",
+    "openFeeBps": 8,
+    "closeFeeBps": 8,
+    "liquidatorRewardBps": 3000
   }
 }

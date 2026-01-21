@@ -645,8 +645,8 @@
       ]
     },
     "C:\\Users\\USER\\sharma\\alpha-signal-trade\\src\\contracts\\TradingPlatformV2.sol": {
-      "lastModificationDate": 1767785273397,
-      "contentHash": "91c9d2957f8afae3bd5561880cc9da99",
+      "lastModificationDate": 1768903566575,
+      "contentHash": "8fcfce0165e50f68b9af1f793fe7914f",
       "sourceName": "src/contracts/TradingPlatformV2.sol",
       "solcConfig": {
         "version": "0.8.20",
