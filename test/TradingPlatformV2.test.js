@@ -10,6 +10,18 @@ describe("TradingPlatformV2", function () {
   const INITIAL_PRICE = ethers.parseUnits("1.08", 8); // EUR/USD = 1.08
   const MARGIN = ethers.parseUnits("100", TOKEN_DECIMALS); // 100 tUSD
   const LEVERAGE = 10n;
+  
+  // Fee constants (matching contract defaults)
+  const OPEN_FEE_BPS = 8n; // 0.08%
+  const CLOSE_FEE_BPS = 8n; // 0.08%
+  const LIQUIDATOR_REWARD_BPS = 3000n; // 30%
+  const BPS_BASE = 10000n;
+
+  // Helper to calculate net margin after open fee
+  function calcNetMargin(margin) {
+    const fee = margin * OPEN_FEE_BPS / BPS_BASE;
+    return margin - fee;
+  }
 
   // Mock price oracle for testing
   let MockPriceOracle;
@@ -76,6 +88,13 @@ describe("TradingPlatformV2", function () {
       expect(await tradingPlatform.maintenanceMarginBps()).to.equal(1000);
       expect(await tradingPlatform.maxProfitBps()).to.equal(30000);
     });
+
+    it("Should set default fee parameters", async function () {
+      expect(await tradingPlatform.treasury()).to.equal(owner.address);
+      expect(await tradingPlatform.openFeeBps()).to.equal(8);
+      expect(await tradingPlatform.closeFeeBps()).to.equal(8);
+      expect(await tradingPlatform.liquidatorRewardBps()).to.equal(3000);
+    });
   });
 
   describe("Open Position", function () {
@@ -91,12 +110,14 @@ describe("TradingPlatformV2", function () {
 
       const receipt = await tx.wait();
       
-      // Check position was created
+      // Check position was created with net margin (after fee deduction)
       const position = await tradingPlatform.getPosition(1);
+      const expectedNetMargin = calcNetMargin(MARGIN);
+      
       expect(position.trader).to.equal(trader1.address);
       expect(position.pairId).to.equal(PAIR_ID);
       expect(position.isLong).to.be.true;
-      expect(position.margin).to.equal(MARGIN);
+      expect(position.margin).to.equal(expectedNetMargin);
       expect(position.leverage).to.equal(LEVERAGE);
       expect(position.isOpen).to.be.true;
     });
@@ -138,12 +159,14 @@ describe("TradingPlatformV2", function () {
       expect(balanceBefore - balanceAfter).to.equal(MARGIN);
     });
 
-    it("Should emit PositionOpened event", async function () {
+    it("Should emit PositionOpened event with net margin", async function () {
+      const expectedNetMargin = calcNetMargin(MARGIN);
+      
       await expect(
         tradingPlatform.connect(trader1).openPosition(PAIR_ID, true, MARGIN, LEVERAGE, 0, 0)
       )
         .to.emit(tradingPlatform, "PositionOpened")
-        .withArgs(1, trader1.address, PAIR_ID, true, MARGIN, LEVERAGE, INITIAL_PRICE);
+        .withArgs(1, trader1.address, PAIR_ID, true, expectedNetMargin, LEVERAGE, INITIAL_PRICE);
     });
   });
 
@@ -183,9 +206,10 @@ describe("TradingPlatformV2", function () {
       await tradingPlatform.connect(trader1).closePosition(1);
 
       const balanceAfter = await collateralToken.balanceOf(trader1.address);
+      const netMargin = calcNetMargin(MARGIN);
       
-      // Trader should receive less than margin
-      expect(balanceAfter - balanceBefore).to.be.lt(MARGIN);
+      // Trader should receive less than net margin (loss)
+      expect(balanceAfter - balanceBefore).to.be.lt(netMargin);
     });
 
     it("Should revert if not position owner", async function () {
@@ -214,8 +238,9 @@ describe("TradingPlatformV2", function () {
       const balanceAfter = await collateralToken.balanceOf(trader1.address);
       const payout = balanceAfter - balanceBefore;
       
-      // Max profit is 300% of margin = 300 tUSD, plus margin = 400 tUSD total
-      const maxPayout = MARGIN * 4n; // margin + 300% profit
+      // Max profit is 300% of netMargin, plus netMargin = 400% total
+      const netMargin = calcNetMargin(MARGIN);
+      const maxPayout = netMargin * 4n; // margin + 300% profit
       expect(payout).to.be.lte(maxPayout);
     });
   });
@@ -292,6 +317,14 @@ describe("TradingPlatformV2", function () {
       const pnl = await tradingPlatform.getCurrentPnL(1);
       expect(pnl).to.be.gt(0); // Long position profits from price increase
     });
+
+    it("Should return fee config", async function () {
+      const [treasury, openFee, closeFee, liquidatorReward] = await tradingPlatform.getFeeConfig();
+      expect(treasury).to.equal(owner.address);
+      expect(openFee).to.equal(8);
+      expect(closeFee).to.equal(8);
+      expect(liquidatorReward).to.equal(3000);
+    });
   });
 
   describe("Admin Functions", function () {
@@ -314,6 +347,127 @@ describe("TradingPlatformV2", function () {
     it("Should revert admin functions from non-owner", async function () {
       await expect(
         tradingPlatform.connect(trader1).setRiskParams(100, 500, 50000)
+      ).to.be.revertedWithCustomError(tradingPlatform, "OwnableUnauthorizedAccount");
+    });
+  });
+
+  describe("Protocol Revenue Model", function () {
+    it("Should collect open fee to treasury", async function () {
+      const treasuryBalanceBefore = await collateralToken.balanceOf(owner.address);
+      
+      await tradingPlatform.connect(trader1).openPosition(
+        PAIR_ID, true, MARGIN, LEVERAGE, 0, 0
+      );
+      
+      const treasuryBalanceAfter = await collateralToken.balanceOf(owner.address);
+      const expectedFee = MARGIN * OPEN_FEE_BPS / BPS_BASE;
+      expect(treasuryBalanceAfter - treasuryBalanceBefore).to.equal(expectedFee);
+    });
+
+    it("Should emit ProtocolFeeCollected on open", async function () {
+      const expectedFee = MARGIN * OPEN_FEE_BPS / BPS_BASE;
+      
+      await expect(
+        tradingPlatform.connect(trader1).openPosition(PAIR_ID, true, MARGIN, LEVERAGE, 0, 0)
+      ).to.emit(tradingPlatform, "ProtocolFeeCollected")
+       .withArgs(1, trader1.address, expectedFee, "open");
+    });
+
+    it("Should collect close fee only on profits", async function () {
+      await tradingPlatform.connect(trader1).openPosition(PAIR_ID, true, MARGIN, LEVERAGE, 0, 0);
+      
+      // Price goes up 5% for profit
+      const newPrice = INITIAL_PRICE * 105n / 100n;
+      await priceOracle.setPrice(PAIR_ID, newPrice);
+      
+      const treasuryBalanceBefore = await collateralToken.balanceOf(owner.address);
+      await tradingPlatform.connect(trader1).closePosition(1);
+      const treasuryBalanceAfter = await collateralToken.balanceOf(owner.address);
+      
+      // Close fee should be collected from profits
+      expect(treasuryBalanceAfter).to.be.gt(treasuryBalanceBefore);
+    });
+
+    it("Should NOT collect close fee on losses", async function () {
+      await tradingPlatform.connect(trader1).openPosition(PAIR_ID, true, MARGIN, LEVERAGE, 0, 0);
+      
+      // Price goes down 3% for loss
+      const newPrice = INITIAL_PRICE * 97n / 100n;
+      await priceOracle.setPrice(PAIR_ID, newPrice);
+      
+      const treasuryBalanceBefore = await collateralToken.balanceOf(owner.address);
+      await tradingPlatform.connect(trader1).closePosition(1);
+      const treasuryBalanceAfter = await collateralToken.balanceOf(owner.address);
+      
+      // No close fee on losses
+      expect(treasuryBalanceAfter).to.equal(treasuryBalanceBefore);
+    });
+
+    it("Should split liquidation penalty between liquidator and treasury", async function () {
+      await tradingPlatform.connect(trader1).openPosition(PAIR_ID, true, MARGIN, LEVERAGE, 0, 0);
+      
+      const position = await tradingPlatform.getPosition(1);
+      await priceOracle.setPrice(PAIR_ID, position.liquidationPrice - 1n);
+      
+      const liquidatorBalanceBefore = await collateralToken.balanceOf(liquidator.address);
+      const treasuryBalanceBefore = await collateralToken.balanceOf(owner.address);
+      
+      await tradingPlatform.connect(liquidator).liquidate(1);
+      
+      const liquidatorBalanceAfter = await collateralToken.balanceOf(liquidator.address);
+      const treasuryBalanceAfter = await collateralToken.balanceOf(owner.address);
+      
+      const netMargin = calcNetMargin(MARGIN);
+      const expectedLiquidatorReward = netMargin * LIQUIDATOR_REWARD_BPS / BPS_BASE;
+      const expectedTreasuryFee = netMargin - expectedLiquidatorReward;
+      
+      expect(liquidatorBalanceAfter - liquidatorBalanceBefore).to.equal(expectedLiquidatorReward);
+      expect(treasuryBalanceAfter - treasuryBalanceBefore).to.equal(expectedTreasuryFee);
+    });
+
+    it("Should allow owner to update treasury", async function () {
+      await tradingPlatform.setTreasury(trader2.address);
+      expect(await tradingPlatform.treasury()).to.equal(trader2.address);
+    });
+
+    it("Should allow owner to update trading fees", async function () {
+      await tradingPlatform.setTradingFees(10, 15); // 0.10% and 0.15%
+      expect(await tradingPlatform.openFeeBps()).to.equal(10);
+      expect(await tradingPlatform.closeFeeBps()).to.equal(15);
+    });
+
+    it("Should allow owner to update liquidator reward", async function () {
+      await tradingPlatform.setLiquidatorReward(2500); // 25%
+      expect(await tradingPlatform.liquidatorRewardBps()).to.equal(2500);
+    });
+
+    it("Should revert if open fee exceeds maximum", async function () {
+      await expect(
+        tradingPlatform.setTradingFees(51, 8) // 0.51% exceeds 0.5% max
+      ).to.be.revertedWith("Open fee too high");
+    });
+
+    it("Should revert if close fee exceeds maximum", async function () {
+      await expect(
+        tradingPlatform.setTradingFees(8, 51) // 0.51% exceeds 0.5% max
+      ).to.be.revertedWith("Close fee too high");
+    });
+
+    it("Should revert if liquidator reward exceeds maximum", async function () {
+      await expect(
+        tradingPlatform.setLiquidatorReward(5001) // 50.01% exceeds 50% max
+      ).to.be.revertedWith("Reward too high");
+    });
+
+    it("Should revert treasury update from non-owner", async function () {
+      await expect(
+        tradingPlatform.connect(trader1).setTreasury(trader2.address)
+      ).to.be.revertedWithCustomError(tradingPlatform, "OwnableUnauthorizedAccount");
+    });
+
+    it("Should revert fee update from non-owner", async function () {
+      await expect(
+        tradingPlatform.connect(trader1).setTradingFees(10, 15)
       ).to.be.revertedWithCustomError(tradingPlatform, "OwnableUnauthorizedAccount");
     });
   });
