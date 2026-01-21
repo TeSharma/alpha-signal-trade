@@ -11,7 +11,7 @@ import { useTrades } from '@/hooks/useTrades'
 import { useMarketData } from '@/hooks/useMarketData'
 import { useOnChainTradingV2 } from '@/hooks/useOnChainTradingV2'
 import { useToast } from '@/components/ui/use-toast'
-import { CONTRACT_ADDRESSES, CHAIN_IDS, getMinimums, isMainnet } from '@/config/contracts'
+import { CONTRACT_ADDRESSES, CHAIN_IDS, getMinimums, isMainnet, FEE_CONFIG, calculateOpenFee } from '@/config/contracts'
 
 interface TradingFormProps {
   accountMode: 'demo' | 'live';
@@ -492,13 +492,25 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
                     <span>Margin:</span>
                     <span>{lotSize} tUSD</span>
                   </div>
+                  {/* Fee breakdown for live mode */}
+                  <div className="flex justify-between text-muted-foreground">
+                    <span>Open Fee ({(FEE_CONFIG.openFeeBps / 100).toFixed(2)}%):</span>
+                    <span>-{calculateOpenFee(parseFloat(lotSize || '0')).toFixed(4)} tUSD</span>
+                  </div>
+                  <div className="flex justify-between font-medium text-primary">
+                    <span>Net Margin:</span>
+                    <span>{(parseFloat(lotSize || '0') - calculateOpenFee(parseFloat(lotSize || '0'))).toFixed(4)} tUSD</span>
+                  </div>
                   <div className="flex justify-between">
                     <span>Leverage:</span>
                     <span>{leverage}x</span>
                   </div>
                   <div className="flex justify-between">
                     <span>Position Size:</span>
-                    <span>${(parseFloat(lotSize || '0') * leverage).toLocaleString()}</span>
+                    <span>${((parseFloat(lotSize || '0') - calculateOpenFee(parseFloat(lotSize || '0'))) * leverage).toLocaleString()}</span>
+                  </div>
+                  <div className="text-xs text-muted-foreground pt-1 border-t">
+                    Close fee: {(FEE_CONFIG.closeFeeBps / 100).toFixed(2)}% on profits only
                   </div>
                 </>
               ) : (

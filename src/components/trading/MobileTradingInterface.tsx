@@ -13,7 +13,7 @@ import { useTrades } from '@/hooks/useTrades';
 import { useMarketData } from '@/hooks/useMarketData';
 import { useOnChainTradingV2 } from '@/hooks/useOnChainTradingV2';
 import { useToast } from '@/hooks/use-toast';
-import { CHAIN_IDS, getMinimums, isMainnet } from '@/config/contracts';
+import { CHAIN_IDS, getMinimums, isMainnet, FEE_CONFIG, calculateOpenFee } from '@/config/contracts';
 
 interface MobileTradingInterfaceProps {
   accountMode: 'demo' | 'live';
@@ -354,9 +354,20 @@ const MobileTradingInterface = ({ accountMode }: MobileTradingInterfaceProps) =>
                       <span>Margin:</span>
                       <span>{lotSize} tUSD</span>
                     </div>
+                    <div className="flex justify-between col-span-2 text-muted-foreground">
+                      <span>Open Fee ({(FEE_CONFIG.openFeeBps / 100).toFixed(2)}%):</span>
+                      <span>-{calculateOpenFee(parseFloat(lotSize || '0')).toFixed(4)} tUSD</span>
+                    </div>
+                    <div className="flex justify-between col-span-2 font-medium text-primary">
+                      <span>Net Margin:</span>
+                      <span>{(parseFloat(lotSize || '0') - calculateOpenFee(parseFloat(lotSize || '0'))).toFixed(4)} tUSD</span>
+                    </div>
                     <div className="flex justify-between col-span-2">
                       <span>Position:</span>
-                      <span>${(parseFloat(lotSize || '0') * leverage).toLocaleString()} @ {leverage}x</span>
+                      <span>${((parseFloat(lotSize || '0') - calculateOpenFee(parseFloat(lotSize || '0'))) * leverage).toLocaleString()} @ {leverage}x</span>
+                    </div>
+                    <div className="col-span-2 text-xs text-muted-foreground pt-1 border-t">
+                      Close fee: {(FEE_CONFIG.closeFeeBps / 100).toFixed(2)}% on profits only
                     </div>
                   </>
                 ) : (
