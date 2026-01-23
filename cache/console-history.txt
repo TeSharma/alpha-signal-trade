@@ -1,0 +1,37 @@
+);
+  1_000_000_000n
+  "0x0c00a13CE1a1e48914Ec63C748d88A0aa8CfF8D8",
+await token.approve(
+await token.balanceOf("0x09C2B58F6004176bD83cc000d804eD3c1041754E");
+);
+  "initial test liquidity"
+  1_000_000_000n, // 1000 tUSD
+  "0x09C2B58F6004176bD83cc000d804eD3c1041754E",
+await token.mint(
+await token.balanceOf("0x09C2B58F6004176bD83cc000d804eD3c1041754E");
+);
+  "console mint test"
+  1n,
+  "0x09C2B58F6004176bD83cc000d804eD3c1041754E",
+await token.mint(
+);
+  "0xdb204732615f1EC2bDb1Aae2032bC9DE7aA8c164"
+  "TokenizedCurrency",
+const token = await ethers.getContractAt(
+);
+  ""
+  1n,
+  "0x09C2B58F6004176bD83cc000d804eD3c1041754E",
+await token.mint(
+await faucetContract.timeUntilNextClaim("0x09C2B58F6004176bD83cc000d804eD3c1041754E");
+);
+  "0xE90D9CB8Da847aC2e37e0d54Eda2b2C57236159D"
+  "TUSDFaucet",
+const faucetContract = await ethers.getContractAt(
+await token.hasRole(MINTER_ROLE, faucet);
+const MINTER_ROLE = await token.MINTER_ROLE();
+const faucet = "0xE90D9CB8Da847aC2e37e0d54Eda2b2C57236159D";
+);
+  "0xdb204732615f1EC2bDb1Aae2032bC9DE7aA8c164"
+  "TokenizedCurrency",
+const token = await ethers.getContractAt(
