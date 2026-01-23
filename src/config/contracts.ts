@@ -2,9 +2,9 @@
 
 export const CONTRACT_ADDRESSES = {
   amoy: {
-    TokenizedCurrency: "0xAF430b788e47d43bB21083b999151FFDEF528a80",
-    PriceOracle: "0x129A60D49907934C64633Fa461708fa79b4232CD",
-    TradingPlatform: "0x8328329b9172514924dFa966D6c06c48C3BF3C5C",
+    TokenizedCurrency: "0xdb204732615f1EC2bDb1Aae2032bC9DE7aA8c164",
+    TUSDFaucet: "0xE90D9CB8Da847aC2e37e0d54Eda2b2C57236159D",
+    PriceOracleV2: "0x061127643995ecc686aFc3F2Cf411E0b5B30426f",
+    TradingPlatformV2: "0x0c00a13CE1a1e48914Ec63C748d88A0aa8CfF8D8",
   },
-  // add polygon mainnet addresses later
 };
