@@ -1,3 +1,8 @@
+console.log(CONTRACT_ADDRESSES.amoy.TradingPlatformV2);
+);
+  "0x0c00a13CE1a1e48914Ec63C748d88A0aa8CfF8D8"  // TradingPlatformV2
+  "0x09C2B58F6004176bD83cc000d804eD3c1041754E", // you
+await token.allowance(
 );
   1_000_000_000n
   "0x0c00a13CE1a1e48914Ec63C748d88A0aa8CfF8D8",

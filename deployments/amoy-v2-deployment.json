@@ -1,11 +1,11 @@
 {
   "network": "amoy",
   "chainId": 80002,
-  "deployedAt": "2026-01-21T03:49:47.562Z",
+  "deployedAt": "2026-01-23T14:23:23.666Z",
   "deployer": "0x09C2B58F6004176bD83cc000d804eD3c1041754E",
   "contracts": {
-    "PriceOracleV2": "0x061127643995ecc686aFc3F2Cf411E0b5B30426f",
-    "TradingPlatformV2": "0x0c00a13CE1a1e48914Ec63C748d88A0aa8CfF8D8",
+    "PriceOracleV2": "0x5D58135A49C5035C5836E682B7A68B0d3d8816fF",
+    "TradingPlatformV2": "0x133DC29e4D6f366E8Ad05454eba452c7BC56573D",
     "CollateralToken": "0xdb204732615f1EC2bDb1Aae2032bC9DE7aA8c164"
   },
   "pairIds": {
