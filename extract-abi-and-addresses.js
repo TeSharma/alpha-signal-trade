@@ -3,17 +3,23 @@ const path = require("path");
 
 const artifactsPath = path.join(__dirname, "artifacts", "src", "contracts");
 const outputDir = path.join(__dirname, "frontend", "abi");
-const deploymentFile = path.join(__dirname, "deployments", "amoy-deployment.json");
-const configFile = path.join(__dirname, "src", "config", "contracts.ts");
 
 // Ensure output directory exists
 if (!fs.existsSync(outputDir)) {
   fs.mkdirSync(outputDir, { recursive: true });
 }
 
-const contracts = ["TokenizedCurrency", "PriceOracle", "TradingPlatform"];
+// Include both V1 and V2 contracts
+const contracts = [
+  "TokenizedCurrency",
+  "PriceOracle",
+  "TradingPlatform",
+  "PriceOracleV2",
+  "TradingPlatformV2",
+  "TUSDFaucet"
+];
 
-// --- Extract ABIs ---
+// --- Extract ABIs only ---
 for (const name of contracts) {
   const artifactFile = path.join(artifactsPath, `${name}.sol`, `${name}.json`);
   if (fs.existsSync(artifactFile)) {
@@ -22,29 +28,10 @@ for (const name of contracts) {
     fs.writeFileSync(abiPath, JSON.stringify(artifact.abi, null, 2));
     console.log(`✅ ABI extracted for ${name}`);
   } else {
-    console.error(`❌ ABI not found for ${name}. Did you run npx hardhat compile?`);
+    console.warn(`⚠️ ABI not found for ${name} (skipping)`);
   }
 }
 
-// --- Update frontend contract config ---
-if (fs.existsSync(deploymentFile)) {
-  const deployData = JSON.parse(fs.readFileSync(deploymentFile, "utf8"));
-  const newContent = `// Auto-generated file. Do not edit manually.
-
-export const CONTRACT_ADDRESSES = {
-  amoy: {
-    TokenizedCurrency: "${deployData.TokenizedCurrency}",
-    PriceOracle: "${deployData.PriceOracle}",
-    TradingPlatform: "${deployData.TradingPlatform}",
-  },
-  // add polygon mainnet addresses later
-};
-`;
-
-  fs.writeFileSync(configFile, newContent);
-  console.log(`📝 Updated frontend config with new addresses in ${configFile}`);
-} else {
-  console.warn("⚠️ No deployment file found. Skipping address update.");
-}
-
-console.log("✅ ABI & address sync complete.");
+console.log("\n✅ ABI extraction complete.");
+console.log("ℹ️  Contract addresses are managed in src/config/contracts.ts");
+console.log("ℹ️  Use deploy-v2.js or manually update addresses after deployment.");

@@ -80,9 +80,7 @@ async function main() {
   console.log("========================================");
   console.log("1. Update src/config/contracts.ts with:");
   console.log(`   TUSDFaucet: "${faucetAddress}"`);
-  console.log("\n2. Extract ABI:");
-  console.log("   node extract-abi-and-addresses.js");
-  console.log("\n3. Verify contract:");
+  console.log("\n2. Verify contract on PolygonScan:");
   console.log(`   npx hardhat verify --network amoy ${faucetAddress} ${TUSD_ADDRESS}`);
   console.log("========================================");
 }
