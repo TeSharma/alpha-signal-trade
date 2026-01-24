@@ -13,12 +13,14 @@ const TRADING_PLATFORM_V2_ABI = [
   {
     inputs: [
       { name: 'pairId', type: 'bytes32' },
+      { name: 'isLong', type: 'bool' },
       { name: 'margin', type: 'uint256' },
       { name: 'leverage', type: 'uint256' },
-      { name: 'isLong', type: 'bool' }
+      { name: 'stopLoss', type: 'uint256' },
+      { name: 'takeProfit', type: 'uint256' }
     ],
     name: 'openPosition',
-    outputs: [{ name: '', type: 'uint256' }],
+    outputs: [{ name: 'id', type: 'uint256' }],
     stateMutability: 'nonpayable',
     type: 'function'
   },
@@ -461,7 +463,7 @@ export const useOnChainTradingV2 = () => {
       });
 
       const tx = await contract.methods
-        .openPosition(pairId, marginWei, params.leverage, isLong)
+        .openPosition(pairId, isLong, marginWei, params.leverage, 0, 0)
         .send({ from: account });
 
       toast({
