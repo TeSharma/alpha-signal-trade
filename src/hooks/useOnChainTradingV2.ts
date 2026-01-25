@@ -3,12 +3,15 @@ import Web3 from 'web3';
 import { useToast } from '@/hooks/use-toast';
 import { CONTRACT_ADDRESSES, FEE_CONFIG } from '@/config/contracts';
 
+// Public RPC for read operations (avoids MetaMask overload)
+const PUBLIC_RPC = 'https://rpc-amoy.polygon.technology/';
+
 // V2 Contract addresses from config
 export const TRADING_PLATFORM_V2_ADDRESS = CONTRACT_ADDRESSES.amoy.TradingPlatformV2;
 export const PRICE_ORACLE_V2_ADDRESS = CONTRACT_ADDRESSES.amoy.PriceOracleV2;
 export const TUSD_ADDRESS = CONTRACT_ADDRESSES.amoy.TokenizedCurrency;
 
-// TradingPlatformV2 ABI (updated with fee functions)
+// TradingPlatformV2 ABI (updated with fee functions and priceTimeout)
 const TRADING_PLATFORM_V2_ABI = [
   {
     inputs: [
@@ -106,6 +109,13 @@ const TRADING_PLATFORM_V2_ABI = [
     stateMutability: 'view',
     type: 'function'
   },
+  {
+    inputs: [],
+    name: 'priceTimeout',
+    outputs: [{ name: '', type: 'uint256' }],
+    stateMutability: 'view',
+    type: 'function'
+  },
   // Fee functions
   {
     inputs: [],
@@ -158,6 +168,27 @@ const TRADING_PLATFORM_V2_ABI = [
       { name: '_closeFeeBps', type: 'uint256' },
       { name: '_liquidatorRewardBps', type: 'uint256' }
     ],
+    stateMutability: 'view',
+    type: 'function'
+  }
+];
+
+// PriceOracleV2 ABI for preflight checks
+const PRICE_ORACLE_V2_ABI = [
+  {
+    inputs: [{ name: 'pairId', type: 'bytes32' }],
+    name: 'getPrice',
+    outputs: [
+      { name: 'price', type: 'uint256' },
+      { name: 'updatedAt', type: 'uint256' }
+    ],
+    stateMutability: 'view',
+    type: 'function'
+  },
+  {
+    inputs: [{ name: 'pairId', type: 'bytes32' }],
+    name: 'hasFeed',
+    outputs: [{ name: '', type: 'bool' }],
     stateMutability: 'view',
     type: 'function'
   }
@@ -228,7 +259,7 @@ const initPairIds = () => {
 export interface OpenPositionV2Params {
   pair: string;
   direction: 'buy' | 'sell';
-  margin: string; // Amount in tUSD
+  margin: string;
   leverage: number;
 }
 
@@ -252,6 +283,7 @@ export interface PlatformConfig {
   maxLeverage: number;
   maintenanceMarginBps: number;
   maxProfitBps: number;
+  priceTimeout?: number;
   treasury?: string;
   openFeeBps?: number;
   closeFeeBps?: number;
@@ -263,6 +295,14 @@ export interface FeeInfo {
   openFeeBps: number;
   closeFeeBps: number;
   liquidatorRewardBps: number;
+}
+
+export interface PreflightResult {
+  success: boolean;
+  error?: string;
+  hasFeed?: boolean;
+  priceAge?: number;
+  priceTimeout?: number;
 }
 
 export const useOnChainTradingV2 = () => {
@@ -279,18 +319,81 @@ export const useOnChainTradingV2 = () => {
     if (!accounts || accounts.length === 0) {
       throw new Error('No accounts found');
     }
-    // Initialize pair IDs
     initPairIds();
     return { web3, account: accounts[0] };
+  }, []);
+
+  // Get read-only web3 with public RPC
+  const getReadOnlyWeb3 = useCallback(() => {
+    return new Web3(PUBLIC_RPC);
   }, []);
 
   const getTradingContract = useCallback((web3: Web3) => {
     return new web3.eth.Contract(TRADING_PLATFORM_V2_ABI as any, TRADING_PLATFORM_V2_ADDRESS);
   }, []);
 
+  const getOracleContract = useCallback((web3: Web3) => {
+    return new web3.eth.Contract(PRICE_ORACLE_V2_ABI as any, PRICE_ORACLE_V2_ADDRESS);
+  }, []);
+
   const getCollateralContract = useCallback((web3: Web3) => {
     return new web3.eth.Contract(ERC20_ABI as any, TUSD_ADDRESS);
   }, []);
+
+  // Preflight check before opening position
+  const preflightCheck = async (pair: string): Promise<PreflightResult> => {
+    try {
+      const web3 = getReadOnlyWeb3();
+      const pairId = web3.utils.keccak256(pair);
+      
+      const oracleContract = getOracleContract(web3);
+      const tradingContract = getTradingContract(web3);
+      
+      // Check if feed exists
+      const hasFeed: boolean = await oracleContract.methods.hasFeed(pairId).call();
+      if (!hasFeed) {
+        return {
+          success: false,
+          error: `Price feed not configured for ${pair}. This pair cannot be traded.`,
+          hasFeed: false
+        };
+      }
+      
+      // Get price and check staleness
+      const [priceResult, priceTimeout]: [any, any] = await Promise.all([
+        oracleContract.methods.getPrice(pairId).call(),
+        tradingContract.methods.priceTimeout().call()
+      ]);
+      
+      const updatedAt = Number(priceResult.updatedAt);
+      const timeout = Number(priceTimeout);
+      const now = Math.floor(Date.now() / 1000);
+      const priceAge = now - updatedAt;
+      
+      if (priceAge > timeout) {
+        return {
+          success: false,
+          error: `Oracle price is stale (age: ${priceAge}s, timeout: ${timeout}s). The trade will revert. Try again when the price feed updates.`,
+          hasFeed: true,
+          priceAge,
+          priceTimeout: timeout
+        };
+      }
+      
+      return {
+        success: true,
+        hasFeed: true,
+        priceAge,
+        priceTimeout: timeout
+      };
+    } catch (error: any) {
+      console.error('Preflight check error:', error);
+      return {
+        success: false,
+        error: `Preflight check failed: ${error.message || 'Unknown error'}`
+      };
+    }
+  };
 
   // Check and request approval for collateral
   const ensureApproval = async (
@@ -299,7 +402,7 @@ export const useOnChainTradingV2 = () => {
     marginAmount: string
   ): Promise<boolean> => {
     const collateralContract = getCollateralContract(web3);
-    const marginWei = web3.utils.toWei(marginAmount, 'mwei'); // 6 decimals
+    const marginWei = web3.utils.toWei(marginAmount, 'mwei');
 
     try {
       const currentAllowance = await collateralContract.methods
@@ -330,15 +433,38 @@ export const useOnChainTradingV2 = () => {
       return true;
     } catch (error: any) {
       console.error('Approval error:', error);
+      const errorMsg = extractErrorMessage(error);
       toast({
         title: 'Approval Failed',
-        description: error.message || 'Failed to approve tUSD',
+        description: errorMsg,
         variant: 'destructive',
       });
       return false;
     } finally {
       setApprovalPending(false);
     }
+  };
+
+  // Extract meaningful error message
+  const extractErrorMessage = (error: any): string => {
+    // Check various error properties
+    if (error?.cause?.message) return error.cause.message;
+    if (error?.data?.message) return error.data.message;
+    if (error?.reason) return error.reason;
+    if (error?.message) {
+      // Clean up common Web3 error messages
+      const msg = error.message;
+      if (msg.includes('User denied')) return 'Transaction rejected by user';
+      if (msg.includes('insufficient funds')) return 'Insufficient funds for gas';
+      if (msg.includes('execution reverted')) {
+        // Try to extract revert reason
+        const match = msg.match(/reason string '([^']+)'/);
+        if (match) return match[1];
+        return 'Transaction would fail - check oracle price or balance';
+      }
+      return msg.slice(0, 100);
+    }
+    return 'Transaction failed';
   };
 
   // Get collateral balance
@@ -360,10 +486,11 @@ export const useOnChainTradingV2 = () => {
       const { web3 } = await getWeb3AndAccount();
       const contract = getTradingContract(web3);
 
-      const [maxLeverage, maintenanceMarginBps, maxProfitBps, feeConfig] = await Promise.all([
+      const [maxLeverage, maintenanceMarginBps, maxProfitBps, priceTimeout, feeConfig] = await Promise.all([
         contract.methods.maxLeverage().call(),
         contract.methods.maintenanceMarginBps().call(),
         contract.methods.maxProfitBps().call(),
+        contract.methods.priceTimeout().call().catch(() => 120),
         contract.methods.getFeeConfig().call().catch(() => null),
       ]);
 
@@ -371,9 +498,9 @@ export const useOnChainTradingV2 = () => {
         maxLeverage: Number(maxLeverage),
         maintenanceMarginBps: Number(maintenanceMarginBps),
         maxProfitBps: Number(maxProfitBps),
+        priceTimeout: Number(priceTimeout),
       };
 
-      // Add fee info if available (new contract)
       if (feeConfig) {
         config.treasury = (feeConfig as any)._treasury;
         config.openFeeBps = Number((feeConfig as any)._openFeeBps);
@@ -404,7 +531,6 @@ export const useOnChainTradingV2 = () => {
       };
     } catch (error) {
       console.error('Error fetching fee config:', error);
-      // Return default config from FEE_CONFIG
       return {
         treasury: '',
         openFeeBps: FEE_CONFIG.openFeeBps,
@@ -429,6 +555,22 @@ export const useOnChainTradingV2 = () => {
   const openPosition = async (params: OpenPositionV2Params): Promise<string | null> => {
     setIsLoading(true);
     try {
+      // Run preflight check first
+      toast({
+        title: 'Checking Oracle',
+        description: `Verifying price feed for ${params.pair}...`,
+      });
+      
+      const preflight = await preflightCheck(params.pair);
+      if (!preflight.success) {
+        toast({
+          title: 'Cannot Open Position',
+          description: preflight.error,
+          variant: 'destructive',
+        });
+        return null;
+      }
+
       const { web3, account } = await getWeb3AndAccount();
       
       // Validate pair
@@ -462,6 +604,16 @@ export const useOnChainTradingV2 = () => {
         description: `Fee: ${fee.toFixed(2)} tUSD (0.08%) | Net margin: ${netMargin.toFixed(2)} tUSD`,
       });
 
+      // Try estimateGas first to catch reverts early
+      try {
+        await contract.methods
+          .openPosition(pairId, isLong, marginWei, params.leverage, 0, 0)
+          .estimateGas({ from: account });
+      } catch (estimateError: any) {
+        const errorMsg = extractErrorMessage(estimateError);
+        throw new Error(`Transaction would fail: ${errorMsg}`);
+      }
+
       const tx = await contract.methods
         .openPosition(pairId, isLong, marginWei, params.leverage, 0, 0)
         .send({ from: account });
@@ -474,9 +626,10 @@ export const useOnChainTradingV2 = () => {
       return tx.transactionHash as string;
     } catch (error: any) {
       console.error('Error opening position:', error);
+      const errorMsg = extractErrorMessage(error);
       toast({
         title: 'Failed to Open Position',
-        description: error.message || 'Transaction failed',
+        description: errorMsg,
         variant: 'destructive',
       });
       return null;
@@ -509,9 +662,10 @@ export const useOnChainTradingV2 = () => {
       return tx.transactionHash as string;
     } catch (error: any) {
       console.error('Error closing position:', error);
+      const errorMsg = extractErrorMessage(error);
       toast({
         title: 'Failed to Close Position',
-        description: error.message || 'Transaction failed',
+        description: errorMsg,
         variant: 'destructive',
       });
       return null;
@@ -544,9 +698,10 @@ export const useOnChainTradingV2 = () => {
       return tx.transactionHash as string;
     } catch (error: any) {
       console.error('Error liquidating position:', error);
+      const errorMsg = extractErrorMessage(error);
       toast({
         title: 'Liquidation Failed',
-        description: error.message || 'Position may not be liquidatable',
+        description: errorMsg,
         variant: 'destructive',
       });
       return null;
@@ -574,7 +729,6 @@ export const useOnChainTradingV2 = () => {
           const position: any = await contract.methods.getPosition(id).call();
           const pnl: any = await contract.methods.getCurrentPnL(id).call();
 
-          // Find pair name from pairId
           const pairName = Object.entries(PAIR_IDS).find(
             ([, hash]) => hash.toLowerCase() === position.pairId.toLowerCase()
           )?.[0] || 'Unknown';
@@ -711,5 +865,6 @@ export const useOnChainTradingV2 = () => {
     calculateOpenFee,
     calculateCloseFee,
     computePairId,
+    preflightCheck,
   };
 };

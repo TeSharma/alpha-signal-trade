@@ -1,29 +1,31 @@
 import { useState, useEffect, useCallback } from 'react';
 import Web3 from 'web3';
-import { ORACLE_ADDRESS } from './useTokenContracts';
+import { CONTRACT_ADDRESSES } from '@/config/contracts';
 
-const ORACLE_ABI = [
+// Use public RPC for reads to avoid MetaMask overload
+const PUBLIC_RPC = 'https://rpc-amoy.polygon.technology/';
+
+// PriceOracleV2 ABI (uses bytes32 pairId)
+const PRICE_ORACLE_V2_ABI = [
   {
-    inputs: [{ name: 'pair', type: 'string' }],
-    name: 'getLatestPrice',
+    inputs: [{ name: 'pairId', type: 'bytes32' }],
+    name: 'getPrice',
     outputs: [
-      { name: 'price', type: 'int256' },
-      { name: 'timestamp', type: 'uint256' },
-      { name: 'roundId', type: 'uint80' },
-      { name: 'isValid', type: 'bool' }
+      { name: 'price', type: 'uint256' },
+      { name: 'updatedAt', type: 'uint256' }
     ],
     stateMutability: 'view',
     type: 'function'
   },
   {
-    inputs: [{ name: 'pair', type: 'string' }],
-    name: 'getLatestValidPrice',
-    outputs: [{ name: 'price', type: 'int256' }],
+    inputs: [{ name: 'pairId', type: 'bytes32' }],
+    name: 'hasFeed',
+    outputs: [{ name: '', type: 'bool' }],
     stateMutability: 'view',
     type: 'function'
   },
   {
-    inputs: [{ name: 'pair', type: 'string' }],
+    inputs: [{ name: 'pairId', type: 'bytes32' }],
     name: 'getDecimals',
     outputs: [{ name: '', type: 'uint8' }],
     stateMutability: 'view',
@@ -53,52 +55,52 @@ export const useOraclePrice = () => {
   }, []);
 
   const initializeWeb3 = async () => {
-    if (typeof window.ethereum !== 'undefined') {
-      const web3Instance = new Web3(window.ethereum);
-      setWeb3(web3Instance);
-      setIsConnected(true);
-    } else {
-      // Fallback to public RPC for read-only operations
-      const web3Instance = new Web3('https://polygon-rpc.com/');
-      setWeb3(web3Instance);
-      setIsConnected(true);
-    }
+    // Use public RPC for read operations to avoid MetaMask provider overload
+    const web3Instance = new Web3(PUBLIC_RPC);
+    setWeb3(web3Instance);
+    setIsConnected(true);
   };
 
   const getOracleContract = useCallback(() => {
     if (!web3) return null;
 
+    const oracleAddress = CONTRACT_ADDRESSES.amoy.PriceOracleV2;
     const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
-    const oracleAddress = (ORACLE_ADDRESS as unknown as string).toLowerCase();
 
-    if (oracleAddress === ZERO_ADDRESS) {
-      return null; // Oracle not deployed yet
+    if (oracleAddress.toLowerCase() === ZERO_ADDRESS.toLowerCase()) {
+      return null;
     }
 
-    return new web3.eth.Contract(ORACLE_ABI as any, oracleAddress);
+    return new web3.eth.Contract(PRICE_ORACLE_V2_ABI as any, oracleAddress);
   }, [web3]);
 
   const fetchPrice = async (pair: string): Promise<OraclePriceData | null> => {
     const contract = getOracleContract();
-    if (!contract) {
-      console.warn('Oracle contract not deployed yet');
+    if (!contract || !web3) {
+      console.warn('Oracle contract not available');
       return null;
     }
 
     try {
-      const result: any = await contract.methods
-        .getLatestPrice(pair)
-        .call();
+      const pairId = web3.utils.keccak256(pair);
       
-      const [price, timestamp, , isValid] = result;
-      const decimals: any = await contract.methods.getDecimals(pair).call();
+      // Check if feed exists
+      const hasFeed: boolean = await contract.methods.hasFeed(pairId).call();
+      if (!hasFeed) {
+        return null;
+      }
 
-      const formattedPrice = (Number(price) / Math.pow(10, Number(decimals))).toFixed(8);
+      const [priceResult, decimals]: [any, any] = await Promise.all([
+        contract.methods.getPrice(pairId).call(),
+        contract.methods.getDecimals(pairId).call()
+      ]);
+
+      const formattedPrice = (Number(priceResult.price) / Math.pow(10, Number(decimals))).toFixed(8);
 
       return {
         price: formattedPrice,
-        timestamp: Number(timestamp),
-        isValid: Boolean(isValid),
+        timestamp: Number(priceResult.updatedAt),
+        isValid: Number(priceResult.price) > 0,
         decimals: Number(decimals)
       };
     } catch (error) {
