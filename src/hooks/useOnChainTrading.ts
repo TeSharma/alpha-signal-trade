@@ -147,7 +147,7 @@ export const useOnChainTrading = () => {
   ): Promise<boolean> => {
     const collateralToken = TOKEN_ADDRESSES.tUSD;
     
-    if (collateralToken === '0x0000000000000000000000000000000000000000') {
+    if (collateralToken.toLowerCase() === '0x0000000000000000000000000000000000000000') {
       toast({
         title: 'Token Not Deployed',
         description: 'Collateral token (tUSD) is not deployed yet',
@@ -366,7 +366,7 @@ export const useOnChainTrading = () => {
       const { web3, account } = await getWeb3AndAccount();
       
       const collateralToken = TOKEN_ADDRESSES.tUSD;
-      if (collateralToken === '0x0000000000000000000000000000000000000000') {
+      if (collateralToken.toLowerCase() === '0x0000000000000000000000000000000000000000') {
         return '0';
       }
       

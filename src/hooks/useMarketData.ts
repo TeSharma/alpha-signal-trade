@@ -1,23 +1,31 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import Web3 from 'web3';
-import { ORACLE_ADDRESS } from './useTokenContracts';
+import { CONTRACT_ADDRESSES } from '@/config/contracts';
 
-// Oracle ABI for price fetching
-const ORACLE_ABI = [
+// Use public RPC for reads to avoid overloading MetaMask provider
+const PUBLIC_RPC = 'https://rpc-amoy.polygon.technology/';
+
+// PriceOracleV2 ABI (uses bytes32 pairId)
+const PRICE_ORACLE_V2_ABI = [
   {
-    inputs: [{ name: 'pair', type: 'string' }],
-    name: 'getLatestPrice',
+    inputs: [{ name: 'pairId', type: 'bytes32' }],
+    name: 'getPrice',
     outputs: [
-      { name: 'price', type: 'int256' },
-      { name: 'timestamp', type: 'uint256' },
-      { name: 'roundId', type: 'uint80' },
-      { name: 'isValid', type: 'bool' }
+      { name: 'price', type: 'uint256' },
+      { name: 'updatedAt', type: 'uint256' }
     ],
     stateMutability: 'view',
     type: 'function'
   },
   {
-    inputs: [{ name: 'pair', type: 'string' }],
+    inputs: [{ name: 'pairId', type: 'bytes32' }],
+    name: 'hasFeed',
+    outputs: [{ name: '', type: 'bool' }],
+    stateMutability: 'view',
+    type: 'function'
+  },
+  {
+    inputs: [{ name: 'pairId', type: 'bytes32' }],
     name: 'getDecimals',
     outputs: [{ name: '', type: 'uint8' }],
     stateMutability: 'view',
@@ -25,7 +33,7 @@ const ORACLE_ABI = [
   }
 ];
 
-// Supported oracle pairs (match PriceOracle contract)
+// Supported oracle pairs
 const ORACLE_PAIRS = ['EUR/USD', 'GBP/USD', 'USD/JPY', 'AUD/USD', 'USD/CAD', 'USD/CHF', 'NZD/USD'];
 
 // Fallback prices when oracle is unavailable
@@ -55,6 +63,7 @@ export interface MarketPrice {
   low24h: number;
   lastUpdate: Date;
   isOraclePrice: boolean;
+  updatedAt?: number; // Oracle timestamp
 }
 
 export const useMarketData = () => {
@@ -63,24 +72,23 @@ export const useMarketData = () => {
   const [isConnected, setIsConnected] = useState(false);
   const [oracleAvailable, setOracleAvailable] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const pairIdsRef = useRef<Record<string, string>>({});
 
-  // Initialize Web3
+  // Initialize Web3 with public RPC (not MetaMask) for reads
   useEffect(() => {
     const initWeb3 = async () => {
-      let web3Instance: Web3;
-      
-      if (typeof window.ethereum !== 'undefined') {
-        web3Instance = new Web3(window.ethereum);
-      } else {
-        // Fallback to Polygon Amoy RPC for read-only
-        web3Instance = new Web3('https://rpc-amoy.polygon.technology/');
-      }
-      
+      // Always use public RPC for market data reads to avoid MetaMask overload
+      const web3Instance = new Web3(PUBLIC_RPC);
       setWeb3(web3Instance);
       setIsConnected(true);
       
-      // Check if oracle is deployed (compare as strings)
-      const oracleAddress = ORACLE_ADDRESS as string;
+      // Pre-compute pair IDs
+      ORACLE_PAIRS.forEach(pair => {
+        pairIdsRef.current[pair] = web3Instance.utils.keccak256(pair);
+      });
+      
+      // Check if oracle is deployed
+      const oracleAddress = CONTRACT_ADDRESSES.amoy.PriceOracleV2;
       const zeroAddress = '0x0000000000000000000000000000000000000000';
       if (oracleAddress && oracleAddress.toLowerCase() !== zeroAddress.toLowerCase()) {
         setOracleAvailable(true);
@@ -90,19 +98,33 @@ export const useMarketData = () => {
     initWeb3();
   }, []);
 
-  // Fetch price from oracle
-  const fetchOraclePrice = useCallback(async (pair: string): Promise<{ price: number; isValid: boolean } | null> => {
+  // Fetch price from PriceOracleV2
+  const fetchOraclePrice = useCallback(async (pair: string): Promise<{ price: number; updatedAt: number; decimals: number } | null> => {
     if (!web3 || !oracleAvailable) return null;
     
+    const pairId = pairIdsRef.current[pair];
+    if (!pairId) return null;
+    
     try {
-      const contract = new web3.eth.Contract(ORACLE_ABI as any, ORACLE_ADDRESS);
-      const result: any = await contract.methods.getLatestPrice(pair).call();
-      const decimals: any = await contract.methods.getDecimals(pair).call();
+      const contract = new web3.eth.Contract(PRICE_ORACLE_V2_ABI as any, CONTRACT_ADDRESSES.amoy.PriceOracleV2);
       
-      const price = Number(result.price) / Math.pow(10, Number(decimals));
-      return { price, isValid: Boolean(result.isValid) };
+      // Check if feed exists first
+      const hasFeed: boolean = await contract.methods.hasFeed(pairId).call();
+      if (!hasFeed) {
+        return null;
+      }
+      
+      const [priceResult, decimals]: [any, any] = await Promise.all([
+        contract.methods.getPrice(pairId).call(),
+        contract.methods.getDecimals(pairId).call()
+      ]);
+      
+      const price = Number(priceResult.price) / Math.pow(10, Number(decimals));
+      const updatedAt = Number(priceResult.updatedAt);
+      
+      return { price, updatedAt, decimals: Number(decimals) };
     } catch (error) {
-      console.warn(`Oracle price unavailable for ${pair}:`, error);
+      // Silent fail - oracle may not have this feed configured
       return null;
     }
   }, [web3, oracleAvailable]);
@@ -120,7 +142,8 @@ export const useMarketData = () => {
     pair: string, 
     newPrice: number, 
     basePrice: number, 
-    isOraclePrice: boolean
+    isOraclePrice: boolean,
+    updatedAt?: number
   ): MarketPrice => {
     const change = newPrice - basePrice;
     const changePercent = (change / basePrice) * 100;
@@ -140,7 +163,8 @@ export const useMarketData = () => {
       high24h: Number((newPrice * (1 + Math.random() * 0.02)).toFixed(5)),
       low24h: Number((newPrice * (1 - Math.random() * 0.02)).toFixed(5)),
       lastUpdate: new Date(),
-      isOraclePrice
+      isOraclePrice,
+      updatedAt
     };
   };
 
@@ -169,10 +193,9 @@ export const useMarketData = () => {
         // Check if we have oracle data for this pair
         const oracleData = oracleResults.find(r => r.pair === pair);
         
-        if (oracleData?.oracleResult?.isValid && oracleData.oracleResult.price > 0) {
-          // Use oracle price with small simulation for spread
+        if (oracleData?.oracleResult && oracleData.oracleResult.price > 0) {
           const oraclePrice = oracleData.oracleResult.price;
-          newPrices[pair] = createMarketPrice(pair, oraclePrice, basePrice, true);
+          newPrices[pair] = createMarketPrice(pair, oraclePrice, basePrice, true, oracleData.oracleResult.updatedAt);
         } else {
           // Use simulated price
           const simulatedPrice = generateSimulatedPrice(basePrice, currentPrice);
@@ -188,18 +211,18 @@ export const useMarketData = () => {
     }
   }, [web3, fetchOraclePrice, prices]);
 
-  // Initial load and periodic updates
+  // Initial load and periodic updates - slower polling (10s) to avoid RPC overload
   useEffect(() => {
     if (!web3) return;
     
     // Initial fetch
     updatePrices();
     
-    // Update every 2 seconds
-    const interval = setInterval(updatePrices, 2000);
+    // Update every 10 seconds (reduced from 2s to prevent RPC spam)
+    const interval = setInterval(updatePrices, 10000);
     
     return () => clearInterval(interval);
-  }, [web3]); // Only depend on web3, not updatePrices to avoid infinite loop
+  }, [web3]); // Only depend on web3
 
   const getPrice = (pair: string): MarketPrice | null => {
     return prices[pair] || null;

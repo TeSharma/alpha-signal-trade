@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import Web3 from 'web3';
-import { Contract } from 'web3-eth-contract';
+import { CONTRACT_ADDRESSES } from '@/config/contracts';
 
 // Contract ABIs (minimal interface)
 const ERC20_ABI = [
@@ -37,10 +37,10 @@ const ERC20_ABI = [
   }
 ];
 
-// Deployed contract addresses on Amoy testnet
+// Re-export V2 addresses from centralized config
 export const TOKEN_ADDRESSES = {
-  tUSD: '0xdb204732615f1EC2bDb1Aae2032bC9DE7aA8c164',
-  tEUR: '0x0000000000000000000000000000000000000000', // Not yet deployed
+  tUSD: CONTRACT_ADDRESSES.amoy.TokenizedCurrency,
+  tEUR: '0x0000000000000000000000000000000000000000',
   tGBP: '0x0000000000000000000000000000000000000000',
   tJPY: '0x0000000000000000000000000000000000000000',
   tAUD: '0x0000000000000000000000000000000000000000',
@@ -49,9 +49,9 @@ export const TOKEN_ADDRESSES = {
   tNZD: '0x0000000000000000000000000000000000000000',
 };
 
-// Updated to use the latest deployed addresses
-export const ORACLE_ADDRESS = '0x8063A3901b9053f911fFE3da4bAF754B640A0744';
-export const TRADING_PLATFORM_ADDRESS = '0xE13B97E70AF997dEaB3EAa28Ab88cCd362734729';
+// Use V2 addresses from central config
+export const ORACLE_ADDRESS = CONTRACT_ADDRESSES.amoy.PriceOracleV2;
+export const TRADING_PLATFORM_ADDRESS = CONTRACT_ADDRESSES.amoy.TradingPlatformV2;
 
 interface TokenBalance {
   symbol: string;
@@ -75,13 +75,11 @@ export const useTokenContracts = () => {
       const web3Instance = new Web3(window.ethereum);
       setWeb3(web3Instance);
       
-      // Get current account
       const accounts = await web3Instance.eth.getAccounts();
       if (accounts.length > 0) {
         setAccount(accounts[0]);
       }
 
-      // Listen for account changes
       window.ethereum.on('accountsChanged', (accounts: string[]) => {
         setAccount(accounts[0] || '');
       });
@@ -115,7 +113,7 @@ export const useTokenContracts = () => {
     
     const tokenAddress = TOKEN_ADDRESSES[tokenSymbol];
     if (tokenAddress === '0x0000000000000000000000000000000000000000') {
-      return '0'; // Contract not deployed yet
+      return '0';
     }
 
     const contract = getTokenContract(tokenAddress);
@@ -144,7 +142,7 @@ export const useTokenContracts = () => {
         return {
           symbol: tokenSymbol,
           balance,
-          decimals: 6, // Standard for stablecoins
+          decimals: 6,
           address
         };
       });
