@@ -6,6 +6,13 @@ import { Activity, AlertTriangle, CheckCircle, XCircle, RefreshCw, Zap } from "l
 import { Button } from "@/components/ui/button";
 import { PRICE_ORACLE_V2_ADDRESS, PAIR_IDS, computePairId } from '@/hooks/useOnChainTradingV2';
 
+// Public RPC endpoints with fallbacks (avoid MetaMask provider overload)
+const RPC_ENDPOINTS = [
+  'https://rpc-amoy.polygon.technology/',
+  'https://polygon-amoy.drpc.org/',
+  'https://polygon-amoy-bor-rpc.publicnode.com'
+];
+
 // PriceOracleV2 ABI - minimal for getPrice
 const PRICE_ORACLE_V2_ABI = [
   {
@@ -48,24 +55,26 @@ const OracleStatus = () => {
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
   const [isConnected, setIsConnected] = useState(false);
 
-  const fetchOracleStatus = useCallback(async () => {
+  const fetchOracleStatus = useCallback(async (rpcIndex: number = 0) => {
     setIsRefreshing(true);
+    const maxRetries = RPC_ENDPOINTS.length;
     
     try {
-      if (typeof window.ethereum === 'undefined') {
-        setOverallStatus('unavailable');
-        setIsConnected(false);
-        return;
-      }
-
-      const web3 = new Web3(window.ethereum);
+      // Use public RPC instead of MetaMask provider to reduce load
+      const endpoint = RPC_ENDPOINTS[rpcIndex % RPC_ENDPOINTS.length];
+      const web3 = new Web3(endpoint);
       const contract = new web3.eth.Contract(PRICE_ORACLE_V2_ABI as any, PRICE_ORACLE_V2_ADDRESS);
       
       // Check if contract is reachable
       try {
         await web3.eth.getCode(PRICE_ORACLE_V2_ADDRESS);
         setIsConnected(true);
-      } catch {
+      } catch (error: any) {
+        // Retry with fallback RPC
+        if (rpcIndex < maxRetries - 1) {
+          console.log(`OracleStatus: Retrying with fallback RPC (attempt ${rpcIndex + 2}/${maxRetries})...`);
+          return fetchOracleStatus(rpcIndex + 1);
+        }
         setOverallStatus('unavailable');
         setIsConnected(false);
         return;
@@ -248,9 +257,9 @@ const OracleStatus = () => {
             </div>
             
             {!isConnected && (
-              <div className="text-sm text-red-600 mb-2 flex items-center gap-2">
+              <div className="text-sm text-destructive mb-2 flex items-center gap-2">
                 <XCircle className="h-4 w-4" />
-                Connect MetaMask to view oracle status
+                Unable to reach oracle - network unavailable
               </div>
             )}
             
