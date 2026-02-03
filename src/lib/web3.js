@@ -25,9 +25,15 @@ export const connectToBlockchain = async () => {
     // Initialize web3 instance
     web3Instance = new Web3(window.ethereum);
     
-    // Check network
-    const networkId = await web3Instance.eth.net.getId();
-    console.log('Connected to network:', networkId);
+    // Get chain ID using eth_chainId (more reliable than net_version)
+    try {
+      const chainIdHex = await window.ethereum.request({ method: 'eth_chainId' });
+      const chainId = parseInt(chainIdHex, 16);
+      console.log('Connected to chain:', chainId);
+    } catch (chainError) {
+      // Non-fatal - just log it
+      console.log('Could not get chain ID, continuing anyway');
+    }
     
     return true;
   } catch (error) {
@@ -75,21 +81,22 @@ export const getBalance = async (address) => {
 };
 
 export const getNetworkInfo = async () => {
-  const web3 = getWeb3();
-  if (!web3) {
-    throw new Error('Web3 not initialized');
+  if (!window.ethereum) {
+    throw new Error('No wallet connected');
   }
   
   try {
-    const networkId = await web3.eth.net.getId();
+    // Use eth_chainId directly from wallet (more reliable than net_version)
+    const chainIdHex = await window.ethereum.request({ method: 'eth_chainId' });
+    const networkId = parseInt(chainIdHex, 16);
+    
     const networkNames = {
       1: 'Ethereum Mainnet',
-      3: 'Ropsten Testnet',
-      4: 'Rinkeby Testnet',
       5: 'Goerli Testnet',
-      42: 'Kovan Testnet',
+      11155111: 'Sepolia Testnet',
       137: 'Polygon Mainnet',
-      80001: 'Polygon Mumbai Testnet'
+      80001: 'Polygon Mumbai Testnet',
+      80002: 'Polygon Amoy Testnet'
     };
     
     return {

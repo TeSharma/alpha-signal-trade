@@ -89,14 +89,20 @@ export const useWallet = () => {
       });
 
       if (accounts.length > 0) {
-        const web3 = getWeb3();
-        const chainId = await web3.eth.getChainId();
+        // Use eth_chainId directly (avoids net_version issues)
+        let chainId: number | null = null;
+        try {
+          const chainIdHex = await window.ethereum.request({ method: 'eth_chainId' });
+          chainId = parseInt(chainIdHex, 16);
+        } catch {
+          console.log('Could not get chain ID');
+        }
         const balance = await getAccountBalance(accounts[0]);
         
         setWalletState({
           isConnected: true,
           account: accounts[0],
-          chainId: Number(chainId),
+          chainId,
           balance,
           isConnecting: false,
           error: null,
@@ -142,9 +148,15 @@ export const useWallet = () => {
       const isConnected = await connectToBlockchain();
       
       if (isConnected) {
-        const web3 = getWeb3();
-        const accounts = await web3.eth.getAccounts();
-        const chainId = await web3.eth.getChainId();
+        const accounts = await window.ethereum.request({ method: 'eth_accounts' });
+        // Use eth_chainId directly (avoids net_version issues)
+        let chainId: number | null = null;
+        try {
+          const chainIdHex = await window.ethereum.request({ method: 'eth_chainId' });
+          chainId = parseInt(chainIdHex, 16);
+        } catch {
+          console.log('Could not get chain ID');
+        }
         const balance = await getAccountBalance(accounts[0]);
 
         setWalletState({
