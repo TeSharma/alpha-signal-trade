@@ -356,31 +356,42 @@ export const useOnChainTradingV2 = () => {
       const oracleContract = getOracleContract(web3);
       const tradingContract = getTradingContract(web3);
       
-      // Check if feed exists
-      const hasFeed: boolean = await oracleContract.methods.hasFeed(pairId).call();
-      if (!hasFeed) {
+      // Try to get price directly - the oracle may not have hasFeed(), or it may revert
+      // So we catch reverts and interpret them as "no feed"
+      let priceResult: any;
+      let hasFeed = false;
+      
+      try {
+        priceResult = await oracleContract.methods.getPrice(pairId).call();
+        // If we got here without error, feed exists
+        hasFeed = true;
+      } catch (priceError: any) {
+        console.log(`getPrice failed for ${pair}:`, priceError.message);
+        // Contract reverted - means no feed for this pair
         return {
           success: false,
-          error: `Price feed not configured for ${pair}. This pair cannot be traded.`,
+          error: `Price feed not available for ${pair}. This trading pair may not be supported on-chain yet.`,
           hasFeed: false
         };
       }
       
-      // Get price and check staleness
-      const [priceResult, priceTimeout]: [any, any] = await Promise.all([
-        oracleContract.methods.getPrice(pairId).call(),
-        tradingContract.methods.priceTimeout().call()
-      ]);
+      // Get timeout to check staleness
+      let timeout: number;
+      try {
+        timeout = Number(await tradingContract.methods.priceTimeout().call());
+      } catch {
+        // Default to 2 minutes if we can't read it
+        timeout = 120;
+      }
       
-      const updatedAt = Number(priceResult.updatedAt);
-      const timeout = Number(priceTimeout);
+      const updatedAt = Number(priceResult.updatedAt || priceResult[1]);
       const now = Math.floor(Date.now() / 1000);
       const priceAge = now - updatedAt;
       
       if (priceAge > timeout) {
         return {
           success: false,
-          error: `Oracle price is stale (age: ${priceAge}s, timeout: ${timeout}s). The trade will revert. Try again when the price feed updates.`,
+          error: `Oracle price is stale (${Math.floor(priceAge / 60)}m old, max ${Math.floor(timeout / 60)}m). Trade may revert.`,
           hasFeed: true,
           priceAge,
           priceTimeout: timeout
@@ -397,12 +408,13 @@ export const useOnChainTradingV2 = () => {
       console.error(`Preflight check error (attempt ${retryCount + 1}):`, error);
       
       // Check if it's a network error and we can retry
+      const errorMsg = error.message?.toLowerCase() || '';
       const isNetworkError = 
-        error.message?.includes('failed to fetch') ||
-        error.message?.includes('Failed to fetch') ||
-        error.message?.includes('network') ||
-        error.message?.includes('timeout') ||
-        error.message?.includes('ECONNREFUSED') ||
+        errorMsg.includes('failed to fetch') ||
+        errorMsg.includes('network') ||
+        errorMsg.includes('timeout') ||
+        errorMsg.includes('econnrefused') ||
+        errorMsg.includes('connection') ||
         error.code === 'NETWORK_ERROR';
       
       if (isNetworkError && retryCount < maxRetries - 1) {
@@ -418,9 +430,18 @@ export const useOnChainTradingV2 = () => {
         };
       }
       
+      // Check for contract execution errors (reverts with no data)
+      if (errorMsg.includes('execution reverted') || errorMsg.includes('inside a smart contract')) {
+        return {
+          success: false,
+          error: `Price feed not available for ${pair}. This pair may not be supported yet.`,
+          hasFeed: false
+        };
+      }
+      
       return {
         success: false,
-        error: `Preflight check failed: ${error.message || 'Unknown error'}`
+        error: `Preflight check failed: ${error.message?.slice(0, 80) || 'Unknown error'}`
       };
     }
   };
