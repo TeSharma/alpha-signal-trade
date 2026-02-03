@@ -3,8 +3,12 @@ import Web3 from 'web3';
 import { useToast } from '@/hooks/use-toast';
 import { CONTRACT_ADDRESSES, FEE_CONFIG } from '@/config/contracts';
 
-// Public RPC for read operations (avoids MetaMask overload)
-const PUBLIC_RPC = 'https://rpc-amoy.polygon.technology/';
+// Public RPC endpoints with fallbacks (avoids MetaMask overload)
+const RPC_ENDPOINTS = [
+  'https://rpc-amoy.polygon.technology/',
+  'https://polygon-amoy.drpc.org/',
+  'https://polygon-amoy-bor-rpc.publicnode.com'
+];
 
 // V2 Contract addresses from config
 export const TRADING_PLATFORM_V2_ADDRESS = CONTRACT_ADDRESSES.amoy.TradingPlatformV2;
@@ -323,9 +327,10 @@ export const useOnChainTradingV2 = () => {
     return { web3, account: accounts[0] };
   }, []);
 
-  // Get read-only web3 with public RPC
-  const getReadOnlyWeb3 = useCallback(() => {
-    return new Web3(PUBLIC_RPC);
+  // Get read-only web3 with public RPC (with fallback support)
+  const getReadOnlyWeb3 = useCallback((rpcIndex: number = 0) => {
+    const endpoint = RPC_ENDPOINTS[rpcIndex % RPC_ENDPOINTS.length];
+    return new Web3(endpoint);
   }, []);
 
   const getTradingContract = useCallback((web3: Web3) => {
@@ -340,10 +345,12 @@ export const useOnChainTradingV2 = () => {
     return new web3.eth.Contract(ERC20_ABI as any, TUSD_ADDRESS);
   }, []);
 
-  // Preflight check before opening position
-  const preflightCheck = async (pair: string): Promise<PreflightResult> => {
+  // Preflight check before opening position with retry logic
+  const preflightCheck = async (pair: string, retryCount: number = 0): Promise<PreflightResult> => {
+    const maxRetries = RPC_ENDPOINTS.length;
+    
     try {
-      const web3 = getReadOnlyWeb3();
+      const web3 = getReadOnlyWeb3(retryCount);
       const pairId = web3.utils.keccak256(pair);
       
       const oracleContract = getOracleContract(web3);
@@ -387,7 +394,30 @@ export const useOnChainTradingV2 = () => {
         priceTimeout: timeout
       };
     } catch (error: any) {
-      console.error('Preflight check error:', error);
+      console.error(`Preflight check error (attempt ${retryCount + 1}):`, error);
+      
+      // Check if it's a network error and we can retry
+      const isNetworkError = 
+        error.message?.includes('failed to fetch') ||
+        error.message?.includes('Failed to fetch') ||
+        error.message?.includes('network') ||
+        error.message?.includes('timeout') ||
+        error.message?.includes('ECONNREFUSED') ||
+        error.code === 'NETWORK_ERROR';
+      
+      if (isNetworkError && retryCount < maxRetries - 1) {
+        console.log(`Retrying preflight with fallback RPC (attempt ${retryCount + 2}/${maxRetries})...`);
+        return preflightCheck(pair, retryCount + 1);
+      }
+      
+      // Provide user-friendly error messages
+      if (isNetworkError) {
+        return {
+          success: false,
+          error: 'Unable to reach blockchain network. Please check your internet connection and try again.'
+        };
+      }
+      
       return {
         success: false,
         error: `Preflight check failed: ${error.message || 'Unknown error'}`
