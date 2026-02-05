@@ -11,6 +11,7 @@ import { useTrades } from '@/hooks/useTrades'
 import { useMarketData } from '@/hooks/useMarketData'
 import { useOnChainTradingV2 } from '@/hooks/useOnChainTradingV2'
 import { useToast } from '@/components/ui/use-toast'
+import { useNetworkEnforcement } from '@/hooks/useNetworkEnforcement'
 import { CONTRACT_ADDRESSES, CHAIN_IDS, getMinimums, isMainnet, FEE_CONFIG, calculateOpenFee } from '@/config/contracts'
 
 interface TradingFormProps {
@@ -41,29 +42,17 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
   const { prices, getCurrentPrice, getBidPrice, getAskPrice, oracleAvailable } = useMarketData()
   const { openPosition: openOnChainPositionV2, isLoading: onChainLoading, approvalPending, getCollateralBalance, getPlatformConfig } = useOnChainTradingV2()
   const { toast } = useToast()
+  const { isCorrectNetwork, currentChainId, switchToAmoy } = useNetworkEnforcement()
   const [collateralBalance, setCollateralBalance] = useState('0')
   const [maxLeverage, setMaxLeverage] = useState(50)
-  const [currentChainId, setCurrentChainId] = useState<number>(CHAIN_IDS.amoy)
 
-  // Fetch collateral balance, platform config, and chain ID for live mode
+  // Fetch collateral balance and platform config for live mode
   useEffect(() => {
     if (accountMode === 'live') {
       getCollateralBalance().then(setCollateralBalance);
       getPlatformConfig().then(config => {
         if (config) setMaxLeverage(config.maxLeverage);
       });
-      
-      // Get current chain ID
-      if (window.ethereum) {
-        window.ethereum.request({ method: 'eth_chainId' })
-          .then((chainId: string) => setCurrentChainId(parseInt(chainId, 16)))
-          .catch(console.error);
-        
-        // Listen for chain changes
-        window.ethereum.on('chainChanged', (chainId: string) => {
-          setCurrentChainId(parseInt(chainId, 16));
-        });
-      }
     }
   }, [accountMode, getCollateralBalance, getPlatformConfig]);
 
@@ -129,19 +118,14 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
           return
         }
 
-        // Check network (Polygon Amoy chainId: 80002)
-        try {
-          const chainId = await window.ethereum.request({ method: 'eth_chainId' });
-          if (chainId !== '0x13882') { // 80002 in hex
-            toast({
-              title: 'Wrong Network',
-              description: 'Please switch to Polygon Amoy testnet in MetaMask to trade.',
-              variant: 'destructive'
-            })
-            return
-          }
-        } catch (networkError) {
-          console.error('Network check error:', networkError);
+        // Network check handled by useNetworkEnforcement hook (button is disabled)
+        if (!isCorrectNetwork) {
+          toast({
+            title: 'Wrong Network',
+            description: 'Please switch to Polygon Amoy testnet to trade.',
+            variant: 'destructive'
+          })
+          return
         }
       }
 
@@ -546,11 +530,19 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
           </div>
         )}
 
+        {accountMode === 'live' && !isCorrectNetwork && (
+          <div className="flex items-center gap-2 text-sm text-amber-600 bg-amber-50 dark:bg-amber-950/30 p-3 rounded-lg">
+            <AlertTriangle className="h-4 w-4 shrink-0" />
+            <span>Switch to Polygon Amoy to trade</span>
+            <Button variant="outline" size="sm" className="ml-auto" onClick={switchToAmoy}>Switch</Button>
+          </div>
+        )}
+
         <Button 
           className="w-full" 
           size="lg"
           onClick={handleSubmitTrade}
-          disabled={isLoadingSignal || isSubmitting || onChainLoading || approvalPending}
+          disabled={isLoadingSignal || isSubmitting || onChainLoading || approvalPending || (accountMode === 'live' && !isCorrectNetwork)}
         >
           {approvalPending ? (
             <span className="flex items-center">

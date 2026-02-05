@@ -6,6 +6,7 @@ import { Coins, ExternalLink, Loader2, CheckCircle, Clock, AlertCircle } from "l
 import { useToast } from "@/hooks/use-toast";
 import Web3 from 'web3';
 import { CONTRACT_ADDRESSES, CHAIN_IDS } from '@/config/contracts';
+import { useNetworkEnforcement } from '@/hooks/useNetworkEnforcement';
 import TUSDFaucetABI from '../../../frontend/abi/TUSDFaucet.json';
 
 const TUSD_ADDRESS = CONTRACT_ADDRESSES.amoy.TokenizedCurrency;
@@ -39,6 +40,7 @@ const TUSDFaucet: React.FC = () => {
   const [isTestnet, setIsTestnet] = useState(true);
   const [faucetDeployed, setFaucetDeployed] = useState(false);
   const { toast } = useToast();
+  const { isCorrectNetwork, switchToAmoy } = useNetworkEnforcement();
 
   // Check network and faucet status
   const checkNetwork = useCallback(async () => {
@@ -134,9 +136,8 @@ const TUSDFaucet: React.FC = () => {
         throw new Error('No accounts found');
       }
 
-      // Check network
-      const chainId = await window.ethereum.request({ method: 'eth_chainId' });
-      if (chainId !== '0x13882') { // Amoy testnet
+      // Network check handled by useNetworkEnforcement (button is disabled)
+      if (!isCorrectNetwork) {
         toast({
           title: 'Wrong Network',
           description: 'Please switch to Polygon Amoy testnet',
@@ -291,6 +292,16 @@ const TUSDFaucet: React.FC = () => {
                 <Clock className="h-4 w-4" />
                 <span className="font-medium">Next claim available in {formatTimeRemaining(timeUntilClaim)}</span>
               </div>
+            </div>
+          ) : !isCorrectNetwork ? (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 text-sm text-amber-600 bg-amber-50 dark:bg-amber-950/30 p-3 rounded-lg border border-amber-200 dark:border-amber-800">
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                <span>Switch to Polygon Amoy to claim tokens</span>
+              </div>
+              <Button onClick={switchToAmoy} variant="outline" className="w-full">
+                Switch to Polygon Amoy
+              </Button>
             </div>
           ) : (
             <Button 

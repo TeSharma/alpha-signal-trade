@@ -50,6 +50,20 @@ export const getMinimums = (chainId?: number) => {
 // ============================================
 // FEE CONFIGURATION (matches smart contract)
 // ============================================
+// ============================================
+// REQUIRED NETWORK (Polygon Amoy)
+// ============================================
+export const REQUIRED_CHAIN_ID = CHAIN_IDS.amoy; // 80002
+export const REQUIRED_CHAIN_ID_HEX = '0x13882';
+
+export const AMOY_NETWORK_PARAMS = {
+  chainId: REQUIRED_CHAIN_ID_HEX,
+  chainName: 'Polygon Amoy Testnet',
+  rpcUrls: ['https://rpc-amoy.polygon.technology/'],
+  nativeCurrency: { name: 'MATIC', symbol: 'MATIC', decimals: 18 },
+  blockExplorerUrls: ['https://amoy.polygonscan.com/'],
+} as const;
+
 export const FEE_CONFIG = {
   openFeeBps: 8,           // 0.08% open fee
   closeFeeBps: 8,          // 0.08% close fee on profits

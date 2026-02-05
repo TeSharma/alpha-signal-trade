@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Wallet, RefreshCw, AlertTriangle, CheckCircle } from "lucide-react";
 import { useWallet } from "@/hooks/useWallet";
+import { useNetworkEnforcement } from "@/hooks/useNetworkEnforcement";
 
 const WalletStatus = () => {
   const { 
@@ -17,6 +18,7 @@ const WalletStatus = () => {
     disconnectWallet, 
     refreshBalance 
   } = useWallet();
+  const { isCorrectNetwork, networkName, switchToAmoy } = useNetworkEnforcement();
 
   const getNetworkName = (chainId: number | null) => {
     switch (chainId) {
@@ -25,6 +27,7 @@ const WalletStatus = () => {
       case 11155111: return 'Sepolia Testnet';
       case 137: return 'Polygon Mainnet';
       case 80001: return 'Polygon Mumbai';
+      case 80002: return 'Polygon Amoy';
       default: return `Chain ID: ${chainId}`;
     }
   };
@@ -130,10 +133,20 @@ const WalletStatus = () => {
 
           <div className="flex justify-between items-center">
             <span className="text-sm text-muted-foreground">Network:</span>
-            <Badge variant="outline" className="text-xs">
+            <Badge variant={isCorrectNetwork ? "outline" : "destructive"} className="text-xs">
               {getNetworkName(chainId)}
             </Badge>
           </div>
+
+          {!isCorrectNetwork && (
+            <div className="flex items-center gap-2 p-2 bg-amber-50 dark:bg-amber-950/30 rounded-lg text-amber-700 dark:text-amber-400 text-sm">
+              <AlertTriangle className="h-4 w-4 shrink-0" />
+              <span>Wrong network</span>
+              <Button variant="outline" size="sm" className="ml-auto h-7 text-xs" onClick={switchToAmoy}>
+                Switch to Amoy
+              </Button>
+            </div>
+          )}
         </div>
 
         <div className="flex gap-2">
