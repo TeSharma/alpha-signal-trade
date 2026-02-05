@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { RefreshCw, TrendingUp, TrendingDown, AlertTriangle, X } from "lucide-react";
 import { useOnChainTradingV2, PositionV2, PAIR_IDS } from '@/hooks/useOnChainTradingV2';
+import { useNetworkEnforcement } from '@/hooks/useNetworkEnforcement';
 
 interface V2PositionsPanelProps {
   onRefreshBalance?: () => void;
@@ -16,6 +17,7 @@ const V2PositionsPanel: React.FC<V2PositionsPanelProps> = ({ onRefreshBalance })
   const [isRefreshing, setIsRefreshing] = useState(false);
   
   const { getUserOpenPositions, closePosition, isLoading: actionLoading } = useOnChainTradingV2();
+  const { isCorrectNetwork } = useNetworkEnforcement();
 
   const fetchPositions = useCallback(async () => {
     setIsRefreshing(true);
@@ -167,7 +169,7 @@ const V2PositionsPanel: React.FC<V2PositionsPanelProps> = ({ onRefreshBalance })
                 size="sm"
                 className="w-full"
                 onClick={() => handleClosePosition(position.id)}
-                disabled={isLoading || actionLoading}
+                disabled={isLoading || actionLoading || !isCorrectNetwork}
               >
                 <X className="h-4 w-4 mr-1" />
                 Close Position

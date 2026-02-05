@@ -4,7 +4,13 @@ import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Activity, AlertTriangle, CheckCircle, XCircle, RefreshCw, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { PRICE_ORACLE_V2_ADDRESS, PAIR_IDS, computePairId } from '@/hooks/useOnChainTradingV2';
+import { PRICE_ORACLE_V2_ADDRESS, PAIR_IDS } from '@/hooks/useOnChainTradingV2';
+
+// Compute pair IDs locally without MetaMask provider
+const computePairIdLocal = (pair: string): string => {
+  const web3 = new Web3();
+  return web3.utils.keccak256(pair);
+};
 
 // Public RPC endpoints with fallbacks (avoid MetaMask provider overload)
 const RPC_ENDPOINTS = [
@@ -86,7 +92,7 @@ const OracleStatus = () => {
       const statuses: OracleFeedStatus[] = await Promise.all(
         pairs.map(async (pair) => {
           try {
-            const pairId = computePairId(pair);
+            const pairId = computePairIdLocal(pair);
             if (!pairId) {
               return {
                 pair,

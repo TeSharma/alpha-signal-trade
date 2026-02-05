@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
 import Web3 from 'web3';
 import { useToast } from '@/hooks/use-toast';
-import { CONTRACT_ADDRESSES, FEE_CONFIG } from '@/config/contracts';
+import { CONTRACT_ADDRESSES, FEE_CONFIG, REQUIRED_CHAIN_ID_HEX } from '@/config/contracts';
 
 // Public RPC endpoints with fallbacks (avoids MetaMask overload)
 const RPC_ENDPOINTS = [
@@ -241,22 +241,28 @@ export const PAIR_IDS: Record<string, string> = {
   'NZD/USD': '',
 };
 
-// Helper to compute pair ID
+// Helper to compute pair ID (no provider needed for keccak256)
 export const computePairId = (pair: string): string => {
-  if (typeof window !== 'undefined' && window.ethereum) {
-    const web3 = new Web3(window.ethereum);
-    return web3.utils.keccak256(pair);
-  }
-  return '';
+  const web3 = new Web3();
+  return web3.utils.keccak256(pair);
 };
 
-// Initialize pair IDs
+// Initialize pair IDs (no provider needed)
 const initPairIds = () => {
-  if (typeof window !== 'undefined' && window.ethereum) {
-    const web3 = new Web3(window.ethereum);
-    Object.keys(PAIR_IDS).forEach((pair) => {
-      PAIR_IDS[pair] = web3.utils.keccak256(pair);
-    });
+  const web3 = new Web3();
+  Object.keys(PAIR_IDS).forEach((pair) => {
+    PAIR_IDS[pair] = web3.utils.keccak256(pair);
+  });
+};
+
+// Enforce correct chain before write operations
+const enforceNetwork = async (): Promise<boolean> => {
+  if (!window.ethereum) return false;
+  try {
+    const chainId: string = await window.ethereum.request({ method: 'eth_chainId' });
+    return chainId === REQUIRED_CHAIN_ID_HEX;
+  } catch {
+    return false;
   }
 };
 
@@ -606,6 +612,12 @@ export const useOnChainTradingV2 = () => {
   const openPosition = async (params: OpenPositionV2Params): Promise<string | null> => {
     setIsLoading(true);
     try {
+      // Network enforcement - last line of defense
+      if (!(await enforceNetwork())) {
+        toast({ title: 'Wrong Network', description: 'Please switch to Polygon Amoy to trade.', variant: 'destructive' });
+        return null;
+      }
+
       // Run preflight check first
       toast({
         title: 'Checking Oracle',
@@ -693,6 +705,12 @@ export const useOnChainTradingV2 = () => {
   const closePosition = async (positionId: number): Promise<string | null> => {
     setIsLoading(true);
     try {
+      // Network enforcement - last line of defense
+      if (!(await enforceNetwork())) {
+        toast({ title: 'Wrong Network', description: 'Please switch to Polygon Amoy to close positions.', variant: 'destructive' });
+        return null;
+      }
+
       const { web3, account } = await getWeb3AndAccount();
       const contract = getTradingContract(web3);
 
@@ -729,6 +747,12 @@ export const useOnChainTradingV2 = () => {
   const liquidatePosition = async (positionId: number): Promise<string | null> => {
     setIsLoading(true);
     try {
+      // Network enforcement
+      if (!(await enforceNetwork())) {
+        toast({ title: 'Wrong Network', description: 'Please switch to Polygon Amoy.', variant: 'destructive' });
+        return null;
+      }
+
       const { web3, account } = await getWeb3AndAccount();
       const contract = getTradingContract(web3);
 

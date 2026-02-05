@@ -19,6 +19,7 @@ import ForgotPassword from "./pages/ForgotPassword";
 import UpdatePassword from "./pages/UpdatePassword";
 import VerifyEmail from "./pages/VerifyEmail";
 import NotFound from "./pages/NotFound";
+import NetworkGuard from "./components/layout/NetworkGuard";
 
 const queryClient = new QueryClient();
 
@@ -29,6 +30,7 @@ const App = () => (
         <Toaster />
         <Sonner />
         <BrowserRouter>
+        <NetworkGuard />
         <Routes>
           <Route path="/" element={<Index />} />
           <Route path="/login" element={<Login />} />
