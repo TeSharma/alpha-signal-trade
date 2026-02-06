@@ -119,7 +119,7 @@ const WalletStatus = () => {
           <div className="flex justify-between items-center">
             <span className="text-sm text-muted-foreground">Balance:</span>
             <div className="flex items-center gap-2">
-              <span className="text-sm font-medium">{balance} ETH</span>
+              <span className="text-sm font-medium">{balance} {chainId === 80002 || chainId === 137 ? 'MATIC' : 'ETH'}</span>
               <Button 
                 variant="ghost" 
                 size="sm" 
