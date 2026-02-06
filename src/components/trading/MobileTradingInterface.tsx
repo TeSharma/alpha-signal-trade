@@ -13,7 +13,8 @@ import { useTrades } from '@/hooks/useTrades';
 import { useMarketData } from '@/hooks/useMarketData';
 import { useOnChainTradingV2 } from '@/hooks/useOnChainTradingV2';
 import { useToast } from '@/hooks/use-toast';
-import { CHAIN_IDS, getMinimums, isMainnet, FEE_CONFIG, calculateOpenFee } from '@/config/contracts';
+import { useNetworkEnforcement } from '@/hooks/useNetworkEnforcement';
+import { getMinimums, isMainnet, FEE_CONFIG, calculateOpenFee } from '@/config/contracts';
 
 interface MobileTradingInterfaceProps {
   accountMode: 'demo' | 'live';
@@ -29,43 +30,38 @@ const MobileTradingInterface = ({ accountMode }: MobileTradingInterfaceProps) =>
   const [showChart, setShowChart] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [collateralBalance, setCollateralBalance] = useState('0');
-  const [currentChainId, setCurrentChainId] = useState<number>(CHAIN_IDS.amoy);
+  const [maticBalance, setMaticBalance] = useState('0');
 
   const { createTrade, accountBalance } = useTrades();
-  const { prices, getCurrentPrice, getBidPrice, getAskPrice } = useMarketData();
-  const { openPosition: openOnChainPositionV2, isLoading: onChainLoading, approvalPending, getCollateralBalance, getPlatformConfig } = useOnChainTradingV2();
+  const { prices, getCurrentPrice, getBidPrice, getAskPrice, oracleAvailable } = useMarketData();
+  const { openPosition: openOnChainPositionV2, isLoading: onChainLoading, approvalPending, getCollateralBalance, getMaticBalance, getPlatformConfig } = useOnChainTradingV2();
   const { toast } = useToast();
+  const { isCorrectNetwork, currentChainId, switchToAmoy } = useNetworkEnforcement();
   
   // Get minimums based on current network
-  const networkMinimums = getMinimums(currentChainId);
+  const networkMinimums = getMinimums(currentChainId ?? undefined);
   const minMargin = networkMinimums.minMargin;
   const [maxLeverage, setMaxLeverage] = useState(50);
 
-  // Fetch collateral balance, platform config, and chain ID for live mode
+  // Fetch collateral balance, MATIC balance, and platform config for live mode
   useEffect(() => {
     if (accountMode === 'live') {
       getCollateralBalance().then(setCollateralBalance);
+      getMaticBalance().then(setMaticBalance);
       getPlatformConfig().then(config => {
         if (config) setMaxLeverage(config.maxLeverage);
       });
-      
-      // Get current chain ID
-      if (window.ethereum) {
-        window.ethereum.request({ method: 'eth_chainId' })
-          .then((chainId: string) => setCurrentChainId(parseInt(chainId, 16)))
-          .catch(console.error);
-        
-        window.ethereum.on('chainChanged', (chainId: string) => {
-          setCurrentChainId(parseInt(chainId, 16));
-        });
-      }
     }
-  }, [accountMode, getCollateralBalance, getPlatformConfig]);
+  }, [accountMode, getCollateralBalance, getMaticBalance, getPlatformConfig]);
 
   const selectedPairData = prices.find(p => p.pair === selectedPair);
   const currentPrice = getCurrentPrice(selectedPair);
   const bidPrice = getBidPrice(selectedPair);
   const askPrice = getAskPrice(selectedPair);
+
+  // Oracle health: in live mode, require oracle price for selected pair
+  const oracleHealthy = accountMode === 'demo' || selectedPairData?.isOraclePrice === true;
+  const maticLow = accountMode === 'live' && parseFloat(maticBalance) < 0.001;
 
   const handleSubmitTrade = async () => {
     if (isSubmitting) return;
@@ -84,7 +80,7 @@ const MobileTradingInterface = ({ accountMode }: MobileTradingInterfaceProps) =>
       }
 
       // Mainnet minimum margin validation
-      if (accountMode === 'live' && isMainnet(currentChainId) && marginAmount < minMargin) {
+      if (accountMode === 'live' && isMainnet(currentChainId ?? undefined) && marginAmount < minMargin) {
         toast({
           title: 'Minimum Margin Required',
           description: `Mainnet requires a minimum margin of ${minMargin} tUSD`,
@@ -95,6 +91,24 @@ const MobileTradingInterface = ({ accountMode }: MobileTradingInterfaceProps) =>
 
       // Pre-trade validation for live mode
       if (accountMode === 'live') {
+        if (!isCorrectNetwork) {
+          toast({
+            title: 'Wrong Network',
+            description: 'Please switch to Polygon Amoy testnet to trade.',
+            variant: 'destructive'
+          });
+          return;
+        }
+
+        if (!oracleHealthy) {
+          toast({
+            title: 'Oracle Unavailable',
+            description: `Price feed for ${selectedPair} is offline or stale. Live trading requires fresh oracle data.`,
+            variant: 'destructive'
+          });
+          return;
+        }
+
         const balance = parseFloat(collateralBalance);
         const requiredMargin = parseFloat(lotSize);
         
@@ -102,6 +116,15 @@ const MobileTradingInterface = ({ accountMode }: MobileTradingInterfaceProps) =>
           toast({
             title: 'Insufficient tUSD Balance',
             description: `You need ${requiredMargin} tUSD but only have ${balance.toFixed(2)} tUSD.`,
+            variant: 'destructive'
+          });
+          return;
+        }
+
+        if (maticLow) {
+          toast({
+            title: 'Insufficient MATIC for Gas',
+            description: 'You need MATIC to pay gas fees. Get free MATIC from faucet.polygon.technology',
             variant: 'destructive'
           });
           return;
@@ -391,13 +414,37 @@ const MobileTradingInterface = ({ accountMode }: MobileTradingInterfaceProps) =>
         </CollapsibleCard>
       )}
 
+      {/* Live Mode Warnings */}
+      {accountMode === 'live' && !isCorrectNetwork && (
+        <div className="flex items-center gap-2 text-sm text-amber-600 bg-amber-50 dark:bg-amber-950/30 p-3 rounded-lg">
+          <AlertTriangle className="h-4 w-4 shrink-0" />
+          <span>Switch to Polygon Amoy to trade</span>
+          <Button variant="outline" size="sm" className="ml-auto" onClick={switchToAmoy}>Switch</Button>
+        </div>
+      )}
+
+      {accountMode === 'live' && isCorrectNetwork && !oracleHealthy && (
+        <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 dark:bg-red-950/30 p-3 rounded-lg">
+          <AlertTriangle className="h-4 w-4 shrink-0" />
+          <span>Oracle offline for {selectedPair} — trading paused</span>
+        </div>
+      )}
+
+      {accountMode === 'live' && isCorrectNetwork && maticLow && (
+        <div className="flex items-center gap-2 text-sm text-amber-600 bg-amber-50 dark:bg-amber-950/30 p-3 rounded-lg">
+          <AlertTriangle className="h-4 w-4 shrink-0" />
+          <span>Low MATIC for gas fees</span>
+          <a href="https://faucet.polygon.technology/" target="_blank" rel="noopener noreferrer" className="ml-auto text-xs underline">Get MATIC</a>
+        </div>
+      )}
+
       {/* Sticky Submit Button */}
       <div className="fixed bottom-4 left-4 right-4 lg:hidden">
         <Button 
           className="w-full h-12 text-lg font-semibold" 
           size="lg"
           onClick={handleSubmitTrade}
-          disabled={isSubmitting || onChainLoading || approvalPending}
+          disabled={isSubmitting || onChainLoading || approvalPending || (accountMode === 'live' && (!isCorrectNetwork || !oracleHealthy))}
         >
           {approvalPending ? (
             <span className="flex items-center">

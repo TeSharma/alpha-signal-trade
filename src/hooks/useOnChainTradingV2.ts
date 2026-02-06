@@ -537,6 +537,18 @@ export const useOnChainTradingV2 = () => {
     }
   };
 
+  // Get native MATIC balance for gas
+  const getMaticBalance = async (): Promise<string> => {
+    try {
+      const { web3, account } = await getWeb3AndAccount();
+      const balance = await web3.eth.getBalance(account);
+      return web3.utils.fromWei(balance, 'ether');
+    } catch (error) {
+      console.error('Error fetching MATIC balance:', error);
+      return '0';
+    }
+  };
+
   // Get platform configuration including fees
   const getPlatformConfig = async (): Promise<PlatformConfig | null> => {
     try {
@@ -935,6 +947,7 @@ export const useOnChainTradingV2 = () => {
     getAllUserPositions,
     getPosition,
     getCollateralBalance,
+    getMaticBalance,
     getPlatformConfig,
     getFeeConfig,
     calculateOpenFee,

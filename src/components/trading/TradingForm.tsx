@@ -40,21 +40,23 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
   
   const { createTrade, accountBalance } = useTrades()
   const { prices, getCurrentPrice, getBidPrice, getAskPrice, oracleAvailable } = useMarketData()
-  const { openPosition: openOnChainPositionV2, isLoading: onChainLoading, approvalPending, getCollateralBalance, getPlatformConfig } = useOnChainTradingV2()
+  const { openPosition: openOnChainPositionV2, isLoading: onChainLoading, approvalPending, getCollateralBalance, getMaticBalance, getPlatformConfig } = useOnChainTradingV2()
   const { toast } = useToast()
   const { isCorrectNetwork, currentChainId, switchToAmoy } = useNetworkEnforcement()
   const [collateralBalance, setCollateralBalance] = useState('0')
+  const [maticBalance, setMaticBalance] = useState('0')
   const [maxLeverage, setMaxLeverage] = useState(50)
 
-  // Fetch collateral balance and platform config for live mode
+  // Fetch collateral balance, MATIC balance, and platform config for live mode
   useEffect(() => {
     if (accountMode === 'live') {
       getCollateralBalance().then(setCollateralBalance);
+      getMaticBalance().then(setMaticBalance);
       getPlatformConfig().then(config => {
         if (config) setMaxLeverage(config.maxLeverage);
       });
     }
-  }, [accountMode, getCollateralBalance, getPlatformConfig]);
+  }, [accountMode, getCollateralBalance, getMaticBalance, getPlatformConfig]);
 
   // Get minimums based on current network
   const networkMinimums = getMinimums(currentChainId);
@@ -64,6 +66,10 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
   const currentPrice = getCurrentPrice(selectedPair)
   const bidPrice = getBidPrice(selectedPair)
   const askPrice = getAskPrice(selectedPair)
+
+  // Oracle health: in live mode, require oracle price for selected pair
+  const oracleHealthy = accountMode === 'demo' || selectedPairData?.isOraclePrice === true
+  const maticLow = accountMode === 'live' && parseFloat(maticBalance) < 0.001
 
   const handleSubmitTrade = async () => {
     if (isSubmitting) return
@@ -123,6 +129,26 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
           toast({
             title: 'Wrong Network',
             description: 'Please switch to Polygon Amoy testnet to trade.',
+            variant: 'destructive'
+          })
+          return
+        }
+
+        // Oracle freshness check
+        if (!oracleHealthy) {
+          toast({
+            title: 'Oracle Unavailable',
+            description: `Price feed for ${selectedPair} is offline or stale. Live trading requires fresh oracle data.`,
+            variant: 'destructive'
+          })
+          return
+        }
+
+        // MATIC gas check
+        if (maticLow) {
+          toast({
+            title: 'Insufficient MATIC for Gas',
+            description: 'You need MATIC to pay gas fees. Get free MATIC from faucet.polygon.technology',
             variant: 'destructive'
           })
           return
@@ -538,11 +564,26 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
           </div>
         )}
 
+        {accountMode === 'live' && isCorrectNetwork && !oracleHealthy && (
+          <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 dark:bg-red-950/30 p-3 rounded-lg">
+            <AlertTriangle className="h-4 w-4 shrink-0" />
+            <span>Oracle offline for {selectedPair} — trading paused</span>
+          </div>
+        )}
+
+        {accountMode === 'live' && maticLow && (
+          <div className="flex items-center gap-2 text-sm text-amber-600 bg-amber-50 dark:bg-amber-950/30 p-3 rounded-lg">
+            <AlertTriangle className="h-4 w-4 shrink-0" />
+            <span>Low MATIC for gas fees</span>
+            <a href="https://faucet.polygon.technology/" target="_blank" rel="noopener noreferrer" className="ml-auto text-xs underline">Get MATIC</a>
+          </div>
+        )}
+
         <Button 
           className="w-full" 
           size="lg"
           onClick={handleSubmitTrade}
-          disabled={isLoadingSignal || isSubmitting || onChainLoading || approvalPending || (accountMode === 'live' && !isCorrectNetwork)}
+          disabled={isLoadingSignal || isSubmitting || onChainLoading || approvalPending || (accountMode === 'live' && (!isCorrectNetwork || !oracleHealthy))}
         >
           {approvalPending ? (
             <span className="flex items-center">
