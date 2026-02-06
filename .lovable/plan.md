@@ -1,135 +1,191 @@
 
 
-## Network Enforcement for Polygon Amoy (chainId: 80002)
+## Audit: Trading and Funding Rules vs. Current Implementation
 
-### Overview
-
-All smart contracts are deployed on Polygon Amoy (80002), but the UI currently allows interactions on any chain. This causes JSON-RPC errors, failed approvals, and inconsistent wallet behavior. The fix introduces a centralized network enforcement layer with three levels of protection: a global banner, a shared hook, and per-component button guards.
+This plan identifies the gaps between your non-negotiable rules and the current codebase, then details exactly what needs to change.
 
 ---
 
-### What Already Works (No Changes Needed)
+### Rule-by-Rule Assessment
 
-- `TradingForm.tsx` and `TUSDFaucet.tsx` already check `chainId` at submission time (inline checks)
-- `useWallet.ts` uses `eth_chainId` instead of the broken `net_version`
-- `contracts.ts` already defines `CHAIN_IDS.amoy = 80002`
+#### Rule 1: Network Enforcement (Polygon Amoy Only)
+**Status: Mostly Implemented -- 2 gaps remain**
 
-### What's Missing (Root Cause of Current Issues)
+What works:
+- Global `NetworkGuard` banner in `App.tsx` warns when on wrong chain
+- `useNetworkEnforcement` hook provides `isCorrectNetwork` and `switchToAmoy()`
+- `TradingForm.tsx` disables the submit button when `!isCorrectNetwork` (live mode)
+- `TUSDFaucet.tsx` blocks claim when wrong network
+- `V2PositionsPanel.tsx` disables Close button when wrong network
+- `useOnChainTradingV2.ts` has `enforceNetwork()` check in `openPosition`, `closePosition`, and `liquidatePosition`
 
-- No shared hook for network state -- each component re-implements detection
-- No global warning banner when on the wrong network
-- Transaction buttons remain **clickable** on wrong networks (check only runs on submit)
-- `V2PositionsPanel` has zero network validation before closing positions
-- `useOnChainTradingV2` has no chainId guard before any write call
-- `OracleStatus` still touches MetaMask provider for `keccak256` hashing unnecessarily
-- `WalletStatus` doesn't recognize Amoy or offer a "Switch Network" button
-- `MobileHeader` has no wrong-network visual indicator
+Gaps:
+- **MobileTradingInterface.tsx** has NO network enforcement at all -- the submit button is never disabled for wrong network, no inline warning, and no `useNetworkEnforcement` import. It manages its own `currentChainId` state separately instead of using the shared hook.
+- **WalletStatus.tsx** shows "ETH" as the native balance label instead of "MATIC" when on Amoy.
+
+#### Rule 2: Token Roles (MATIC = gas, tUSD = money)
+**Status: Correctly implemented in trading logic, minor labeling issue**
+
+What works:
+- All trading contracts use tUSD (TokenizedCurrency) as margin/collateral
+- Approval flow is tUSD-only
+- Balance checks reference tUSD for trade sizing
+
+Gap:
+- **WalletStatus.tsx** line 122 shows `{balance} ETH` -- should show `MATIC` when on Polygon Amoy to avoid user confusion about which token is gas.
+
+#### Rule 3: Trading Preconditions
+**Status: Partially implemented -- oracle freshness not checked before enabling the button**
+
+What works:
+- Wallet connection check exists in `TradingForm` and `MobileTradingInterface`
+- Network check exists in `TradingForm` (missing in mobile)
+- tUSD balance is checked before submission
+- MATIC balance is not explicitly checked, but gas estimation will fail if zero
+
+Gaps:
+- **No MATIC balance pre-check**: Neither form checks if the user has MATIC > 0 for gas before attempting a trade. The trade will fail at MetaMask with a confusing "insufficient funds for gas" error. A clear pre-check with actionable guidance ("Get free MATIC from Polygon Faucet") would be better.
+- **Oracle freshness is not gating the button**: The preflight check runs AFTER the user clicks "Place Trade." If the oracle is offline or stale, the user gets an error toast only after clicking. The oracle status should disable the button proactively.
+- **MobileTradingInterface** is missing all of these checks entirely in its submit button `disabled` logic.
+
+#### Rule 4: Oracle Requirement
+**Status: Backend enforcement exists, UI enforcement is reactive only**
+
+What works:
+- `preflightCheck()` in `useOnChainTradingV2.ts` validates oracle feed presence and staleness before `openPosition`
+- `OracleStatus.tsx` monitors feeds with green/yellow/red indicators
+- The trading contract itself will revert on stale prices
+
+Gaps:
+- The **TradingForm submit button is not disabled** when oracle is offline/stale -- it only shows an error after the user clicks
+- `MobileTradingInterface` has no oracle gating at all
+- `useMarketData` exposes `oracleAvailable` but this is not used to gate trading actions
+
+#### Rule 5: Cross-Chain Funding (Tron as Bridge Only)
+**Status: Correctly architected -- Tron never touches trading contracts**
+
+What works:
+- `TronWalletConnect` only shows USDT/TRX balances (no trading actions)
+- `DepositInterface` accepts USDT deposits from Tron, stores them in Supabase as pending
+- `WithdrawalInterface` handles withdrawals to Tron or Polygon
+- Trading contracts are only on Polygon Amoy
+- Tron wallet has zero integration with `useOnChainTradingV2`
+
+Gap:
+- The deposit/withdrawal flow references "USDT" but doesn't explicitly mention the tUSD mint/burn concept to the user. This is a UX clarity issue, not a security issue. The actual bridge logic (USDT to tUSD conversion) would need a backend service that isn't built yet.
+
+#### Rule 6: UI Enforcement
+**Status: Partially implemented -- oracle status not gating buttons**
+
+What works:
+- Wrong network: buttons disabled + banner shown + switch button
+- TradingForm shows inline "Switch to Polygon Amoy to trade" warning
+
+Gaps:
+- Oracle offline/stale does NOT disable buttons (only caught after click)
+- MobileTradingInterface has no network or oracle warnings/guards
+- No banner for "Oracle offline -- trading paused"
+
+#### Rule 7: Last-Line Defense
+**Status: Fully implemented**
+
+- `enforceNetwork()` checks `eth_chainId === 0x13882` before `openPosition`, `closePosition`, and `liquidatePosition`
+- Returns null and shows toast on wrong network
+- This is the final safety net and it's solid
 
 ---
 
 ### Implementation Plan
 
-#### Step 1: Add Amoy Network Config to `src/config/contracts.ts`
+#### 1. Add Network + Oracle Enforcement to MobileTradingInterface
 
-Add two new exports:
-- `REQUIRED_CHAIN_ID = 80002`
-- `AMOY_NETWORK_PARAMS` object with RPC URL, chain name, block explorer, and native currency for MetaMask's `wallet_addEthereumChain`
+This is the biggest gap. `MobileTradingInterface.tsx` currently has:
+- No `useNetworkEnforcement` import
+- Its own manual `currentChainId` state management
+- No disabled state on the submit button for wrong network
+- No oracle status gating
 
-This centralizes the network definition so no component has to hardcode `0x13882`.
+Changes:
+- Import and use `useNetworkEnforcement` hook (replace the manual `currentChainId` state)
+- Import `useMarketData`'s `oracleAvailable` status
+- Disable the sticky submit button when `!isCorrectNetwork` (live mode)
+- Disable the sticky submit button when oracle is offline (live mode)
+- Show inline warning when on wrong network: "Switch to Polygon Amoy to trade"
+- Show inline warning when oracle offline: "Oracle offline -- trading paused"
+- Add a "Switch Network" button in the warning area
 
-#### Step 2: Create `src/hooks/useNetworkEnforcement.ts`
+#### 2. Add Oracle-Gated Trading to TradingForm
 
-A shared React hook that:
-- Reads `eth_chainId` from `window.ethereum` on mount
-- Listens to the `chainChanged` event for real-time updates
-- Exports:
-  - `isCorrectNetwork: boolean` (true only when chainId is 80002)
-  - `currentChainId: number | null`
-  - `networkName: string` (human-readable name for the connected chain)
-  - `switchToAmoy()` function that calls `wallet_switchEthereumChain`, with a fallback to `wallet_addEthereumChain` if Amoy isn't in the wallet yet
-  - `isWalletConnected: boolean` (whether any account is connected)
+The desktop `TradingForm` already gates on network but not oracle status.
 
-This eliminates all the duplicated `window.ethereum.request({ method: 'eth_chainId' })` calls scattered across components.
+Changes:
+- Use the `oracleAvailable` flag from `useMarketData` (already imported)
+- Add an `oracleHealthy` check that considers if the selected pair has a fresh oracle price
+- Disable the submit button in live mode when oracle is unavailable for the selected pair
+- Show inline warning: "Oracle price unavailable for [PAIR] -- trading paused"
+- Keep the existing preflight check as a second layer of defense
 
-#### Step 3: Create `src/components/layout/NetworkGuard.tsx`
+#### 3. Add MATIC Gas Balance Check
 
-A global component that renders a warning banner **only** when:
-- A wallet is installed AND connected
-- The connected chain is NOT Amoy (80002)
+Neither trading form checks if the user has MATIC for gas fees.
 
-The banner will:
-- Display: "You are connected to [Network Name]. Please switch to Polygon Amoy to use this dApp."
-- Show a "Switch to Polygon Amoy" button that triggers `switchToAmoy()`
-- Use amber/yellow styling to be visible but not block the entire page
-- Automatically hide once the user switches to the correct network
+Changes in `useOnChainTradingV2.ts`:
+- Add a `getMaticBalance` function that reads the native balance via `web3.eth.getBalance(account)`
+- Export it alongside `getCollateralBalance`
 
-#### Step 4: Wire NetworkGuard into `src/App.tsx`
+Changes in `TradingForm.tsx` and `MobileTradingInterface.tsx`:
+- Fetch MATIC balance alongside tUSD balance in the `useEffect`
+- Before submission: if MATIC balance is 0 or very low (< 0.001), show a specific error: "You need MATIC for gas fees. Get free MATIC from the Polygon Faucet" with a link
+- Show a warning badge in the trade summary when MATIC is low
 
-Add `<NetworkGuard />` inside the `BrowserRouter`, above `<Routes>`, so it appears on every page when triggered.
+#### 4. Fix WalletStatus Native Token Label
 
-#### Step 5: Guard Transaction Buttons (Per-Component)
+Change `{balance} ETH` to show the correct native token based on network:
+- On Polygon Amoy (80002): show `MATIC`
+- On Ethereum (1): show `ETH`
+- Default: show the native token name for the connected chain
 
-Each component that triggers a blockchain write will import `useNetworkEnforcement` and:
+#### 5. Add Oracle Health Banner (Optional Enhancement)
 
-**`TradingForm.tsx`**
-- Disable the "Place Trade" button when `!isCorrectNetwork`
-- Show inline text: "Switch to Polygon Amoy to trade"
-- Remove the existing inline `chainId` check (lines 132-145) since the hook handles it
-
-**`TUSDFaucet.tsx`**
-- Disable the "Claim" button when `!isCorrectNetwork`
-- Show inline text: "Switch to Polygon Amoy to claim"
-- Remove the inline `chainId` check (lines 138-146)
-
-**`V2PositionsPanel.tsx`**
-- Disable the "Close Position" button when `!isCorrectNetwork`
-- This component currently has NO network check at all
-
-**`WalletStatus.tsx`**
-- Add Amoy (80002) to the `getNetworkName` mapping
-- Show a "Wrong Network" warning badge when connected but not on Amoy
-- Add a "Switch to Amoy" button using `switchToAmoy()`
-
-**`MobileHeader.tsx`**
-- Show a small red dot and "Wrong Network" label next to the wallet icon when not on Amoy
-
-#### Step 6: Last Line of Defense in `useOnChainTradingV2.ts`
-
-Add a `chainId` check at the top of both `openPosition` and `closePosition`:
-- Read `eth_chainId` from `window.ethereum`
-- If it's not `0x13882`, show a toast ("Please switch to Polygon Amoy") and return `null`
-- This catches any edge case where the UI guard was bypassed
-
-#### Step 7: Fix `OracleStatus.tsx` `computePairId` Issue
-
-The `computePairId` function in `useOnChainTradingV2.ts` and `OracleStatus.tsx` creates `new Web3(window.ethereum)` just to call `keccak256`. This unnecessarily touches the MetaMask provider. Change it to use `new Web3()` (no provider needed for utility functions) or the public RPC instance.
+Add oracle health awareness to the `NetworkGuard` component or create a sibling `OracleGuard` component:
+- When oracle status is "unavailable" and user is on a trading page, show an amber banner: "Price oracle is offline. Live trading is temporarily paused."
+- This complements the per-component button disabling
 
 ---
 
-### Files Summary
+### Files to Modify
 
-| File | Action | What Changes |
-|------|--------|-------------|
-| `src/config/contracts.ts` | Edit | Add `REQUIRED_CHAIN_ID` and `AMOY_NETWORK_PARAMS` |
-| `src/hooks/useNetworkEnforcement.ts` | Create | Shared hook for chainId detection, switch function |
-| `src/components/layout/NetworkGuard.tsx` | Create | Global wrong-network warning banner |
-| `src/App.tsx` | Edit | Add `<NetworkGuard />` inside router |
-| `src/components/trading/TradingForm.tsx` | Edit | Disable button + remove inline check |
-| `src/components/wallet/TUSDFaucet.tsx` | Edit | Disable button + remove inline check |
-| `src/components/trading/V2PositionsPanel.tsx` | Edit | Disable "Close Position" button |
-| `src/components/wallet/WalletStatus.tsx` | Edit | Add Amoy name, wrong-network badge, switch button |
-| `src/components/layout/MobileHeader.tsx` | Edit | Add wrong-network indicator |
-| `src/hooks/useOnChainTradingV2.ts` | Edit | Add chainId guard in write functions, fix computePairId |
-| `src/components/trading/OracleStatus.tsx` | Edit | Fix computePairId to not use MetaMask provider |
+| File | Changes |
+|------|---------|
+| `src/components/trading/MobileTradingInterface.tsx` | Add `useNetworkEnforcement`, oracle gating, MATIC check, disable submit button, inline warnings |
+| `src/components/trading/TradingForm.tsx` | Add oracle-gated button disable, MATIC balance check and warning |
+| `src/hooks/useOnChainTradingV2.ts` | Add `getMaticBalance()` function |
+| `src/components/wallet/WalletStatus.tsx` | Change "ETH" label to "MATIC" on Polygon networks |
+
+### Files Already Correct (No Changes Needed)
+
+| File | Status |
+|------|--------|
+| `src/config/contracts.ts` | REQUIRED_CHAIN_ID, AMOY_NETWORK_PARAMS correct |
+| `src/hooks/useNetworkEnforcement.ts` | Hook fully functional |
+| `src/components/layout/NetworkGuard.tsx` | Global banner working |
+| `src/App.tsx` | NetworkGuard wired in |
+| `src/components/wallet/TUSDFaucet.tsx` | Network gated correctly |
+| `src/components/trading/V2PositionsPanel.tsx` | Close button gated correctly |
+| `src/components/trading/OracleStatus.tsx` | Uses provider-less Web3, public RPC |
+| `src/components/wallet/TronWalletConnect.tsx` | Bridge-only, no trading contact |
+| `src/components/wallet/DepositInterface.tsx` | Tron deposit flow correct |
+| `src/components/wallet/WithdrawalInterface.tsx` | Withdrawal flow correct |
+| `src/hooks/useMarketData.ts` | Public RPC reads, oracle fallback correct |
 
 ---
 
-### Expected Results After Implementation
+### Summary of Gaps Being Fixed
 
-- No more JSON-RPC / net_version errors from wrong-chain interactions
-- All transaction buttons (trade, approve, faucet, close position) are disabled when on wrong network
-- A persistent banner tells users exactly what to do and offers one-click switching
-- MetaMask will prompt to add Polygon Amoy if it's not configured
-- UI re-enables automatically once the user switches to the correct chain
-- No accidental Ethereum Mainnet contract interactions
+1. **MobileTradingInterface** -- the biggest hole: no network guard, no oracle guard, no MATIC check
+2. **Oracle not gating buttons** -- users can click "Place Trade" when oracle is offline (desktop and mobile)
+3. **No MATIC gas pre-check** -- users get confusing MetaMask errors instead of a clear "get MATIC" message
+4. **WalletStatus shows "ETH"** instead of "MATIC" on Polygon networks
+
+After these changes, every rule in your specification will be enforced at the UI layer, with the existing `enforceNetwork()` in `useOnChainTradingV2.ts` serving as the last-line defense.
 
