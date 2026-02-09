@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { TrendingUp, TrendingDown, Clock, Star, Check, X } from "lucide-react";
+import { TrendingUp, TrendingDown, Clock, Star, Check, X, Brain } from "lucide-react";
 import Sidebar from "@/components/layout/Sidebar";
 import TopBar from "@/components/layout/TopBar";
 import MobileHeader from "@/components/layout/MobileHeader";
@@ -70,8 +70,16 @@ const DesktopSignals = ({ mockSignals }: any) => (
   <main className="flex-1 p-6">
     <div className="max-w-7xl mx-auto space-y-6">
       <div>
-        <h1 className="text-3xl font-bold text-gray-900">Trading Signals</h1>
-        <p className="text-gray-600">AI-powered trading signals from top traders</p>
+        <h1 className="text-3xl font-bold text-gray-900">AI Forex Signals</h1>
+        <p className="text-gray-600">AI-powered forex signals — no oracle or on-chain execution required</p>
+        <div className="mt-2 flex items-center gap-2">
+          <Badge variant="outline" className="flex items-center gap-1">
+            <Brain className="h-3 w-3" />
+            AI Layer
+          </Badge>
+          <Badge variant="secondary">EUR/USD • GBP/USD • USD/JPY</Badge>
+          <span className="text-xs text-muted-foreground">On-chain forex trading coming in v2</span>
+        </div>
       </div>
 
       <div className="grid gap-4">
@@ -139,6 +147,13 @@ const DesktopSignals = ({ mockSignals }: any) => (
 
 const MobileSignals = ({ mockSignals, accountMode }: any) => (
   <main className="p-4 space-y-4">
+    <div className="flex items-center gap-2 mb-2">
+      <Badge variant="outline" className="flex items-center gap-1">
+        <Brain className="h-3 w-3" />
+        AI Forex Signals
+      </Badge>
+      <span className="text-xs text-muted-foreground">On-chain forex in v2</span>
+    </div>
     {/* Signal Tabs */}
     <Tabs defaultValue="all" className="w-full">
       <TabsList className="grid w-full grid-cols-3">

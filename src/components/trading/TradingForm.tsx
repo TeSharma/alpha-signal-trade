@@ -13,6 +13,7 @@ import { useOnChainTradingV2 } from '@/hooks/useOnChainTradingV2'
 import { useToast } from '@/components/ui/use-toast'
 import { useNetworkEnforcement } from '@/hooks/useNetworkEnforcement'
 import { CONTRACT_ADDRESSES, CHAIN_IDS, getMinimums, isMainnet, FEE_CONFIG, calculateOpenFee } from '@/config/contracts'
+import { V1_TRADING_MARKETS, MARKET_METADATA, formatPrice } from '@/config/markets'
 
 interface TradingFormProps {
   accountMode: 'demo' | 'live';
@@ -26,7 +27,7 @@ interface AISignalResponse {
 }
 
 const TradingForm = ({ accountMode }: TradingFormProps) => {
-  const [selectedPair, setSelectedPair] = useState('EUR/USD')
+  const [selectedPair, setSelectedPair] = useState('BTC/USD')
   const [tradeDirection, setTradeDirection] = useState<'buy' | 'sell'>('buy')
   const [lotSize, setLotSize] = useState('10')
   const [leverage, setLeverage] = useState(5)
@@ -296,25 +297,32 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* Currency Pair Selection */}
+        {/* Market Pair Selection */}
         <div className="space-y-2">
-          <Label>Currency Pair</Label>
-          <div className="grid grid-cols-2 gap-2">
-            {prices.slice(0, 4).map((pair) => (
-              <Button
-                key={pair.pair}
-                variant={selectedPair === pair.pair ? 'default' : 'outline'}
-                className="h-auto p-3 flex flex-col items-start"
-                onClick={() => setSelectedPair(pair.pair)}
-              >
-                <span className="font-semibold">{pair.pair}</span>
-                <span className="text-xs">{pair.price}</span>
-                <span className={`text-xs ${pair.changePercent >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-                  {pair.changePercent >= 0 ? '+' : ''}{pair.changePercent}%
-                </span>
-              </Button>
-            ))}
+          <Label>Market</Label>
+          <div className="grid grid-cols-3 gap-2">
+            {V1_TRADING_MARKETS.map((pairName) => {
+              const pairData = prices.find(p => p.pair === pairName)
+              const meta = MARKET_METADATA[pairName]
+              return (
+                <Button
+                  key={pairName}
+                  variant={selectedPair === pairName ? 'default' : 'outline'}
+                  className="h-auto p-3 flex flex-col items-start"
+                  onClick={() => setSelectedPair(pairName)}
+                >
+                  <span className="font-semibold">{meta?.icon} {meta?.symbol}</span>
+                  <span className="text-xs">{pairData ? formatPrice(pairName, pairData.price) : '—'}</span>
+                  {pairData && (
+                    <span className={`text-xs ${pairData.changePercent >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                      {pairData.changePercent >= 0 ? '+' : ''}{pairData.changePercent}%
+                    </span>
+                  )}
+                </Button>
+              )
+            })}
           </div>
+          <p className="text-xs text-muted-foreground">Forex markets (EUR/USD, GBP/USD, USD/JPY) coming in v2</p>
           
           {/* Current Price Display */}
           {selectedPairData && (
@@ -337,15 +345,15 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
               <div className="grid grid-cols-3 gap-2 text-sm">
                 <div className="text-center">
                   <div className="text-xs text-gray-500">Bid</div>
-                  <div className="font-mono font-semibold text-red-600">{bidPrice.toFixed(5)}</div>
+                  <div className="font-mono font-semibold text-red-600">{formatPrice(selectedPair, bidPrice)}</div>
                 </div>
                 <div className="text-center">
                   <div className="text-xs text-gray-500">Price</div>
-                  <div className="font-mono font-semibold">{currentPrice.toFixed(5)}</div>
+                  <div className="font-mono font-semibold">{formatPrice(selectedPair, currentPrice)}</div>
                 </div>
                 <div className="text-center">
                   <div className="text-xs text-gray-500">Ask</div>
-                  <div className="font-mono font-semibold text-green-600">{askPrice.toFixed(5)}</div>
+                  <div className="font-mono font-semibold text-green-600">{formatPrice(selectedPair, askPrice)}</div>
                 </div>
               </div>
             </div>

@@ -33,7 +33,7 @@ const Trade = () => {
             <div className="max-w-7xl mx-auto space-y-6">
               <div>
                 <h1 className="text-3xl font-bold text-gray-900">Trade</h1>
-                <p className="text-gray-600">Execute trades on synthetic forex pairs</p>
+                <p className="text-gray-600">On-chain crypto trading — BTC, ETH, MATIC powered by Chainlink oracles</p>
               </div>
               <Tabs defaultValue="trading" className="w-full">
                 <TabsList className="grid w-full grid-cols-2">
