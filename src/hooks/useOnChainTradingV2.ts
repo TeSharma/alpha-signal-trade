@@ -230,15 +230,11 @@ const ERC20_ABI = [
   }
 ];
 
-// Pair ID mapping (keccak256 hashes)
+// Pair ID mapping (keccak256 hashes) — v1 crypto markets only
 export const PAIR_IDS: Record<string, string> = {
-  'EUR/USD': '',
-  'GBP/USD': '',
-  'USD/JPY': '',
-  'AUD/USD': '',
-  'USD/CAD': '',
-  'USD/CHF': '',
-  'NZD/USD': '',
+  'BTC/USD': '',
+  'ETH/USD': '',
+  'MATIC/USD': '',
 };
 
 // Helper to compute pair ID (no provider needed for keccak256)

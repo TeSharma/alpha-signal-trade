@@ -2,8 +2,9 @@ import React, { useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { TrendingUp, TrendingDown, BarChart3, Wifi, WifiOff, RefreshCw, Zap } from "lucide-react"
+import { TrendingUp, TrendingDown, BarChart3, Wifi, WifiOff, RefreshCw, Zap, Info } from "lucide-react"
 import { useMarketData } from '@/hooks/useMarketData'
+import { V1_TRADING_MARKETS, MARKET_METADATA, formatPrice } from '@/config/markets'
 
 const MarketOverview = () => {
   const { prices, isConnected, oracleAvailable, updatePrices, isLoading } = useMarketData()
@@ -96,48 +97,60 @@ const MarketOverview = () => {
         </CardHeader>
         <CardContent>
           <div className="space-y-3">
-            {prices.slice(0, 6).map((item) => (
-              <div key={item.pair} className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50 transition-colors cursor-pointer">
-                <div className="flex items-center gap-3">
-                  <div className={`p-2 rounded-full ${
-                    item.changePercent >= 0 ? 'bg-green-100' : 'bg-red-100'
-                  }`}>
-                    {item.changePercent >= 0 ? (
-                      <TrendingUp className="h-4 w-4 text-green-600" />
-                    ) : (
-                      <TrendingDown className="h-4 w-4 text-red-600" />
-                    )}
-                  </div>
-                  <div>
-                    <p className="font-semibold">{item.pair}</p>
-                    <p className="text-sm text-gray-600">Vol: {item.volume}</p>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <div className="flex items-center justify-end gap-1">
-                    <p className="font-semibold">{item.price}</p>
-                    {item.isOraclePrice && (
-                      <span title="Chainlink Oracle">
-                        <Zap className="h-3 w-3 text-yellow-500" />
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Badge variant={item.changePercent >= 0 ? 'default' : 'destructive'}>
-                      {item.changePercent >= 0 ? '+' : ''}{item.changePercent}%
-                    </Badge>
-                    <span className={`text-sm ${
-                      item.changePercent >= 0 ? 'text-green-500' : 'text-red-500'
+            {prices
+              .filter(item => (V1_TRADING_MARKETS as readonly string[]).includes(item.pair))
+              .map((item) => {
+              const meta = MARKET_METADATA[item.pair]
+              return (
+                <div key={item.pair} className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50 transition-colors cursor-pointer">
+                  <div className="flex items-center gap-3">
+                    <div className={`p-2 rounded-full ${
+                      item.changePercent >= 0 ? 'bg-green-100' : 'bg-red-100'
                     }`}>
-                      {item.changePercent >= 0 ? '+' : ''}{item.change}
-                    </span>
+                      {item.changePercent >= 0 ? (
+                        <TrendingUp className="h-4 w-4 text-green-600" />
+                      ) : (
+                        <TrendingDown className="h-4 w-4 text-red-600" />
+                      )}
+                    </div>
+                    <div>
+                      <p className="font-semibold">{meta?.icon} {item.pair}</p>
+                      <p className="text-sm text-gray-600">Vol: {item.volume}</p>
+                    </div>
                   </div>
-                  <div className="text-xs text-gray-500 mt-1">
-                    Spread: {item.spread}
+                  <div className="text-right">
+                    <div className="flex items-center justify-end gap-1">
+                      <p className="font-semibold">{formatPrice(item.pair, item.price)}</p>
+                      {item.isOraclePrice && (
+                        <span title="Chainlink Oracle">
+                          <Zap className="h-3 w-3 text-yellow-500" />
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Badge variant={item.changePercent >= 0 ? 'default' : 'destructive'}>
+                        {item.changePercent >= 0 ? '+' : ''}{item.changePercent}%
+                      </Badge>
+                    </div>
+                    <div className="text-xs text-gray-500 mt-1">
+                      Spread: {item.spread}
+                    </div>
                   </div>
                 </div>
+              )
+            })}
+            {prices.filter(item => (V1_TRADING_MARKETS as readonly string[]).includes(item.pair)).length === 0 && (
+              <div className="text-center py-6 text-muted-foreground">
+                <p>Waiting for oracle data...</p>
+                <p className="text-xs mt-1">Crypto markets will appear once Chainlink feeds are active</p>
               </div>
-            ))}
+            )}
+          </div>
+          
+          {/* Forex v2 Notice */}
+          <div className="mt-4 flex items-center gap-2 text-sm text-muted-foreground bg-muted rounded-lg p-3">
+            <Info className="h-4 w-4 shrink-0" />
+            <span>Forex markets (EUR/USD, GBP/USD, USD/JPY) coming in v2 with dedicated oracle integration</span>
           </div>
         </CardContent>
       </Card>

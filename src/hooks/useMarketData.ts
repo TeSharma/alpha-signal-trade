@@ -33,22 +33,10 @@ const PRICE_ORACLE_V2_ABI = [
   }
 ];
 
-// Supported oracle pairs
-const ORACLE_PAIRS = ['EUR/USD', 'GBP/USD', 'USD/JPY', 'AUD/USD', 'USD/CAD', 'USD/CHF', 'NZD/USD'];
+// v1 crypto markets only — Chainlink-backed, no simulated prices
+import { V1_TRADING_MARKETS } from '@/config/markets';
 
-// Fallback prices when oracle is unavailable
-const FALLBACK_PRICES: Record<string, number> = {
-  'GBP/JPY': 188.25,
-  'EUR/USD': 1.0842,
-  'USD/JPY': 149.75,
-  'GBP/USD': 1.2567,
-  'AUD/USD': 0.6745,
-  'USD/CAD': 1.3412,
-  'EUR/GBP': 0.8632,
-  'CHF/USD': 1.1025,
-  'NZD/USD': 0.6234,
-  'USD/CHF': 0.9068
-};
+const ORACLE_PAIRS = [...V1_TRADING_MARKETS]; // BTC/USD, ETH/USD, MATIC/USD
 
 export interface MarketPrice {
   pair: string;
@@ -129,13 +117,7 @@ export const useMarketData = () => {
     }
   }, [web3, oracleAvailable]);
 
-  // Generate simulated price with volatility
-  const generateSimulatedPrice = (basePrice: number, currentPrice?: number) => {
-    const price = currentPrice || basePrice;
-    const volatility = 0.0005;
-    const change = (Math.random() - 0.5) * 2 * volatility * price;
-    return Math.max(price + change, price * 0.95);
-  };
+  // No simulated prices in v1 — only real oracle data is used
 
   // Create market price object
   const createMarketPrice = (
@@ -168,7 +150,7 @@ export const useMarketData = () => {
     };
   };
 
-  // Update all prices
+  // Update all prices — only from oracle, no fallbacks
   const updatePrices = useCallback(async () => {
     if (!web3) return;
     
@@ -177,29 +159,19 @@ export const useMarketData = () => {
     try {
       const newPrices: Record<string, MarketPrice> = {};
       
-      // Fetch oracle prices for supported pairs
-      const oraclePricePromises = ORACLE_PAIRS.map(async (pair) => {
-        const oracleResult = await fetchOraclePrice(pair);
-        return { pair, oracleResult };
-      });
+      // Fetch oracle prices for v1 crypto pairs only
+      const oracleResults = await Promise.all(
+        ORACLE_PAIRS.map(async (pair) => {
+          const oracleResult = await fetchOraclePrice(pair);
+          return { pair, oracleResult };
+        })
+      );
       
-      const oracleResults = await Promise.all(oraclePricePromises);
-      
-      // Process all pairs
-      Object.keys(FALLBACK_PRICES).forEach((pair) => {
-        const basePrice = FALLBACK_PRICES[pair];
-        const currentPrice = prices[pair]?.price;
-        
-        // Check if we have oracle data for this pair
-        const oracleData = oracleResults.find(r => r.pair === pair);
-        
-        if (oracleData?.oracleResult && oracleData.oracleResult.price > 0) {
-          const oraclePrice = oracleData.oracleResult.price;
-          newPrices[pair] = createMarketPrice(pair, oraclePrice, basePrice, true, oracleData.oracleResult.updatedAt);
-        } else {
-          // Use simulated price
-          const simulatedPrice = generateSimulatedPrice(basePrice, currentPrice);
-          newPrices[pair] = createMarketPrice(pair, simulatedPrice, basePrice, false);
+      // Only add pairs with real oracle data
+      oracleResults.forEach(({ pair, oracleResult }) => {
+        if (oracleResult && oracleResult.price > 0) {
+          const previousPrice = prices[pair]?.price || oracleResult.price;
+          newPrices[pair] = createMarketPrice(pair, oracleResult.price, previousPrice, true, oracleResult.updatedAt);
         }
       });
       
@@ -229,7 +201,7 @@ export const useMarketData = () => {
   };
 
   const getCurrentPrice = (pair: string): number => {
-    return prices[pair]?.price || FALLBACK_PRICES[pair] || 0;
+    return prices[pair]?.price || 0;
   };
 
   const getBidPrice = (pair: string): number => {

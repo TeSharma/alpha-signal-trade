@@ -15,13 +15,14 @@ import { useOnChainTradingV2 } from '@/hooks/useOnChainTradingV2';
 import { useToast } from '@/hooks/use-toast';
 import { useNetworkEnforcement } from '@/hooks/useNetworkEnforcement';
 import { getMinimums, isMainnet, FEE_CONFIG, calculateOpenFee } from '@/config/contracts';
+import { V1_TRADING_MARKETS, MARKET_METADATA, formatPrice } from '@/config/markets';
 
 interface MobileTradingInterfaceProps {
   accountMode: 'demo' | 'live';
 }
 
 const MobileTradingInterface = ({ accountMode }: MobileTradingInterfaceProps) => {
-  const [selectedPair, setSelectedPair] = useState('EUR/USD');
+  const [selectedPair, setSelectedPair] = useState('BTC/USD');
   const [tradeDirection, setTradeDirection] = useState<'buy' | 'sell'>('buy');
   const [lotSize, setLotSize] = useState('10');
   const [leverage, setLeverage] = useState(5);
@@ -220,16 +221,23 @@ const MobileTradingInterface = ({ accountMode }: MobileTradingInterfaceProps) =>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {prices.slice(0, 7).map((pair) => (
-                <SelectItem key={pair.pair} value={pair.pair}>
-                  <div className="flex justify-between w-full">
-                    <span>{pair.pair}</span>
-                    <span className="ml-4 text-sm text-muted-foreground">{pair.price}</span>
-                  </div>
-                </SelectItem>
-              ))}
+              {V1_TRADING_MARKETS.map((pairName) => {
+                const pairData = prices.find(p => p.pair === pairName);
+                const meta = MARKET_METADATA[pairName];
+                return (
+                  <SelectItem key={pairName} value={pairName}>
+                    <div className="flex justify-between w-full">
+                      <span>{meta?.icon} {meta?.symbol}/{pairName.split('/')[1]}</span>
+                      <span className="ml-4 text-sm text-muted-foreground">
+                        {pairData ? formatPrice(pairName, pairData.price) : '—'}
+                      </span>
+                    </div>
+                  </SelectItem>
+                );
+              })}
             </SelectContent>
           </Select>
+          <p className="text-xs text-muted-foreground mt-1">Forex markets coming in v2</p>
           
           {/* Live mode collateral display */}
           {accountMode === 'live' && parseFloat(collateralBalance) > 0 && (
