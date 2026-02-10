@@ -1,70 +1,82 @@
 
 
-## Integrate Dedicated Alchemy RPC Across the Codebase
+## Amoy Oracle Fix: POL/USD Only + Network-Aware Market Config
 
-### What This Does
+### Problem
 
-Replaces all hardcoded public Polygon Amoy RPC URLs with your dedicated Alchemy endpoints. This fixes the `ConnectTimeoutError` (UND_ERR_CONNECT_TIMEOUT) that causes oracle offline, faucet failures, and trade reverts.
+Chainlink on Polygon Amoy only has a reliable POL/USD feed. BTC/USD and ETH/USD feeds do not exist on Amoy. The current code registers all three pairs, causing reverts and oracle-offline errors.
 
-### Your Alchemy URLs
+### Solution
 
-- **Amoy (testnet):** `https://polygon-amoy.g.alchemy.com/v2/Jpq0TNEHUNI4RVlVQyH6P`
-- **Mainnet:** `https://polygon-mainnet.g.alchemy.com/v2/Jpq0TNEHUNI4RVlVQyH6P` (saved for future use)
+Make the market configuration network-aware: on Amoy, only POL/USD is tradable on-chain. BTC/USD and ETH/USD are shown as "Mainnet only" in the UI. On future mainnet deployment, all three pairs activate automatically.
 
 ---
 
 ### Changes
 
-#### 1. Environment Variable (`.env`)
+#### 1. Update `src/config/markets.ts`
 
-Add `VITE_ALCHEMY_AMOY_RPC` so the Alchemy URL is available in the browser bundle.
+- Rename `MATIC/USD` to `POL/USD` everywhere (symbol, icon, metadata key)
+- Add a new `network` field to `MarketMeta`: `'amoy-only' | 'mainnet-only' | 'all'`
+- Mark `BTC/USD` and `ETH/USD` as `network: 'mainnet-only'`
+- Mark `POL/USD` as `network: 'all'`
+- Add helper: `getAmoyTradingMarkets()` returns `['POL/USD']`
+- Add helper: `getMainnetTradingMarkets()` returns `['BTC/USD', 'ETH/USD', 'POL/USD']`
+- Keep `V1_TRADING_MARKETS` as the full list for reference, but add `V1_AMOY_MARKETS` and `V1_MAINNET_MARKETS`
 
-#### 2. Centralized RPC Export (`src/config/contracts.ts`)
+#### 2. Update `src/hooks/useOnChainTradingV2.ts`
 
-Add a single `AMOY_RPC_URL` export that reads from the env var, with the public RPC as fallback:
+- Change `PAIR_IDS` from `{ 'BTC/USD', 'ETH/USD', 'MATIC/USD' }` to `{ 'POL/USD' }` (Amoy-only)
+- Keep `BTC/USD` and `ETH/USD` entries but mark them with comments for mainnet activation
+- The `initPairIds()` function stays the same -- it just hashes fewer pairs
 
-```text
-AMOY_RPC_URL = env var || public fallback
-```
+#### 3. Update `src/hooks/useMarketData.ts`
 
-Also update `AMOY_NETWORK_PARAMS.rpcUrls` to use this value (what MetaMask gets when adding the network).
+- Change `ORACLE_PAIRS` from `[...V1_TRADING_MARKETS]` to `['POL/USD']` (import from markets config)
+- Only POL/USD will be fetched from the oracle; BTC/USD and ETH/USD won't be queried on Amoy
 
-#### 3. Update 5 Files to Import `AMOY_RPC_URL`
+#### 4. Update `src/components/trading/TradingForm.tsx`
 
-| File | Current RPC Source | Change |
-|---|---|---|
-| `src/hooks/useMarketData.ts` | Hardcoded `PUBLIC_RPC` string (line 6) | Import `AMOY_RPC_URL` from contracts config |
-| `src/hooks/useOraclePrice.ts` | Hardcoded `PUBLIC_RPC` string (line 6) | Import `AMOY_RPC_URL` from contracts config |
-| `src/hooks/useOnChainTradingV2.ts` | 3-endpoint `RPC_ENDPOINTS` array (lines 7-11) | Alchemy as primary, keep 2 public fallbacks |
-| `src/components/trading/OracleStatus.tsx` | 3-endpoint `RPC_ENDPOINTS` array (lines 16-20) | Alchemy as primary, keep 2 public fallbacks |
-| `src/utils/web3.ts` | Hardcoded `JsonRpcProvider("https://rpc-amoy...")` (line 10) | Import `AMOY_RPC_URL` from contracts config |
+- Default selected pair: `POL/USD` instead of `BTC/USD`
+- Filter pair selector to only show pairs with active oracle feeds (on Amoy: POL/USD only)
+- Show BTC/USD and ETH/USD in the selector but grayed out with "Mainnet only" badge
+- Keep all existing precondition checks unchanged
 
-#### 4. Fallback Strategy (for files with multi-endpoint arrays)
+#### 5. Update `src/components/trading/MobileTradingInterface.tsx`
 
-`useOnChainTradingV2.ts` and `OracleStatus.tsx` keep their retry logic but now use:
+- Same changes as TradingForm: default to POL/USD, show BTC/ETH as disabled "Mainnet only"
 
-```text
-Position 1: Alchemy (primary - fast, reliable)
-Position 2: dRPC (fallback)
-Position 3: PublicNode (last resort)
-```
+#### 6. Update `src/components/trading/MarketOverview.tsx`
 
-### Files Modified
+- Show POL/USD with live data
+- Show BTC/USD and ETH/USD cards with "Mainnet only" label and no price data
+- Existing "Forex coming in v2" banner stays
 
-| File | Lines Changed |
+#### 7. Update `scripts/setup-crypto-feeds.js`
+
+- Remove BTC/USD and ETH/USD entries from the `FEEDS` array
+- Rename MATIC/USD to POL/USD
+- Keep the confirmed aggregator address `0x001382149eBa3441043c1c66972b4772963f5D43` for POL/USD
+
+---
+
+### Files to Modify
+
+| File | Change |
 |---|---|
-| `.env` | Add 1 line |
-| `src/config/contracts.ts` | Add 2 lines (export + update rpcUrls) |
-| `src/hooks/useMarketData.ts` | 2 lines (import + replace PUBLIC_RPC) |
-| `src/hooks/useOraclePrice.ts` | 2 lines (import + replace PUBLIC_RPC) |
-| `src/hooks/useOnChainTradingV2.ts` | 2 lines (import + update RPC_ENDPOINTS[0]) |
-| `src/components/trading/OracleStatus.tsx` | 2 lines (import + update RPC_ENDPOINTS[0]) |
-| `src/utils/web3.ts` | 2 lines (import + replace hardcoded URL) |
+| `src/config/markets.ts` | Rename MATIC to POL, add network-aware helpers, mark BTC/ETH as mainnet-only |
+| `src/hooks/useOnChainTradingV2.ts` | PAIR_IDS = POL/USD only |
+| `src/hooks/useMarketData.ts` | ORACLE_PAIRS = POL/USD only |
+| `src/components/trading/TradingForm.tsx` | Default to POL/USD, gray out BTC/ETH with "Mainnet only" |
+| `src/components/trading/MobileTradingInterface.tsx` | Same as TradingForm |
+| `src/components/trading/MarketOverview.tsx` | POL/USD live, BTC/ETH shown as "Mainnet only" |
+| `scripts/setup-crypto-feeds.js` | POL/USD only, remove BTC/ETH entries |
 
 ### What Does NOT Change
 
-- Trading logic, PnL, margin, fees -- untouched
-- Network enforcement -- untouched
-- Oracle gating -- untouched
-- Hardhat config (`hardhat.config.cjs`) -- already reads `AMOY_RPC_URL` from process.env; set it in your local `.env` for scripts
+- Trading engine, PnL, margin, liquidation logic -- pair-agnostic
+- Network enforcement, wallet logic, faucet -- untouched
+- AI Signal layer (Forex) -- untouched
+- Contract addresses -- untouched (PriceOracleV2 already deployed)
+- RPC configuration -- just updated in previous change
 

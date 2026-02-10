@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { TrendingUp, TrendingDown, BarChart3, Wifi, WifiOff, RefreshCw, Zap, Info } from "lucide-react"
 import { useMarketData } from '@/hooks/useMarketData'
-import { V1_TRADING_MARKETS, MARKET_METADATA, formatPrice } from '@/config/markets'
+import { V1_TRADING_MARKETS, MARKET_METADATA, formatPrice, isMainnetOnly } from '@/config/markets'
 
 const MarketOverview = () => {
   const { prices, isConnected, oracleAvailable, updatePrices, isLoading } = useMarketData()
@@ -97,8 +97,28 @@ const MarketOverview = () => {
         </CardHeader>
         <CardContent>
           <div className="space-y-3">
+            {/* Mainnet-only pairs shown as disabled */}
+            {V1_TRADING_MARKETS.filter(p => isMainnetOnly(p)).map((pairName) => {
+              const meta = MARKET_METADATA[pairName]
+              return (
+                <div key={pairName} className="flex items-center justify-between p-3 border rounded-lg opacity-50">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-full bg-muted">
+                      <BarChart3 className="h-4 w-4 text-muted-foreground" />
+                    </div>
+                    <div>
+                      <p className="font-semibold">{meta?.icon} {pairName}</p>
+                      <Badge variant="outline" className="text-[10px]">Mainnet only</Badge>
+                    </div>
+                  </div>
+                  <div className="text-right text-sm text-muted-foreground">—</div>
+                </div>
+              )
+            })}
+
+            {/* Active pairs with live data */}
             {prices
-              .filter(item => (V1_TRADING_MARKETS as readonly string[]).includes(item.pair))
+              .filter(item => (V1_TRADING_MARKETS as readonly string[]).includes(item.pair) && !isMainnetOnly(item.pair))
               .map((item) => {
               const meta = MARKET_METADATA[item.pair]
               return (
@@ -139,10 +159,10 @@ const MarketOverview = () => {
                 </div>
               )
             })}
-            {prices.filter(item => (V1_TRADING_MARKETS as readonly string[]).includes(item.pair)).length === 0 && (
+            {prices.filter(item => (V1_TRADING_MARKETS as readonly string[]).includes(item.pair) && !isMainnetOnly(item.pair)).length === 0 && (
               <div className="text-center py-6 text-muted-foreground">
                 <p>Waiting for oracle data...</p>
-                <p className="text-xs mt-1">Crypto markets will appear once Chainlink feeds are active</p>
+                <p className="text-xs mt-1">POL/USD will appear once Chainlink feed is active</p>
               </div>
             )}
           </div>

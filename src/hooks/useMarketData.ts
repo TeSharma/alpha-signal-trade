@@ -30,10 +30,10 @@ const PRICE_ORACLE_V2_ABI = [
   }
 ];
 
-// v1 crypto markets only — Chainlink-backed, no simulated prices
-import { V1_TRADING_MARKETS } from '@/config/markets';
+// Amoy: only POL/USD has a Chainlink feed; BTC/ETH activate on mainnet
+import { V1_AMOY_MARKETS } from '@/config/markets';
 
-const ORACLE_PAIRS = [...V1_TRADING_MARKETS]; // BTC/USD, ETH/USD, MATIC/USD
+const ORACLE_PAIRS = [...V1_AMOY_MARKETS]; // POL/USD only on Amoy
 
 export interface MarketPrice {
   pair: string;
