@@ -230,11 +230,13 @@ const ERC20_ABI = [
   }
 ];
 
-// Pair ID mapping (keccak256 hashes) — v1 crypto markets only
+// Pair ID mapping (keccak256 hashes) — Amoy: POL/USD only
+// BTC/USD and ETH/USD will be activated on mainnet deployment
 export const PAIR_IDS: Record<string, string> = {
-  'BTC/USD': '',
-  'ETH/USD': '',
-  'MATIC/USD': '',
+  'POL/USD': '',
+  // Mainnet activation:
+  // 'BTC/USD': '',
+  // 'ETH/USD': '',
 };
 
 // Helper to compute pair ID (no provider needed for keccak256)
