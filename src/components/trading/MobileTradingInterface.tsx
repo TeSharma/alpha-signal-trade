@@ -15,14 +15,14 @@ import { useOnChainTradingV2 } from '@/hooks/useOnChainTradingV2';
 import { useToast } from '@/hooks/use-toast';
 import { useNetworkEnforcement } from '@/hooks/useNetworkEnforcement';
 import { getMinimums, isMainnet, FEE_CONFIG, calculateOpenFee } from '@/config/contracts';
-import { V1_TRADING_MARKETS, MARKET_METADATA, formatPrice } from '@/config/markets';
+import { V1_TRADING_MARKETS, V1_AMOY_MARKETS, MARKET_METADATA, formatPrice, isMainnetOnly } from '@/config/markets';
 
 interface MobileTradingInterfaceProps {
   accountMode: 'demo' | 'live';
 }
 
 const MobileTradingInterface = ({ accountMode }: MobileTradingInterfaceProps) => {
-  const [selectedPair, setSelectedPair] = useState('BTC/USD');
+  const [selectedPair, setSelectedPair] = useState('POL/USD');
   const [tradeDirection, setTradeDirection] = useState<'buy' | 'sell'>('buy');
   const [lotSize, setLotSize] = useState('10');
   const [leverage, setLeverage] = useState(5);
@@ -216,7 +216,7 @@ const MobileTradingInterface = ({ accountMode }: MobileTradingInterfaceProps) =>
       <Card>
         <CardContent className="p-4">
           <Label className="text-sm font-medium">Trading Pair</Label>
-          <Select value={selectedPair} onValueChange={setSelectedPair}>
+          <Select value={selectedPair} onValueChange={(v) => !isMainnetOnly(v) && setSelectedPair(v)}>
             <SelectTrigger className="mt-2">
               <SelectValue />
             </SelectTrigger>
@@ -224,13 +224,18 @@ const MobileTradingInterface = ({ accountMode }: MobileTradingInterfaceProps) =>
               {V1_TRADING_MARKETS.map((pairName) => {
                 const pairData = prices.find(p => p.pair === pairName);
                 const meta = MARKET_METADATA[pairName];
+                const mainnetOnly = isMainnetOnly(pairName);
                 return (
-                  <SelectItem key={pairName} value={pairName}>
+                  <SelectItem key={pairName} value={pairName} disabled={mainnetOnly}>
                     <div className="flex justify-between w-full">
-                      <span>{meta?.icon} {meta?.symbol}/{pairName.split('/')[1]}</span>
-                      <span className="ml-4 text-sm text-muted-foreground">
-                        {pairData ? formatPrice(pairName, pairData.price) : '—'}
-                      </span>
+                      <span className={mainnetOnly ? 'opacity-50' : ''}>{meta?.icon} {meta?.symbol}/{pairName.split('/')[1]}</span>
+                      {mainnetOnly ? (
+                        <span className="ml-4 text-xs text-muted-foreground">Mainnet only</span>
+                      ) : (
+                        <span className="ml-4 text-sm text-muted-foreground">
+                          {pairData ? formatPrice(pairName, pairData.price) : '—'}
+                        </span>
+                      )}
                     </div>
                   </SelectItem>
                 );

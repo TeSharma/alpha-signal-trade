@@ -8,26 +8,17 @@ const { ethers } = require("hardhat");
 const PRICE_ORACLE_V2 = "0x5D58135A49C5035C5836E682B7A68B0d3d8816fF";
 
 // Chainlink Aggregator addresses on Polygon Amoy testnet
-// Verify at: https://docs.chain.link/data-feeds/price-feeds/addresses?network=polygon&page=1#amoy-testnet
+// Only POL/USD is available on Amoy. BTC/USD and ETH/USD activate on mainnet.
 const FEEDS = [
   {
-    pair: "BTC/USD",
-    // TODO: Confirm this address from Chainlink docs for Amoy
-    aggregator: "0xe7656e23fE8077D438aEfbec2fAbDf2Bb8E6A019",
-    decimals: 8
-  },
-  {
-    pair: "ETH/USD",
-    // TODO: Confirm this address from Chainlink docs for Amoy
-    aggregator: "0xF0d50568e3A7e8259E16663972b11910F89BD8e7",
-    decimals: 8
-  },
-  {
-    pair: "MATIC/USD",
-    // Confirmed from Polygon docs
+    pair: "POL/USD",
+    // Confirmed from Polygon/Chainlink docs for Amoy
     aggregator: "0x001382149eBa3441043c1c66972b4772963f5D43",
     decimals: 8
   }
+  // Mainnet activation:
+  // { pair: "BTC/USD", aggregator: "TBD", decimals: 8 },
+  // { pair: "ETH/USD", aggregator: "TBD", decimals: 8 },
 ];
 
 async function main() {

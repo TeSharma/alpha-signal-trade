@@ -7,12 +7,17 @@ export interface MarketMeta {
   icon: string;
   decimals: number; // Display precision
   layer: 'on-chain' | 'signal';
+  network: 'all' | 'mainnet-only' | 'amoy-only';
   description?: string;
 }
 
 // ─── ON-CHAIN TRADING MARKETS (Crypto – Chainlink required) ──────────────
-export const V1_TRADING_MARKETS = ['BTC/USD', 'ETH/USD', 'MATIC/USD'] as const;
+export const V1_TRADING_MARKETS = ['BTC/USD', 'ETH/USD', 'POL/USD'] as const;
 export type V1TradingPair = typeof V1_TRADING_MARKETS[number];
+
+// Network-specific subsets
+export const V1_AMOY_MARKETS = ['POL/USD'] as const;
+export const V1_MAINNET_MARKETS = ['BTC/USD', 'ETH/USD', 'POL/USD'] as const;
 
 // ─── AI SIGNAL MARKETS (Forex – no oracle needed) ────────────────────────
 export const V1_SIGNAL_MARKETS = ['EUR/USD', 'GBP/USD', 'USD/JPY'] as const;
@@ -21,13 +26,13 @@ export type V1SignalPair = typeof V1_SIGNAL_MARKETS[number];
 // Combined metadata for all v1 markets
 export const MARKET_METADATA: Record<string, MarketMeta> = {
   // Crypto (on-chain)
-  'BTC/USD':   { symbol: 'BTC',   icon: '₿', decimals: 2, layer: 'on-chain' },
-  'ETH/USD':   { symbol: 'ETH',   icon: 'Ξ', decimals: 2, layer: 'on-chain' },
-  'MATIC/USD': { symbol: 'MATIC', icon: '⬡', decimals: 4, layer: 'on-chain' },
+  'BTC/USD':   { symbol: 'BTC',   icon: '₿', decimals: 2, layer: 'on-chain', network: 'mainnet-only' },
+  'ETH/USD':   { symbol: 'ETH',   icon: 'Ξ', decimals: 2, layer: 'on-chain', network: 'mainnet-only' },
+  'POL/USD':   { symbol: 'POL',   icon: '⬡', decimals: 4, layer: 'on-chain', network: 'all' },
   // Forex (signals only)
-  'EUR/USD':   { symbol: 'EUR',   icon: '€', decimals: 5, layer: 'signal', description: 'AI Signals Only' },
-  'GBP/USD':   { symbol: 'GBP',   icon: '£', decimals: 5, layer: 'signal', description: 'AI Signals Only' },
-  'USD/JPY':   { symbol: 'JPY',   icon: '¥', decimals: 3, layer: 'signal', description: 'AI Signals Only' },
+  'EUR/USD':   { symbol: 'EUR',   icon: '€', decimals: 5, layer: 'signal', network: 'all', description: 'AI Signals Only' },
+  'GBP/USD':   { symbol: 'GBP',   icon: '£', decimals: 5, layer: 'signal', network: 'all', description: 'AI Signals Only' },
+  'USD/JPY':   { symbol: 'JPY',   icon: '¥', decimals: 3, layer: 'signal', network: 'all', description: 'AI Signals Only' },
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
@@ -40,6 +45,12 @@ export const isSignalMarket = (pair: string): boolean =>
 
 export const getMarketMeta = (pair: string): MarketMeta | undefined =>
   MARKET_METADATA[pair];
+
+export const getAmoyTradingMarkets = (): string[] => [...V1_AMOY_MARKETS];
+export const getMainnetTradingMarkets = (): string[] => [...V1_MAINNET_MARKETS];
+
+export const isMainnetOnly = (pair: string): boolean =>
+  MARKET_METADATA[pair]?.network === 'mainnet-only';
 
 export const formatPrice = (pair: string, price: number): string => {
   const meta = MARKET_METADATA[pair];

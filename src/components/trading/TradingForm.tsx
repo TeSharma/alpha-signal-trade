@@ -13,7 +13,7 @@ import { useOnChainTradingV2 } from '@/hooks/useOnChainTradingV2'
 import { useToast } from '@/components/ui/use-toast'
 import { useNetworkEnforcement } from '@/hooks/useNetworkEnforcement'
 import { CONTRACT_ADDRESSES, CHAIN_IDS, getMinimums, isMainnet, FEE_CONFIG, calculateOpenFee } from '@/config/contracts'
-import { V1_TRADING_MARKETS, MARKET_METADATA, formatPrice } from '@/config/markets'
+import { V1_TRADING_MARKETS, V1_AMOY_MARKETS, MARKET_METADATA, formatPrice, isMainnetOnly } from '@/config/markets'
 
 interface TradingFormProps {
   accountMode: 'demo' | 'live';
@@ -27,7 +27,7 @@ interface AISignalResponse {
 }
 
 const TradingForm = ({ accountMode }: TradingFormProps) => {
-  const [selectedPair, setSelectedPair] = useState('BTC/USD')
+  const [selectedPair, setSelectedPair] = useState('POL/USD')
   const [tradeDirection, setTradeDirection] = useState<'buy' | 'sell'>('buy')
   const [lotSize, setLotSize] = useState('10')
   const [leverage, setLeverage] = useState(5)
@@ -304,19 +304,27 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
             {V1_TRADING_MARKETS.map((pairName) => {
               const pairData = prices.find(p => p.pair === pairName)
               const meta = MARKET_METADATA[pairName]
+              const mainnetOnly = isMainnetOnly(pairName)
               return (
                 <Button
                   key={pairName}
                   variant={selectedPair === pairName ? 'default' : 'outline'}
-                  className="h-auto p-3 flex flex-col items-start"
-                  onClick={() => setSelectedPair(pairName)}
+                  className={`h-auto p-3 flex flex-col items-start ${mainnetOnly ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  onClick={() => !mainnetOnly && setSelectedPair(pairName)}
+                  disabled={mainnetOnly}
                 >
                   <span className="font-semibold">{meta?.icon} {meta?.symbol}</span>
-                  <span className="text-xs">{pairData ? formatPrice(pairName, pairData.price) : '—'}</span>
-                  {pairData && (
-                    <span className={`text-xs ${pairData.changePercent >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-                      {pairData.changePercent >= 0 ? '+' : ''}{pairData.changePercent}%
-                    </span>
+                  {mainnetOnly ? (
+                    <Badge variant="outline" className="text-[10px] mt-1">Mainnet only</Badge>
+                  ) : (
+                    <>
+                      <span className="text-xs">{pairData ? formatPrice(pairName, pairData.price) : '—'}</span>
+                      {pairData && (
+                        <span className={`text-xs ${pairData.changePercent >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                          {pairData.changePercent >= 0 ? '+' : ''}{pairData.changePercent}%
+                        </span>
+                      )}
+                    </>
                   )}
                 </Button>
               )
