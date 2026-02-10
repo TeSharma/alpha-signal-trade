@@ -1,5 +1,9 @@
 // Auto-generated file. Do not edit manually.
 
+// Dedicated RPC — env var with public fallback
+export const AMOY_RPC_URL = import.meta.env.VITE_ALCHEMY_AMOY_RPC
+  || 'https://rpc-amoy.polygon.technology/';
+
 export const CONTRACT_ADDRESSES = {
   amoy: {
     TokenizedCurrency: "0xdb204732615f1EC2bDb1Aae2032bC9DE7aA8c164",
@@ -59,7 +63,7 @@ export const REQUIRED_CHAIN_ID_HEX = '0x13882';
 export const AMOY_NETWORK_PARAMS = {
   chainId: REQUIRED_CHAIN_ID_HEX,
   chainName: 'Polygon Amoy Testnet',
-  rpcUrls: ['https://rpc-amoy.polygon.technology/'],
+  rpcUrls: [AMOY_RPC_URL],
   nativeCurrency: { name: 'MATIC', symbol: 'MATIC', decimals: 18 },
   blockExplorerUrls: ['https://amoy.polygonscan.com/'],
 } as const;

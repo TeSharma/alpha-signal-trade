@@ -1,13 +1,13 @@
 import { ethers } from "ethers";
-import { CONTRACT_ADDRESSES } from "../config/contracts";
+import { CONTRACT_ADDRESSES, AMOY_RPC_URL } from "../config/contracts";
 
 // Get provider (wallet or RPC fallback)
 export const getProvider = () => {
   if (window.ethereum) {
     return new ethers.BrowserProvider(window.ethereum);
   } else {
-    console.warn("⚠️ No wallet found — using public RPC");
-    return new ethers.JsonRpcProvider("https://rpc-amoy.polygon.technology/");
+    console.warn("⚠️ No wallet found — using dedicated RPC");
+    return new ethers.JsonRpcProvider(AMOY_RPC_URL);
   }
 };
 

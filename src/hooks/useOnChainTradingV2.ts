@@ -1,11 +1,11 @@
 import { useState, useCallback } from 'react';
 import Web3 from 'web3';
 import { useToast } from '@/hooks/use-toast';
-import { CONTRACT_ADDRESSES, FEE_CONFIG, REQUIRED_CHAIN_ID_HEX } from '@/config/contracts';
+import { CONTRACT_ADDRESSES, FEE_CONFIG, REQUIRED_CHAIN_ID_HEX, AMOY_RPC_URL } from '@/config/contracts';
 
-// Public RPC endpoints with fallbacks (avoids MetaMask overload)
+// RPC endpoints with fallbacks — Alchemy primary, public fallbacks
 const RPC_ENDPOINTS = [
-  'https://rpc-amoy.polygon.technology/',
+  AMOY_RPC_URL,
   'https://polygon-amoy.drpc.org/',
   'https://polygon-amoy-bor-rpc.publicnode.com'
 ];

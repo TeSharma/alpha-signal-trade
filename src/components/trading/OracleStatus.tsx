@@ -5,6 +5,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { Activity, AlertTriangle, CheckCircle, XCircle, RefreshCw, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PRICE_ORACLE_V2_ADDRESS, PAIR_IDS } from '@/hooks/useOnChainTradingV2';
+import { AMOY_RPC_URL } from '@/config/contracts';
 
 // Compute pair IDs locally without MetaMask provider
 const computePairIdLocal = (pair: string): string => {
@@ -12,9 +13,9 @@ const computePairIdLocal = (pair: string): string => {
   return web3.utils.keccak256(pair);
 };
 
-// Public RPC endpoints with fallbacks (avoid MetaMask provider overload)
+// RPC endpoints — Alchemy primary, public fallbacks
 const RPC_ENDPOINTS = [
-  'https://rpc-amoy.polygon.technology/',
+  AMOY_RPC_URL,
   'https://polygon-amoy.drpc.org/',
   'https://polygon-amoy-bor-rpc.publicnode.com'
 ];
