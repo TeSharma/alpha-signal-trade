@@ -1,9 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import Web3 from 'web3';
-import { CONTRACT_ADDRESSES } from '@/config/contracts';
-
-// Use public RPC for reads to avoid MetaMask overload
-const PUBLIC_RPC = 'https://rpc-amoy.polygon.technology/';
+import { CONTRACT_ADDRESSES, AMOY_RPC_URL } from '@/config/contracts';
 
 // PriceOracleV2 ABI (uses bytes32 pairId)
 const PRICE_ORACLE_V2_ABI = [
@@ -56,7 +53,7 @@ export const useOraclePrice = () => {
 
   const initializeWeb3 = async () => {
     // Use public RPC for read operations to avoid MetaMask provider overload
-    const web3Instance = new Web3(PUBLIC_RPC);
+    const web3Instance = new Web3(AMOY_RPC_URL);
     setWeb3(web3Instance);
     setIsConnected(true);
   };
