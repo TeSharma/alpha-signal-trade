@@ -9,8 +9,12 @@ import Sidebar from '@/components/layout/Sidebar';
 import ResponsiveNav from '@/components/layout/ResponsiveNav';
 import { TokenBalances } from '@/components/trading/TokenBalances';
 import TUSDFaucet from '@/components/wallet/TUSDFaucet';
+import { useApp } from '@/contexts/AppContext';
 
 export default function Wallet() {
+  const { state } = useApp();
+  const isDemo = state.accountMode === 'demo';
+
   return (
     <div className="min-h-screen bg-background">
       <ResponsiveNav />
@@ -30,12 +34,12 @@ export default function Wallet() {
             </div>
 
             <Tabs defaultValue="wallets" className="space-y-6">
-              <TabsList className="grid w-full grid-cols-5">
+              <TabsList className={`grid w-full ${isDemo ? 'grid-cols-5' : 'grid-cols-4'}`}>
                 <TabsTrigger value="wallets">Wallets</TabsTrigger>
                 <TabsTrigger value="tokens">Tokens</TabsTrigger>
                 <TabsTrigger value="deposit">Deposit</TabsTrigger>
                 <TabsTrigger value="withdraw">Withdraw</TabsTrigger>
-                <TabsTrigger value="history">History</TabsTrigger>
+                {isDemo && <TabsTrigger value="history">History</TabsTrigger>}
               </TabsList>
 
               <TabsContent value="wallets" className="space-y-6">
@@ -57,7 +61,7 @@ export default function Wallet() {
 
               <TabsContent value="tokens" className="space-y-6">
                 <TokenBalances />
-                <TUSDFaucet />
+                {isDemo && <TUSDFaucet />}
               </TabsContent>
 
               <TabsContent value="deposit" className="space-y-6">
@@ -68,9 +72,11 @@ export default function Wallet() {
                 <WithdrawalInterface />
               </TabsContent>
 
-              <TabsContent value="history" className="space-y-6">
-                <TransactionHistory />
-              </TabsContent>
+              {isDemo && (
+                <TabsContent value="history" className="space-y-6">
+                  <TransactionHistory />
+                </TabsContent>
+              )}
             </Tabs>
           </div>
         </main>

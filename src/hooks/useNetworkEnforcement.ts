@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { REQUIRED_CHAIN_ID, REQUIRED_CHAIN_ID_HEX, AMOY_NETWORK_PARAMS } from '@/config/contracts';
+import { getRequiredChainId, getRequiredChainHex, getNetworkParams, getNetworkName, type AccountMode } from '@/config/contracts';
 
 const NETWORK_NAMES: Record<number, string> = {
   1: 'Ethereum Mainnet',
@@ -10,12 +10,14 @@ const NETWORK_NAMES: Record<number, string> = {
   80002: 'Polygon Amoy',
 };
 
-export const useNetworkEnforcement = () => {
+export const useNetworkEnforcement = (accountMode: AccountMode = 'demo') => {
   const [currentChainId, setCurrentChainId] = useState<number | null>(null);
   const [isWalletConnected, setIsWalletConnected] = useState(false);
 
-  const isCorrectNetwork = currentChainId === REQUIRED_CHAIN_ID;
+  const requiredChainId = getRequiredChainId(accountMode);
+  const isCorrectNetwork = currentChainId === requiredChainId;
   const networkName = currentChainId ? (NETWORK_NAMES[currentChainId] || `Chain ${currentChainId}`) : 'Unknown';
+  const requiredNetworkName = getNetworkName(accountMode);
 
   // Read chain ID and wallet connection state
   const detectNetwork = useCallback(async () => {
@@ -36,14 +38,17 @@ export const useNetworkEnforcement = () => {
     }
   }, []);
 
-  // Switch to Polygon Amoy
-  const switchToAmoy = useCallback(async () => {
+  // Switch to the required network for the current mode
+  const switchToRequiredNetwork = useCallback(async () => {
     if (!window.ethereum) return;
+
+    const targetChainHex = getRequiredChainHex(accountMode);
+    const targetParams = getNetworkParams(accountMode);
 
     try {
       await window.ethereum.request({
         method: 'wallet_switchEthereumChain',
-        params: [{ chainId: REQUIRED_CHAIN_ID_HEX }],
+        params: [{ chainId: targetChainHex }],
       });
     } catch (err: any) {
       // 4902 = chain not added to wallet
@@ -51,16 +56,19 @@ export const useNetworkEnforcement = () => {
         try {
           await window.ethereum.request({
             method: 'wallet_addEthereumChain',
-            params: [AMOY_NETWORK_PARAMS],
+            params: [targetParams],
           });
         } catch (addErr) {
-          console.error('Failed to add Polygon Amoy:', addErr);
+          console.error(`Failed to add ${requiredNetworkName}:`, addErr);
         }
       } else {
         console.error('Failed to switch network:', err);
       }
     }
-  }, []);
+  }, [accountMode, requiredNetworkName]);
+
+  // Backward-compatible alias
+  const switchToAmoy = switchToRequiredNetwork;
 
   useEffect(() => {
     detectNetwork();
@@ -88,7 +96,9 @@ export const useNetworkEnforcement = () => {
     isCorrectNetwork,
     currentChainId,
     networkName,
+    requiredNetworkName,
     isWalletConnected,
+    switchToRequiredNetwork,
     switchToAmoy,
   };
 };

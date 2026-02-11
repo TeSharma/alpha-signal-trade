@@ -12,6 +12,7 @@ import { DeploymentGuide } from "@/components/trading/DeploymentGuide";
 import V2PositionsPanel from "@/components/trading/V2PositionsPanel";
 import OracleStatus from "@/components/trading/OracleStatus";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { getNetworkName } from '@/config/contracts';
 
 const Trade = () => {
   const [accountMode, setAccountMode] = useState<'demo' | 'live'>('demo');
@@ -33,7 +34,12 @@ const Trade = () => {
             <div className="max-w-7xl mx-auto space-y-6">
               <div>
                 <h1 className="text-3xl font-bold text-gray-900">Trade</h1>
-                <p className="text-gray-600">On-chain crypto trading — BTC, ETH, MATIC powered by Chainlink oracles</p>
+                <p className="text-gray-600">
+                  {accountMode === 'demo' 
+                    ? 'Demo trading on Polygon Amoy — POL/USD powered by Chainlink oracle'
+                    : `Live trading on ${getNetworkName('live')} — BTC, ETH, POL powered by Chainlink oracles`
+                  }
+                </p>
               </div>
               <Tabs defaultValue="trading" className="w-full">
                 <TabsList className="grid w-full grid-cols-2">
@@ -53,10 +59,10 @@ const Trade = () => {
                     <div className="lg:col-span-2 space-y-6">
                       {accountMode === 'live' && (
                         <div className="flex justify-end">
-                          <OracleStatus />
+                          <OracleStatus accountMode={accountMode} />
                         </div>
                       )}
-                      <MarketOverview />
+                      <MarketOverview accountMode={accountMode} />
                       {accountMode === 'live' && <V2PositionsPanel />}
                       <TradeHistory accountMode={accountMode} />
                     </div>

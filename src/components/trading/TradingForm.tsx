@@ -12,8 +12,8 @@ import { useMarketData } from '@/hooks/useMarketData'
 import { useOnChainTradingV2 } from '@/hooks/useOnChainTradingV2'
 import { useToast } from '@/components/ui/use-toast'
 import { useNetworkEnforcement } from '@/hooks/useNetworkEnforcement'
-import { CONTRACT_ADDRESSES, CHAIN_IDS, getMinimums, isMainnet, FEE_CONFIG, calculateOpenFee } from '@/config/contracts'
-import { V1_TRADING_MARKETS, V1_AMOY_MARKETS, MARKET_METADATA, formatPrice, isMainnetOnly } from '@/config/markets'
+import { getMinimums, isMainnet, FEE_CONFIG, calculateOpenFee, getNetworkName } from '@/config/contracts'
+import { getMarketsForMode, MARKET_METADATA, formatPrice } from '@/config/markets'
 
 interface TradingFormProps {
   accountMode: 'demo' | 'live';
@@ -27,7 +27,8 @@ interface AISignalResponse {
 }
 
 const TradingForm = ({ accountMode }: TradingFormProps) => {
-  const [selectedPair, setSelectedPair] = useState('POL/USD')
+  const availableMarkets = getMarketsForMode(accountMode)
+  const [selectedPair, setSelectedPair] = useState(availableMarkets[0] || 'POL/USD')
   const [tradeDirection, setTradeDirection] = useState<'buy' | 'sell'>('buy')
   const [lotSize, setLotSize] = useState('10')
   const [leverage, setLeverage] = useState(5)
@@ -40,13 +41,21 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
   const [isSubmitting, setIsSubmitting] = useState(false)
   
   const { createTrade, accountBalance } = useTrades()
-  const { prices, getCurrentPrice, getBidPrice, getAskPrice, oracleAvailable } = useMarketData()
-  const { openPosition: openOnChainPositionV2, isLoading: onChainLoading, approvalPending, getCollateralBalance, getMaticBalance, getPlatformConfig } = useOnChainTradingV2()
+  const { prices, getCurrentPrice, getBidPrice, getAskPrice, oracleAvailable } = useMarketData(accountMode)
+  const { openPosition: openOnChainPositionV2, isLoading: onChainLoading, approvalPending, getCollateralBalance, getMaticBalance, getPlatformConfig } = useOnChainTradingV2(accountMode)
   const { toast } = useToast()
-  const { isCorrectNetwork, currentChainId, switchToAmoy } = useNetworkEnforcement()
+  const { isCorrectNetwork, currentChainId, switchToRequiredNetwork, requiredNetworkName } = useNetworkEnforcement(accountMode)
   const [collateralBalance, setCollateralBalance] = useState('0')
   const [maticBalance, setMaticBalance] = useState('0')
   const [maxLeverage, setMaxLeverage] = useState(50)
+
+  // Reset selected pair when mode changes
+  useEffect(() => {
+    const markets = getMarketsForMode(accountMode)
+    if (!markets.includes(selectedPair)) {
+      setSelectedPair(markets[0] || 'POL/USD')
+    }
+  }, [accountMode, selectedPair])
 
   // Fetch collateral balance, MATIC balance, and platform config for live mode
   useEffect(() => {
@@ -79,84 +88,45 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
     setIsLoadingSignal(true)
     
     try {
-      // Validate inputs
       const marginAmount = parseFloat(lotSize);
       if (!lotSize || marginAmount <= 0) {
-        toast({
-          title: 'Invalid lot size',
-          description: 'Please enter a valid lot size',
-          variant: 'destructive'
-        })
+        toast({ title: 'Invalid lot size', description: 'Please enter a valid lot size', variant: 'destructive' })
         return
       }
 
-      // Mainnet minimum margin validation
       if (accountMode === 'live' && isMainnet(currentChainId) && marginAmount < minMargin) {
-        toast({
-          title: 'Minimum Margin Required',
-          description: `Mainnet requires a minimum margin of ${minMargin} tUSD`,
-          variant: 'destructive'
-        })
+        toast({ title: 'Minimum Margin Required', description: `Mainnet requires a minimum margin of ${minMargin} tUSD`, variant: 'destructive' })
         return
       }
 
-      // Pre-trade validation for live mode
       if (accountMode === 'live') {
-        // Check collateral balance
         const balance = parseFloat(collateralBalance);
-        const requiredMargin = parseFloat(lotSize);
-        
-        if (balance < requiredMargin) {
-          toast({
-            title: 'Insufficient tUSD Balance',
-            description: `You need ${requiredMargin} tUSD but only have ${balance.toFixed(2)} tUSD. Visit the Wallet page to get test tokens from the faucet.`,
-            variant: 'destructive'
-          })
+        if (balance < marginAmount) {
+          toast({ title: 'Insufficient tUSD Balance', description: `You need ${marginAmount} tUSD but only have ${balance.toFixed(2)} tUSD.`, variant: 'destructive' })
           return
         }
 
-        // Check if MetaMask is connected
         if (typeof window.ethereum === 'undefined') {
-          toast({
-            title: 'Wallet Not Connected',
-            description: 'Please install and connect MetaMask to trade in live mode.',
-            variant: 'destructive'
-          })
+          toast({ title: 'Wallet Not Connected', description: 'Please install and connect MetaMask to trade in live mode.', variant: 'destructive' })
           return
         }
 
-        // Network check handled by useNetworkEnforcement hook (button is disabled)
         if (!isCorrectNetwork) {
-          toast({
-            title: 'Wrong Network',
-            description: 'Please switch to Polygon Amoy testnet to trade.',
-            variant: 'destructive'
-          })
+          toast({ title: 'Wrong Network', description: `Please switch to ${requiredNetworkName} to trade.`, variant: 'destructive' })
           return
         }
 
-        // Oracle freshness check
         if (!oracleHealthy) {
-          toast({
-            title: 'Oracle Unavailable',
-            description: `Price feed for ${selectedPair} is offline or stale. Live trading requires fresh oracle data.`,
-            variant: 'destructive'
-          })
+          toast({ title: 'Oracle Unavailable', description: `Price feed for ${selectedPair} is offline or stale.`, variant: 'destructive' })
           return
         }
 
-        // MATIC gas check
         if (maticLow) {
-          toast({
-            title: 'Insufficient MATIC for Gas',
-            description: 'You need MATIC to pay gas fees. Get free MATIC from faucet.polygon.technology',
-            variant: 'destructive'
-          })
+          toast({ title: 'Insufficient Gas Token', description: 'You need native tokens to pay gas fees.', variant: 'destructive' })
           return
         }
       }
 
-      // Get execution price based on order type and direction
       let executionPrice = currentPrice
       if (orderType === 'market') {
         executionPrice = tradeDirection === 'buy' ? askPrice : bidPrice
@@ -164,11 +134,9 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
         executionPrice = parseFloat(limitPrice)
       }
 
-      // Check AI signal first
       const response = await checkAISignal(selectedPair, tradeDirection)
       setSignalResponse(response)
 
-      // Create trade in database
       const tradeResult = await createTrade({
         pair: selectedPair,
         direction: tradeDirection,
@@ -180,21 +148,17 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
       })
 
       if (accountMode === 'live' && tradeResult) {
-        // Execute on-chain using the V2 hook
         const txHash = await openOnChainPositionV2({
           pair: selectedPair,
           direction: tradeDirection,
           margin: lotSize,
           leverage: leverage
         });
-
         if (txHash) {
-          // Update collateral balance after trade
           getCollateralBalance().then(setCollateralBalance);
         }
       }
 
-      // Reset form on success
       if (tradeResult) {
         setLotSize('0.1')
         setStopLoss('')
@@ -203,64 +167,26 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
       }
     } catch (error: any) {
       console.error('Error submitting trade:', error)
-      
-      // Parse error message for specific handling
       const errorMessage = error?.message || 'Transaction failed';
       
-      // User rejected transaction
       if (error?.code === 4001 || errorMessage.includes('User denied') || errorMessage.includes('rejected')) {
-        toast({
-          title: 'Transaction Cancelled',
-          description: 'You cancelled the transaction in MetaMask.',
-          variant: 'default'
-        })
+        toast({ title: 'Transaction Cancelled', description: 'You cancelled the transaction in MetaMask.', variant: 'default' })
         return
       }
       
-      // Insufficient balance
       if (errorMessage.includes('insufficient') || errorMessage.includes('Insufficient')) {
-        toast({
-          title: 'Insufficient Balance',
-          description: 'Not enough tUSD. Get test tokens from the faucet on the Wallet page.',
-          variant: 'destructive'
-        })
+        toast({ title: 'Insufficient Balance', description: 'Not enough tUSD.', variant: 'destructive' })
         return
       }
       
-      // Oracle/price feed errors
       if (errorMessage.includes('oracle') || errorMessage.includes('price') || errorMessage.includes('stale')) {
-        toast({
-          title: 'Price Feed Unavailable',
-          description: 'Oracle price is unavailable or stale. Please try again in a moment.',
-          variant: 'destructive'
-        })
+        toast({ title: 'Price Feed Unavailable', description: 'Oracle price is unavailable or stale.', variant: 'destructive' })
         return
       }
       
-      // Network errors
-      if (errorMessage.includes('network') || errorMessage.includes('connection') || errorMessage.includes('timeout')) {
-        toast({
-          title: 'Network Error',
-          description: 'Check your internet connection and try again.',
-          variant: 'destructive'
-        })
-        return
-      }
-      
-      // Gas estimation failed (often means contract will revert)
-      if (errorMessage.includes('gas') || errorMessage.includes('execution reverted')) {
-        toast({
-          title: 'Transaction Failed',
-          description: 'The transaction would fail. Check your balance and try a smaller position.',
-          variant: 'destructive'
-        })
-        return
-      }
-      
-      // Generic fallback
       toast({
         title: 'Trade Failed',
-        description: errorMessage.length > 100 ? 'An unexpected error occurred. Please try again.' : errorMessage,
+        description: errorMessage.length > 100 ? 'An unexpected error occurred.' : errorMessage,
         variant: 'destructive'
       })
     } finally {
@@ -273,7 +199,7 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
     const balance = accountMode === 'demo' 
       ? (accountBalance?.demo_balance || 10000) 
       : (accountBalance?.live_balance || 0);
-    const riskPercent = 2; // 2% risk
+    const riskPercent = 2;
     const suggestedLot = (balance * (riskPercent / 100) / 10000).toFixed(2);
     setLotSize(suggestedLot);
   };
@@ -297,40 +223,34 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* Market Pair Selection */}
+        {/* Market Pair Selection — only valid markets for current mode */}
         <div className="space-y-2">
           <Label>Market</Label>
           <div className="grid grid-cols-3 gap-2">
-            {V1_TRADING_MARKETS.map((pairName) => {
+            {availableMarkets.map((pairName) => {
               const pairData = prices.find(p => p.pair === pairName)
               const meta = MARKET_METADATA[pairName]
-              const mainnetOnly = isMainnetOnly(pairName)
               return (
                 <Button
                   key={pairName}
                   variant={selectedPair === pairName ? 'default' : 'outline'}
-                  className={`h-auto p-3 flex flex-col items-start ${mainnetOnly ? 'opacity-50 cursor-not-allowed' : ''}`}
-                  onClick={() => !mainnetOnly && setSelectedPair(pairName)}
-                  disabled={mainnetOnly}
+                  className="h-auto p-3 flex flex-col items-start"
+                  onClick={() => setSelectedPair(pairName)}
                 >
                   <span className="font-semibold">{meta?.icon} {meta?.symbol}</span>
-                  {mainnetOnly ? (
-                    <Badge variant="outline" className="text-[10px] mt-1">Mainnet only</Badge>
-                  ) : (
-                    <>
-                      <span className="text-xs">{pairData ? formatPrice(pairName, pairData.price) : '—'}</span>
-                      {pairData && (
-                        <span className={`text-xs ${pairData.changePercent >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-                          {pairData.changePercent >= 0 ? '+' : ''}{pairData.changePercent}%
-                        </span>
-                      )}
-                    </>
+                  <span className="text-xs">{pairData ? formatPrice(pairName, pairData.price) : '—'}</span>
+                  {pairData && (
+                    <span className={`text-xs ${pairData.changePercent >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                      {pairData.changePercent >= 0 ? '+' : ''}{pairData.changePercent}%
+                    </span>
                   )}
                 </Button>
               )
             })}
           </div>
-          <p className="text-xs text-muted-foreground">Forex markets (EUR/USD, GBP/USD, USD/JPY) coming in v2</p>
+          <p className="text-xs text-muted-foreground">
+            Forex markets (EUR/USD, GBP/USD, USD/JPY) — signals live, execution coming in v2
+          </p>
           
           {/* Current Price Display */}
           {selectedPairData && (
@@ -476,25 +396,13 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
         {/* Stop Loss */}
         <div className="space-y-2">
           <Label>Stop Loss (Optional)</Label>
-          <Input
-            type="number"
-            value={stopLoss}
-            onChange={(e) => setStopLoss(e.target.value)}
-            placeholder="Enter stop loss price"
-            step="0.01"
-          />
+          <Input type="number" value={stopLoss} onChange={(e) => setStopLoss(e.target.value)} placeholder="Enter stop loss price" step="0.01" />
         </div>
 
         {/* Take Profit */}
         <div className="space-y-2">
           <Label>Take Profit (Optional)</Label>
-          <Input
-            type="number"
-            value={takeProfit}
-            onChange={(e) => setTakeProfit(e.target.value)}
-            placeholder="Enter take profit price"
-            step="0.01"
-          />
+          <Input type="number" value={takeProfit} onChange={(e) => setTakeProfit(e.target.value)} placeholder="Enter take profit price" step="0.01" />
         </div>
 
         {/* Trade Summary */}
@@ -502,23 +410,14 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
           <div className="bg-muted rounded-lg p-3 space-y-2">
             <h4 className="font-semibold text-sm">Trade Summary</h4>
             <div className="space-y-1 text-sm">
-              <div className="flex justify-between">
-                <span>Pair:</span>
-                <span>{selectedPair}</span>
-              </div>
+              <div className="flex justify-between"><span>Pair:</span><span>{selectedPair}</span></div>
               <div className="flex justify-between">
                 <span>Direction:</span>
-                <span className={tradeDirection === 'buy' ? 'text-green-500' : 'text-red-500'}>
-                  {tradeDirection.toUpperCase()}
-                </span>
+                <span className={tradeDirection === 'buy' ? 'text-green-500' : 'text-red-500'}>{tradeDirection.toUpperCase()}</span>
               </div>
               {accountMode === 'live' ? (
                 <>
-                  <div className="flex justify-between">
-                    <span>Margin:</span>
-                    <span>{lotSize} tUSD</span>
-                  </div>
-                  {/* Fee breakdown for live mode */}
+                  <div className="flex justify-between"><span>Margin:</span><span>{lotSize} tUSD</span></div>
                   <div className="flex justify-between text-muted-foreground">
                     <span>Open Fee ({(FEE_CONFIG.openFeeBps / 100).toFixed(2)}%):</span>
                     <span>-{calculateOpenFee(parseFloat(lotSize || '0')).toFixed(4)} tUSD</span>
@@ -527,10 +426,7 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
                     <span>Net Margin:</span>
                     <span>{(parseFloat(lotSize || '0') - calculateOpenFee(parseFloat(lotSize || '0'))).toFixed(4)} tUSD</span>
                   </div>
-                  <div className="flex justify-between">
-                    <span>Leverage:</span>
-                    <span>{leverage}x</span>
-                  </div>
+                  <div className="flex justify-between"><span>Leverage:</span><span>{leverage}x</span></div>
                   <div className="flex justify-between">
                     <span>Position Size:</span>
                     <span>${((parseFloat(lotSize || '0') - calculateOpenFee(parseFloat(lotSize || '0'))) * leverage).toLocaleString()}</span>
@@ -540,43 +436,31 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
                   </div>
                 </>
               ) : (
-                <div className="flex justify-between">
-                  <span>Lot Size:</span>
-                  <span>{lotSize}</span>
-                </div>
+                <div className="flex justify-between"><span>Lot Size:</span><span>{lotSize}</span></div>
               )}
-              <div className="flex justify-between">
-                <span>Entry Price:</span>
-                <span>{selectedPairData.price}</span>
-              </div>
+              <div className="flex justify-between"><span>Entry Price:</span><span>{selectedPairData.price}</span></div>
             </div>
           </div>
         )}
 
-        {/* Submit Button */}
+        {/* AI Signal */}
         {signalResponse && (
-          <div className={`p-3 rounded-lg ${
-            signalResponse.confidence > 70 ? 'bg-green-50' : 'bg-yellow-50'
-          }`}>
+          <div className={`p-3 rounded-lg ${signalResponse.confidence > 70 ? 'bg-green-50' : 'bg-yellow-50'}`}>
             <div className="flex justify-between items-center">
               <span className="font-medium">AI Signal:</span>
-              <span className={`font-bold ${
-                signalResponse.confidence > 70 ? 'text-green-600' : 'text-yellow-600'
-              }`}>
+              <span className={`font-bold ${signalResponse.confidence > 70 ? 'text-green-600' : 'text-yellow-600'}`}>
                 {signalResponse.confidence}% Confidence
               </span>
             </div>
-            <div className="text-sm mt-1">
-              Recommendation: {signalResponse.recommendation}
-            </div>
+            <div className="text-sm mt-1">Recommendation: {signalResponse.recommendation}</div>
           </div>
         )}
 
         {accountMode === 'live' && !isCorrectNetwork && (
           <div className="flex items-center gap-2 text-sm text-amber-600 bg-amber-50 dark:bg-amber-950/30 p-3 rounded-lg">
             <AlertTriangle className="h-4 w-4 shrink-0" />
-            <span>Switch to Polygon Amoy to trade</span>
-            <Button variant="outline" size="sm" className="ml-auto" onClick={switchToAmoy}>Switch</Button>
+            <span>Switch to {requiredNetworkName} to trade</span>
+            <Button variant="outline" size="sm" className="ml-auto" onClick={switchToRequiredNetwork}>Switch</Button>
           </div>
         )}
 
@@ -590,8 +474,7 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
         {accountMode === 'live' && maticLow && (
           <div className="flex items-center gap-2 text-sm text-amber-600 bg-amber-50 dark:bg-amber-950/30 p-3 rounded-lg">
             <AlertTriangle className="h-4 w-4 shrink-0" />
-            <span>Low MATIC for gas fees</span>
-            <a href="https://faucet.polygon.technology/" target="_blank" rel="noopener noreferrer" className="ml-auto text-xs underline">Get MATIC</a>
+            <span>Low gas token balance</span>
           </div>
         )}
 
@@ -620,11 +503,7 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
           ) : (
             <span className="flex items-center">
               {accountMode === 'live' && <Link className="h-4 w-4 mr-2" />}
-              {orderType === 'market' ? (
-                <Zap className="h-4 w-4 mr-2" />
-              ) : (
-                <Activity className="h-4 w-4 mr-2" />
-              )}
+              {orderType === 'market' ? <Zap className="h-4 w-4 mr-2" /> : <Activity className="h-4 w-4 mr-2" />}
               {orderType === 'market' 
                 ? `${tradeDirection.toUpperCase()} ${selectedPair}` 
                 : `Place ${tradeDirection.toUpperCase()} Limit`
@@ -639,14 +518,13 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
 
 // AI Signal Check (mock implementation)
 const checkAISignal = async (pair: string, direction: string): Promise<AISignalResponse> => {
-  // In a real implementation, this would call your AI service
   return new Promise((resolve) => {
     setTimeout(() => {
       resolve({
         pair,
         direction,
-        confidence: Math.floor(Math.random() * 100), // Random confidence for demo
-        recommendation: Math.random() > 0.5 ? 'strong_buy' : 'hold' // Random recommendation
+        confidence: Math.floor(Math.random() * 100),
+        recommendation: Math.random() > 0.5 ? 'strong_buy' : 'hold'
       });
     }, 500);
   });

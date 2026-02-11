@@ -1,19 +1,24 @@
 import { useState, useCallback } from 'react';
 import Web3 from 'web3';
 import { useToast } from '@/hooks/use-toast';
-import { CONTRACT_ADDRESSES, FEE_CONFIG, REQUIRED_CHAIN_ID_HEX, AMOY_RPC_URL } from '@/config/contracts';
+import { CONTRACT_ADDRESSES, FEE_CONFIG, AMOY_RPC_URL, POLYGON_RPC_URL, getRequiredChainHex, getContractAddresses, getNetworkName, type AccountMode } from '@/config/contracts';
+import { getMarketsForMode } from '@/config/markets';
 
-// RPC endpoints with fallbacks — Alchemy primary, public fallbacks
-const RPC_ENDPOINTS = [
+// RPC endpoints with fallbacks per mode
+const AMOY_RPC_ENDPOINTS = [
   AMOY_RPC_URL,
   'https://polygon-amoy.drpc.org/',
   'https://polygon-amoy-bor-rpc.publicnode.com'
 ];
 
-// V2 Contract addresses from config
-export const TRADING_PLATFORM_V2_ADDRESS = CONTRACT_ADDRESSES.amoy.TradingPlatformV2;
-export const PRICE_ORACLE_V2_ADDRESS = CONTRACT_ADDRESSES.amoy.PriceOracleV2;
-export const TUSD_ADDRESS = CONTRACT_ADDRESSES.amoy.TokenizedCurrency;
+const POLYGON_RPC_ENDPOINTS = [
+  POLYGON_RPC_URL,
+  'https://polygon-rpc.com/',
+  'https://polygon-bor-rpc.publicnode.com'
+];
+
+const getRpcEndpoints = (mode: AccountMode) =>
+  mode === 'demo' ? AMOY_RPC_ENDPOINTS : POLYGON_RPC_ENDPOINTS;
 
 // TradingPlatformV2 ABI (updated with fee functions and priceTimeout)
 const TRADING_PLATFORM_V2_ABI = [
@@ -120,7 +125,6 @@ const TRADING_PLATFORM_V2_ABI = [
     stateMutability: 'view',
     type: 'function'
   },
-  // Fee functions
   {
     inputs: [],
     name: 'treasury',
@@ -230,38 +234,10 @@ const ERC20_ABI = [
   }
 ];
 
-// Pair ID mapping (keccak256 hashes) — Amoy: POL/USD only
-// BTC/USD and ETH/USD will be activated on mainnet deployment
-export const PAIR_IDS: Record<string, string> = {
-  'POL/USD': '',
-  // Mainnet activation:
-  // 'BTC/USD': '',
-  // 'ETH/USD': '',
-};
-
 // Helper to compute pair ID (no provider needed for keccak256)
 export const computePairId = (pair: string): string => {
   const web3 = new Web3();
   return web3.utils.keccak256(pair);
-};
-
-// Initialize pair IDs (no provider needed)
-const initPairIds = () => {
-  const web3 = new Web3();
-  Object.keys(PAIR_IDS).forEach((pair) => {
-    PAIR_IDS[pair] = web3.utils.keccak256(pair);
-  });
-};
-
-// Enforce correct chain before write operations
-const enforceNetwork = async (): Promise<boolean> => {
-  if (!window.ethereum) return false;
-  try {
-    const chainId: string = await window.ethereum.request({ method: 'eth_chainId' });
-    return chainId === REQUIRED_CHAIN_ID_HEX;
-  } catch {
-    return false;
-  }
 };
 
 export interface OpenPositionV2Params {
@@ -313,10 +289,38 @@ export interface PreflightResult {
   priceTimeout?: number;
 }
 
-export const useOnChainTradingV2 = () => {
+export const useOnChainTradingV2 = (accountMode: AccountMode = 'demo') => {
   const [isLoading, setIsLoading] = useState(false);
   const [approvalPending, setApprovalPending] = useState(false);
   const { toast } = useToast();
+
+  // Mode-aware configuration
+  const RPC_ENDPOINTS = getRpcEndpoints(accountMode);
+  const addresses = getContractAddresses(accountMode);
+  const TRADING_PLATFORM_V2_ADDRESS = addresses.TradingPlatformV2;
+  const PRICE_ORACLE_V2_ADDRESS = addresses.PriceOracleV2;
+  const TUSD_ADDRESS = addresses.TokenizedCurrency;
+  const requiredChainHex = getRequiredChainHex(accountMode);
+  const networkName = getNetworkName(accountMode);
+
+  // Build PAIR_IDS based on mode
+  const marketPairs = getMarketsForMode(accountMode);
+  const PAIR_IDS: Record<string, string> = {};
+  const web3Static = new Web3();
+  marketPairs.forEach(pair => {
+    PAIR_IDS[pair] = web3Static.utils.keccak256(pair);
+  });
+
+  // Enforce correct chain before write operations
+  const enforceNetwork = async (): Promise<boolean> => {
+    if (!window.ethereum) return false;
+    try {
+      const chainId: string = await window.ethereum.request({ method: 'eth_chainId' });
+      return chainId === requiredChainHex;
+    } catch {
+      return false;
+    }
+  };
 
   const getWeb3AndAccount = useCallback(async () => {
     if (typeof window.ethereum === 'undefined') {
@@ -327,7 +331,6 @@ export const useOnChainTradingV2 = () => {
     if (!accounts || accounts.length === 0) {
       throw new Error('No accounts found');
     }
-    initPairIds();
     return { web3, account: accounts[0] };
   }, []);
 
@@ -335,19 +338,19 @@ export const useOnChainTradingV2 = () => {
   const getReadOnlyWeb3 = useCallback((rpcIndex: number = 0) => {
     const endpoint = RPC_ENDPOINTS[rpcIndex % RPC_ENDPOINTS.length];
     return new Web3(endpoint);
-  }, []);
+  }, [RPC_ENDPOINTS]);
 
   const getTradingContract = useCallback((web3: Web3) => {
     return new web3.eth.Contract(TRADING_PLATFORM_V2_ABI as any, TRADING_PLATFORM_V2_ADDRESS);
-  }, []);
+  }, [TRADING_PLATFORM_V2_ADDRESS]);
 
   const getOracleContract = useCallback((web3: Web3) => {
     return new web3.eth.Contract(PRICE_ORACLE_V2_ABI as any, PRICE_ORACLE_V2_ADDRESS);
-  }, []);
+  }, [PRICE_ORACLE_V2_ADDRESS]);
 
   const getCollateralContract = useCallback((web3: Web3) => {
     return new web3.eth.Contract(ERC20_ABI as any, TUSD_ADDRESS);
-  }, []);
+  }, [TUSD_ADDRESS]);
 
   // Preflight check before opening position with retry logic
   const preflightCheck = async (pair: string, retryCount: number = 0): Promise<PreflightResult> => {
@@ -360,18 +363,14 @@ export const useOnChainTradingV2 = () => {
       const oracleContract = getOracleContract(web3);
       const tradingContract = getTradingContract(web3);
       
-      // Try to get price directly - the oracle may not have hasFeed(), or it may revert
-      // So we catch reverts and interpret them as "no feed"
       let priceResult: any;
       let hasFeed = false;
       
       try {
         priceResult = await oracleContract.methods.getPrice(pairId).call();
-        // If we got here without error, feed exists
         hasFeed = true;
       } catch (priceError: any) {
         console.log(`getPrice failed for ${pair}:`, priceError.message);
-        // Contract reverted - means no feed for this pair
         return {
           success: false,
           error: `Price feed not available for ${pair}. This trading pair may not be supported on-chain yet.`,
@@ -379,12 +378,10 @@ export const useOnChainTradingV2 = () => {
         };
       }
       
-      // Get timeout to check staleness
       let timeout: number;
       try {
         timeout = Number(await tradingContract.methods.priceTimeout().call());
       } catch {
-        // Default to 2 minutes if we can't read it
         timeout = 120;
       }
       
@@ -411,7 +408,6 @@ export const useOnChainTradingV2 = () => {
     } catch (error: any) {
       console.error(`Preflight check error (attempt ${retryCount + 1}):`, error);
       
-      // Check if it's a network error and we can retry
       const errorMsg = error.message?.toLowerCase() || '';
       const isNetworkError = 
         errorMsg.includes('failed to fetch') ||
@@ -426,7 +422,6 @@ export const useOnChainTradingV2 = () => {
         return preflightCheck(pair, retryCount + 1);
       }
       
-      // Provide user-friendly error messages
       if (isNetworkError) {
         return {
           success: false,
@@ -434,7 +429,6 @@ export const useOnChainTradingV2 = () => {
         };
       }
       
-      // Check for contract execution errors (reverts with no data)
       if (errorMsg.includes('execution reverted') || errorMsg.includes('inside a smart contract')) {
         return {
           success: false,
@@ -474,7 +468,6 @@ export const useOnChainTradingV2 = () => {
         description: 'Please approve tUSD spending in MetaMask',
       });
 
-      // Approve max uint256 for convenience
       const maxApproval = '0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff';
       await collateralContract.methods
         .approve(TRADING_PLATFORM_V2_ADDRESS, maxApproval)
@@ -502,17 +495,14 @@ export const useOnChainTradingV2 = () => {
 
   // Extract meaningful error message
   const extractErrorMessage = (error: any): string => {
-    // Check various error properties
     if (error?.cause?.message) return error.cause.message;
     if (error?.data?.message) return error.data.message;
     if (error?.reason) return error.reason;
     if (error?.message) {
-      // Clean up common Web3 error messages
       const msg = error.message;
       if (msg.includes('User denied')) return 'Transaction rejected by user';
       if (msg.includes('insufficient funds')) return 'Insufficient funds for gas';
       if (msg.includes('execution reverted')) {
-        // Try to extract revert reason
         const match = msg.match(/reason string '([^']+)'/);
         if (match) return match[1];
         return 'Transaction would fail - check oracle price or balance';
@@ -608,12 +598,12 @@ export const useOnChainTradingV2 = () => {
   };
 
   // Calculate open fee (local calculation for UI preview)
-  const calculateOpenFee = (margin: number): number => {
+  const calculateOpenFeeLocal = (margin: number): number => {
     return (margin * FEE_CONFIG.openFeeBps) / 10000;
   };
 
   // Calculate close fee (local calculation for UI preview)
-  const calculateCloseFee = (profit: number): number => {
+  const calculateCloseFeeLocal = (profit: number): number => {
     if (profit <= 0) return 0;
     return (profit * FEE_CONFIG.closeFeeBps) / 10000;
   };
@@ -622,13 +612,11 @@ export const useOnChainTradingV2 = () => {
   const openPosition = async (params: OpenPositionV2Params): Promise<string | null> => {
     setIsLoading(true);
     try {
-      // Network enforcement - last line of defense
       if (!(await enforceNetwork())) {
-        toast({ title: 'Wrong Network', description: 'Please switch to Polygon Amoy to trade.', variant: 'destructive' });
+        toast({ title: 'Wrong Network', description: `Please switch to ${networkName} to trade.`, variant: 'destructive' });
         return null;
       }
 
-      // Run preflight check first
       toast({
         title: 'Checking Oracle',
         description: `Verifying price feed for ${params.pair}...`,
@@ -646,19 +634,16 @@ export const useOnChainTradingV2 = () => {
 
       const { web3, account } = await getWeb3AndAccount();
       
-      // Validate pair
       const pairId = PAIR_IDS[params.pair];
       if (!pairId) {
         throw new Error(`Invalid trading pair: ${params.pair}`);
       }
 
-      // Check balance
       const balance = await getCollateralBalance();
       if (parseFloat(balance) < parseFloat(params.margin)) {
         throw new Error(`Insufficient tUSD balance. Have: ${balance}, Need: ${params.margin}`);
       }
 
-      // Ensure approval
       const approved = await ensureApproval(web3, account, params.margin);
       if (!approved) {
         return null;
@@ -668,8 +653,7 @@ export const useOnChainTradingV2 = () => {
       const marginWei = web3.utils.toWei(params.margin, 'mwei');
       const isLong = params.direction === 'buy';
 
-      // Calculate expected fee for display
-      const fee = calculateOpenFee(parseFloat(params.margin));
+      const fee = calculateOpenFeeLocal(parseFloat(params.margin));
       const netMargin = parseFloat(params.margin) - fee;
 
       toast({
@@ -677,7 +661,6 @@ export const useOnChainTradingV2 = () => {
         description: `Fee: ${fee.toFixed(2)} tUSD (0.08%) | Net margin: ${netMargin.toFixed(2)} tUSD`,
       });
 
-      // Try estimateGas first to catch reverts early
       try {
         await contract.methods
           .openPosition(pairId, isLong, marginWei, params.leverage, 0, 0)
@@ -715,9 +698,8 @@ export const useOnChainTradingV2 = () => {
   const closePosition = async (positionId: number): Promise<string | null> => {
     setIsLoading(true);
     try {
-      // Network enforcement - last line of defense
       if (!(await enforceNetwork())) {
-        toast({ title: 'Wrong Network', description: 'Please switch to Polygon Amoy to close positions.', variant: 'destructive' });
+        toast({ title: 'Wrong Network', description: `Please switch to ${networkName} to close positions.`, variant: 'destructive' });
         return null;
       }
 
@@ -753,13 +735,12 @@ export const useOnChainTradingV2 = () => {
     }
   };
 
-  // Liquidate a position (anyone can call - earns 30% reward)
+  // Liquidate a position
   const liquidatePosition = async (positionId: number): Promise<string | null> => {
     setIsLoading(true);
     try {
-      // Network enforcement
       if (!(await enforceNetwork())) {
-        toast({ title: 'Wrong Network', description: 'Please switch to Polygon Amoy.', variant: 'destructive' });
+        toast({ title: 'Wrong Network', description: `Please switch to ${networkName}.`, variant: 'destructive' });
         return null;
       }
 
@@ -948,9 +929,11 @@ export const useOnChainTradingV2 = () => {
     getMaticBalance,
     getPlatformConfig,
     getFeeConfig,
-    calculateOpenFee,
-    calculateCloseFee,
+    calculateOpenFee: calculateOpenFeeLocal,
+    calculateCloseFee: calculateCloseFeeLocal,
     computePairId,
     preflightCheck,
+    PAIR_IDS,
+    PRICE_ORACLE_V2_ADDRESS,
   };
 };

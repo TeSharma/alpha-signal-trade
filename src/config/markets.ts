@@ -49,6 +49,9 @@ export const getMarketMeta = (pair: string): MarketMeta | undefined =>
 export const getAmoyTradingMarkets = (): string[] => [...V1_AMOY_MARKETS];
 export const getMainnetTradingMarkets = (): string[] => [...V1_MAINNET_MARKETS];
 
+export const getMarketsForMode = (mode: 'demo' | 'live'): string[] =>
+  mode === 'demo' ? getAmoyTradingMarkets() : getMainnetTradingMarkets();
+
 export const isMainnetOnly = (pair: string): boolean =>
   MARKET_METADATA[pair]?.network === 'mainnet-only';
 

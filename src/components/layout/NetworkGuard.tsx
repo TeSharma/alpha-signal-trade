@@ -2,9 +2,11 @@ import React from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useNetworkEnforcement } from '@/hooks/useNetworkEnforcement';
+import { useApp } from '@/contexts/AppContext';
 
 const NetworkGuard = () => {
-  const { isCorrectNetwork, isWalletConnected, networkName, switchToAmoy } = useNetworkEnforcement();
+  const { state } = useApp();
+  const { isCorrectNetwork, isWalletConnected, networkName, requiredNetworkName, switchToRequiredNetwork } = useNetworkEnforcement(state.accountMode);
 
   // Only show when wallet is connected AND on the wrong network
   if (!isWalletConnected || isCorrectNetwork) return null;
@@ -15,16 +17,16 @@ const NetworkGuard = () => {
         <div className="flex items-center gap-2 text-sm font-medium">
           <AlertTriangle className="h-4 w-4 shrink-0" />
           <span>
-            You are connected to <strong>{networkName}</strong>. Please switch to Polygon Amoy to use this dApp.
+            You are connected to <strong>{networkName}</strong>. Please switch to {requiredNetworkName} to use this dApp.
           </span>
         </div>
         <Button
           size="sm"
           variant="secondary"
-          onClick={switchToAmoy}
+          onClick={switchToRequiredNetwork}
           className="whitespace-nowrap"
         >
-          Switch to Polygon Amoy
+          Switch to {requiredNetworkName}
         </Button>
       </div>
     </div>

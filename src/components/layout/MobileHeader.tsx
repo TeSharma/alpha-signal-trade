@@ -16,7 +16,7 @@ interface MobileHeaderProps {
 const MobileHeader = ({ accountMode, onAccountModeChange }: MobileHeaderProps) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const { isConnected, connectWallet, isConnecting } = useWallet();
-  const { isCorrectNetwork, isWalletConnected } = useNetworkEnforcement();
+  const { isCorrectNetwork, isWalletConnected, requiredNetworkName } = useNetworkEnforcement(accountMode);
 
   return (
     <div className="lg:hidden">

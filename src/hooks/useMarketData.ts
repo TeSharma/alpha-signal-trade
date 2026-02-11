@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import Web3 from 'web3';
-import { CONTRACT_ADDRESSES, AMOY_RPC_URL } from '@/config/contracts';
+import { CONTRACT_ADDRESSES, AMOY_RPC_URL, POLYGON_RPC_URL } from '@/config/contracts';
+import { V1_AMOY_MARKETS, V1_MAINNET_MARKETS } from '@/config/markets';
 
 // PriceOracleV2 ABI (uses bytes32 pairId)
 const PRICE_ORACLE_V2_ABI = [
@@ -30,11 +31,6 @@ const PRICE_ORACLE_V2_ABI = [
   }
 ];
 
-// Amoy: only POL/USD has a Chainlink feed; BTC/ETH activate on mainnet
-import { V1_AMOY_MARKETS } from '@/config/markets';
-
-const ORACLE_PAIRS = [...V1_AMOY_MARKETS]; // POL/USD only on Amoy
-
 export interface MarketPrice {
   pair: string;
   price: number;
@@ -51,7 +47,7 @@ export interface MarketPrice {
   updatedAt?: number; // Oracle timestamp
 }
 
-export const useMarketData = () => {
+export const useMarketData = (accountMode: 'demo' | 'live' = 'demo') => {
   const [web3, setWeb3] = useState<Web3 | null>(null);
   const [prices, setPrices] = useState<Record<string, MarketPrice>>({});
   const [isConnected, setIsConnected] = useState(false);
@@ -59,29 +55,35 @@ export const useMarketData = () => {
   const [isLoading, setIsLoading] = useState(false);
   const pairIdsRef = useRef<Record<string, string>>({});
 
-  // Initialize Web3 with public RPC (not MetaMask) for reads
+  // Mode-aware config
+  const rpcUrl = accountMode === 'demo' ? AMOY_RPC_URL : POLYGON_RPC_URL;
+  const oraclePairs = accountMode === 'demo' ? [...V1_AMOY_MARKETS] : [...V1_MAINNET_MARKETS];
+  const contractAddresses = accountMode === 'demo' ? CONTRACT_ADDRESSES.amoy : CONTRACT_ADDRESSES.polygon;
+
+  // Initialize Web3 with mode-aware RPC
   useEffect(() => {
     const initWeb3 = async () => {
-      // Always use public RPC for market data reads to avoid MetaMask overload
-      const web3Instance = new Web3(AMOY_RPC_URL);
+      const web3Instance = new Web3(rpcUrl);
       setWeb3(web3Instance);
       setIsConnected(true);
       
       // Pre-compute pair IDs
-      ORACLE_PAIRS.forEach(pair => {
+      oraclePairs.forEach(pair => {
         pairIdsRef.current[pair] = web3Instance.utils.keccak256(pair);
       });
       
       // Check if oracle is deployed
-      const oracleAddress = CONTRACT_ADDRESSES.amoy.PriceOracleV2;
+      const oracleAddress = contractAddresses.PriceOracleV2 as string;
       const zeroAddress = '0x0000000000000000000000000000000000000000';
-      if (oracleAddress && oracleAddress.toLowerCase() !== zeroAddress.toLowerCase()) {
+      if (oracleAddress && oracleAddress.length > 0 && oracleAddress.toLowerCase() !== zeroAddress.toLowerCase()) {
         setOracleAvailable(true);
+      } else {
+        setOracleAvailable(false);
       }
     };
     
     initWeb3();
-  }, []);
+  }, [rpcUrl, accountMode]);
 
   // Fetch price from PriceOracleV2
   const fetchOraclePrice = useCallback(async (pair: string): Promise<{ price: number; updatedAt: number; decimals: number } | null> => {
@@ -91,7 +93,7 @@ export const useMarketData = () => {
     if (!pairId) return null;
     
     try {
-      const contract = new web3.eth.Contract(PRICE_ORACLE_V2_ABI as any, CONTRACT_ADDRESSES.amoy.PriceOracleV2);
+      const contract = new web3.eth.Contract(PRICE_ORACLE_V2_ABI as any, contractAddresses.PriceOracleV2);
       
       // Check if feed exists first
       const hasFeed: boolean = await contract.methods.hasFeed(pairId).call();
@@ -112,9 +114,7 @@ export const useMarketData = () => {
       // Silent fail - oracle may not have this feed configured
       return null;
     }
-  }, [web3, oracleAvailable]);
-
-  // No simulated prices in v1 — only real oracle data is used
+  }, [web3, oracleAvailable, contractAddresses.PriceOracleV2]);
 
   // Create market price object
   const createMarketPrice = (
@@ -156,9 +156,8 @@ export const useMarketData = () => {
     try {
       const newPrices: Record<string, MarketPrice> = {};
       
-      // Fetch oracle prices for v1 crypto pairs only
       const oracleResults = await Promise.all(
-        ORACLE_PAIRS.map(async (pair) => {
+        oraclePairs.map(async (pair) => {
           const oracleResult = await fetchOraclePrice(pair);
           return { pair, oracleResult };
         })
@@ -178,18 +177,14 @@ export const useMarketData = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [web3, fetchOraclePrice, prices]);
+  }, [web3, fetchOraclePrice, prices, oraclePairs]);
 
-  // Initial load and periodic updates - slower polling (10s) to avoid RPC overload
+  // Initial load and periodic updates
   useEffect(() => {
     if (!web3) return;
     
-    // Initial fetch
     updatePrices();
-    
-    // Update every 10 seconds (reduced from 2s to prevent RPC spam)
     const interval = setInterval(updatePrices, 10000);
-    
     return () => clearInterval(interval);
   }, [web3]); // Only depend on web3
 
