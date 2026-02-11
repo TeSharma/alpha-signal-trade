@@ -14,15 +14,16 @@ import { useMarketData } from '@/hooks/useMarketData';
 import { useOnChainTradingV2 } from '@/hooks/useOnChainTradingV2';
 import { useToast } from '@/hooks/use-toast';
 import { useNetworkEnforcement } from '@/hooks/useNetworkEnforcement';
-import { getMinimums, isMainnet, FEE_CONFIG, calculateOpenFee } from '@/config/contracts';
-import { V1_TRADING_MARKETS, V1_AMOY_MARKETS, MARKET_METADATA, formatPrice, isMainnetOnly } from '@/config/markets';
+import { getMinimums, isMainnet, FEE_CONFIG, calculateOpenFee, getNetworkName } from '@/config/contracts';
+import { getMarketsForMode, MARKET_METADATA, formatPrice } from '@/config/markets';
 
 interface MobileTradingInterfaceProps {
   accountMode: 'demo' | 'live';
 }
 
 const MobileTradingInterface = ({ accountMode }: MobileTradingInterfaceProps) => {
-  const [selectedPair, setSelectedPair] = useState('POL/USD');
+  const availableMarkets = getMarketsForMode(accountMode);
+  const [selectedPair, setSelectedPair] = useState(availableMarkets[0] || 'POL/USD');
   const [tradeDirection, setTradeDirection] = useState<'buy' | 'sell'>('buy');
   const [lotSize, setLotSize] = useState('10');
   const [leverage, setLeverage] = useState(5);
@@ -34,17 +35,23 @@ const MobileTradingInterface = ({ accountMode }: MobileTradingInterfaceProps) =>
   const [maticBalance, setMaticBalance] = useState('0');
 
   const { createTrade, accountBalance } = useTrades();
-  const { prices, getCurrentPrice, getBidPrice, getAskPrice, oracleAvailable } = useMarketData();
-  const { openPosition: openOnChainPositionV2, isLoading: onChainLoading, approvalPending, getCollateralBalance, getMaticBalance, getPlatformConfig } = useOnChainTradingV2();
+  const { prices, getCurrentPrice, getBidPrice, getAskPrice, oracleAvailable } = useMarketData(accountMode);
+  const { openPosition: openOnChainPositionV2, isLoading: onChainLoading, approvalPending, getCollateralBalance, getMaticBalance, getPlatformConfig } = useOnChainTradingV2(accountMode);
   const { toast } = useToast();
-  const { isCorrectNetwork, currentChainId, switchToAmoy } = useNetworkEnforcement();
+  const { isCorrectNetwork, currentChainId, switchToRequiredNetwork, requiredNetworkName } = useNetworkEnforcement(accountMode);
   
-  // Get minimums based on current network
   const networkMinimums = getMinimums(currentChainId ?? undefined);
   const minMargin = networkMinimums.minMargin;
   const [maxLeverage, setMaxLeverage] = useState(50);
 
-  // Fetch collateral balance, MATIC balance, and platform config for live mode
+  // Reset selected pair when mode changes
+  useEffect(() => {
+    const markets = getMarketsForMode(accountMode);
+    if (!markets.includes(selectedPair)) {
+      setSelectedPair(markets[0] || 'POL/USD');
+    }
+  }, [accountMode, selectedPair]);
+
   useEffect(() => {
     if (accountMode === 'live') {
       getCollateralBalance().then(setCollateralBalance);
@@ -60,7 +67,6 @@ const MobileTradingInterface = ({ accountMode }: MobileTradingInterfaceProps) =>
   const bidPrice = getBidPrice(selectedPair);
   const askPrice = getAskPrice(selectedPair);
 
-  // Oracle health: in live mode, require oracle price for selected pair
   const oracleHealthy = accountMode === 'demo' || selectedPairData?.isOraclePrice === true;
   const maticLow = accountMode === 'live' && parseFloat(maticBalance) < 0.001;
 
@@ -69,74 +75,41 @@ const MobileTradingInterface = ({ accountMode }: MobileTradingInterfaceProps) =>
     setIsSubmitting(true);
 
     try {
-      // Validate inputs
       const marginAmount = parseFloat(lotSize);
       if (!lotSize || marginAmount <= 0) {
-        toast({
-          title: 'Invalid lot size',
-          description: 'Please enter a valid lot size',
-          variant: 'destructive'
-        });
+        toast({ title: 'Invalid lot size', description: 'Please enter a valid lot size', variant: 'destructive' });
         return;
       }
 
-      // Mainnet minimum margin validation
       if (accountMode === 'live' && isMainnet(currentChainId ?? undefined) && marginAmount < minMargin) {
-        toast({
-          title: 'Minimum Margin Required',
-          description: `Mainnet requires a minimum margin of ${minMargin} tUSD`,
-          variant: 'destructive'
-        });
+        toast({ title: 'Minimum Margin Required', description: `Mainnet requires a minimum margin of ${minMargin} tUSD`, variant: 'destructive' });
         return;
       }
 
-      // Pre-trade validation for live mode
       if (accountMode === 'live') {
         if (!isCorrectNetwork) {
-          toast({
-            title: 'Wrong Network',
-            description: 'Please switch to Polygon Amoy testnet to trade.',
-            variant: 'destructive'
-          });
+          toast({ title: 'Wrong Network', description: `Please switch to ${requiredNetworkName} to trade.`, variant: 'destructive' });
           return;
         }
 
         if (!oracleHealthy) {
-          toast({
-            title: 'Oracle Unavailable',
-            description: `Price feed for ${selectedPair} is offline or stale. Live trading requires fresh oracle data.`,
-            variant: 'destructive'
-          });
+          toast({ title: 'Oracle Unavailable', description: `Price feed for ${selectedPair} is offline or stale.`, variant: 'destructive' });
           return;
         }
 
         const balance = parseFloat(collateralBalance);
-        const requiredMargin = parseFloat(lotSize);
-        
-        if (balance < requiredMargin) {
-          toast({
-            title: 'Insufficient tUSD Balance',
-            description: `You need ${requiredMargin} tUSD but only have ${balance.toFixed(2)} tUSD.`,
-            variant: 'destructive'
-          });
+        if (balance < marginAmount) {
+          toast({ title: 'Insufficient tUSD Balance', description: `You need ${marginAmount} tUSD but only have ${balance.toFixed(2)} tUSD.`, variant: 'destructive' });
           return;
         }
 
         if (maticLow) {
-          toast({
-            title: 'Insufficient MATIC for Gas',
-            description: 'You need MATIC to pay gas fees. Get free MATIC from faucet.polygon.technology',
-            variant: 'destructive'
-          });
+          toast({ title: 'Insufficient Gas Token', description: 'You need native tokens to pay gas fees.', variant: 'destructive' });
           return;
         }
 
         if (typeof window.ethereum === 'undefined') {
-          toast({
-            title: 'Wallet Not Connected',
-            description: 'Please install and connect MetaMask.',
-            variant: 'destructive'
-          });
+          toast({ title: 'Wallet Not Connected', description: 'Please install and connect MetaMask.', variant: 'destructive' });
           return;
         }
       }
@@ -160,7 +133,6 @@ const MobileTradingInterface = ({ accountMode }: MobileTradingInterfaceProps) =>
           margin: lotSize,
           leverage: leverage
         });
-
         if (txHash) {
           getCollateralBalance().then(setCollateralBalance);
         }
@@ -170,10 +142,7 @@ const MobileTradingInterface = ({ accountMode }: MobileTradingInterfaceProps) =>
         setLotSize('10');
         setStopLoss('');
         setTakeProfit('');
-        toast({
-          title: 'Trade Placed',
-          description: `${tradeDirection.toUpperCase()} ${selectedPair} executed successfully`,
-        });
+        toast({ title: 'Trade Placed', description: `${tradeDirection.toUpperCase()} ${selectedPair} executed successfully` });
       }
     } catch (error: any) {
       console.error('Error submitting trade:', error);
@@ -208,43 +177,39 @@ const MobileTradingInterface = ({ accountMode }: MobileTradingInterfaceProps) =>
       {/* Oracle Status for Live Mode */}
       {accountMode === 'live' && (
         <div className="flex justify-center">
-          <OracleStatus />
+          <OracleStatus accountMode={accountMode} />
         </div>
       )}
 
-      {/* Pair Selector */}
+      {/* Pair Selector — only valid markets for mode */}
       <Card>
         <CardContent className="p-4">
           <Label className="text-sm font-medium">Trading Pair</Label>
-          <Select value={selectedPair} onValueChange={(v) => !isMainnetOnly(v) && setSelectedPair(v)}>
+          <Select value={selectedPair} onValueChange={setSelectedPair}>
             <SelectTrigger className="mt-2">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {V1_TRADING_MARKETS.map((pairName) => {
+              {availableMarkets.map((pairName) => {
                 const pairData = prices.find(p => p.pair === pairName);
                 const meta = MARKET_METADATA[pairName];
-                const mainnetOnly = isMainnetOnly(pairName);
                 return (
-                  <SelectItem key={pairName} value={pairName} disabled={mainnetOnly}>
+                  <SelectItem key={pairName} value={pairName}>
                     <div className="flex justify-between w-full">
-                      <span className={mainnetOnly ? 'opacity-50' : ''}>{meta?.icon} {meta?.symbol}/{pairName.split('/')[1]}</span>
-                      {mainnetOnly ? (
-                        <span className="ml-4 text-xs text-muted-foreground">Mainnet only</span>
-                      ) : (
-                        <span className="ml-4 text-sm text-muted-foreground">
-                          {pairData ? formatPrice(pairName, pairData.price) : '—'}
-                        </span>
-                      )}
+                      <span>{meta?.icon} {meta?.symbol}/{pairName.split('/')[1]}</span>
+                      <span className="ml-4 text-sm text-muted-foreground">
+                        {pairData ? formatPrice(pairName, pairData.price) : '—'}
+                      </span>
                     </div>
                   </SelectItem>
                 );
               })}
             </SelectContent>
           </Select>
-          <p className="text-xs text-muted-foreground mt-1">Forex markets coming in v2</p>
+          <p className="text-xs text-muted-foreground mt-1">
+            Forex markets — signals live, execution coming in v2
+          </p>
           
-          {/* Live mode collateral display */}
           {accountMode === 'live' && parseFloat(collateralBalance) > 0 && (
             <div className="mt-2 flex items-center gap-2">
               <Badge variant="outline" className="text-xs">
@@ -256,7 +221,7 @@ const MobileTradingInterface = ({ accountMode }: MobileTradingInterfaceProps) =>
         </CardContent>
       </Card>
 
-      {/* Chart View - Collapsible */}
+      {/* Chart View */}
       <CollapsibleCard title="Chart View" defaultOpen={showChart}>
         <div className="h-64 bg-muted rounded-lg flex items-center justify-center">
           <p className="text-muted-foreground">TradingView Chart</p>
@@ -275,7 +240,7 @@ const MobileTradingInterface = ({ accountMode }: MobileTradingInterfaceProps) =>
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* Trade Direction */}
+          {/* Direction */}
           <div className="space-y-2">
             <Label>Direction</Label>
             <div className="grid grid-cols-2 gap-2">
@@ -284,16 +249,14 @@ const MobileTradingInterface = ({ accountMode }: MobileTradingInterfaceProps) =>
                 className={`h-12 ${tradeDirection === 'buy' ? 'bg-green-500 hover:bg-green-600' : ''}`}
                 onClick={() => setTradeDirection('buy')}
               >
-                <TrendingUp className="h-4 w-4 mr-2" />
-                Buy
+                <TrendingUp className="h-4 w-4 mr-2" /> Buy
               </Button>
               <Button
                 variant={tradeDirection === 'sell' ? 'default' : 'outline'}
                 className={`h-12 ${tradeDirection === 'sell' ? 'bg-red-500 hover:bg-red-600' : ''}`}
                 onClick={() => setTradeDirection('sell')}
               >
-                <TrendingDown className="h-4 w-4 mr-2" />
-                Sell
+                <TrendingDown className="h-4 w-4 mr-2" /> Sell
               </Button>
             </div>
           </div>
@@ -303,8 +266,7 @@ const MobileTradingInterface = ({ accountMode }: MobileTradingInterfaceProps) =>
             <div className="flex items-center justify-between">
               <Label>{accountMode === 'live' ? 'Margin (tUSD)' : 'Lot Size'}</Label>
               <Button variant="ghost" size="sm" onClick={calculateLotSize}>
-                <Calculator className="h-4 w-4 mr-1" />
-                Calc
+                <Calculator className="h-4 w-4 mr-1" /> Calc
               </Button>
             </div>
             <Input
@@ -324,18 +286,10 @@ const MobileTradingInterface = ({ accountMode }: MobileTradingInterfaceProps) =>
                 <Label>Leverage</Label>
                 <Badge variant="outline" className="font-mono">{leverage}x</Badge>
               </div>
-              <Slider
-                value={[leverage]}
-                onValueChange={(value) => setLeverage(value[0])}
-                min={1}
-                max={maxLeverage}
-                step={1}
-                className="w-full"
-              />
+              <Slider value={[leverage]} onValueChange={(value) => setLeverage(value[0])} min={1} max={maxLeverage} step={1} className="w-full" />
               {leverage >= 20 && (
                 <div className="flex items-center gap-2 text-xs text-amber-600 bg-amber-50 dark:bg-amber-950/30 p-2 rounded">
-                  <AlertTriangle className="h-3 w-3" />
-                  High leverage risk
+                  <AlertTriangle className="h-3 w-3" /> High leverage risk
                 </div>
               )}
             </div>
@@ -345,23 +299,11 @@ const MobileTradingInterface = ({ accountMode }: MobileTradingInterfaceProps) =>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
               <Label className="text-sm">Stop Loss</Label>
-              <Input
-                type="number"
-                value={stopLoss}
-                onChange={(e) => setStopLoss(e.target.value)}
-                placeholder="SL"
-                step="0.01"
-              />
+              <Input type="number" value={stopLoss} onChange={(e) => setStopLoss(e.target.value)} placeholder="SL" step="0.01" />
             </div>
             <div className="space-y-2">
               <Label className="text-sm">Take Profit</Label>
-              <Input
-                type="number"
-                value={takeProfit}
-                onChange={(e) => setTakeProfit(e.target.value)}
-                placeholder="TP"
-                step="0.01"
-              />
+              <Input type="number" value={takeProfit} onChange={(e) => setTakeProfit(e.target.value)} placeholder="TP" step="0.01" />
             </div>
           </div>
 
@@ -370,26 +312,15 @@ const MobileTradingInterface = ({ accountMode }: MobileTradingInterfaceProps) =>
             <div className="bg-muted rounded-lg p-3 space-y-2">
               <h4 className="font-semibold text-sm">Trade Summary</h4>
               <div className="grid grid-cols-2 gap-2 text-sm">
-                <div className="flex justify-between">
-                  <span>Pair:</span>
-                  <span>{selectedPair}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Price:</span>
-                  <span>{selectedPairData.price}</span>
-                </div>
+                <div className="flex justify-between"><span>Pair:</span><span>{selectedPair}</span></div>
+                <div className="flex justify-between"><span>Price:</span><span>{selectedPairData.price}</span></div>
                 <div className="flex justify-between">
                   <span>Direction:</span>
-                  <span className={tradeDirection === 'buy' ? 'text-green-500' : 'text-red-500'}>
-                    {tradeDirection.toUpperCase()}
-                  </span>
+                  <span className={tradeDirection === 'buy' ? 'text-green-500' : 'text-red-500'}>{tradeDirection.toUpperCase()}</span>
                 </div>
                 {accountMode === 'live' ? (
                   <>
-                    <div className="flex justify-between">
-                      <span>Margin:</span>
-                      <span>{lotSize} tUSD</span>
-                    </div>
+                    <div className="flex justify-between"><span>Margin:</span><span>{lotSize} tUSD</span></div>
                     <div className="flex justify-between col-span-2 text-muted-foreground">
                       <span>Open Fee ({(FEE_CONFIG.openFeeBps / 100).toFixed(2)}%):</span>
                       <span>-{calculateOpenFee(parseFloat(lotSize || '0')).toFixed(4)} tUSD</span>
@@ -407,10 +338,7 @@ const MobileTradingInterface = ({ accountMode }: MobileTradingInterfaceProps) =>
                     </div>
                   </>
                 ) : (
-                  <div className="flex justify-between">
-                    <span>Lot:</span>
-                    <span>{lotSize}</span>
-                  </div>
+                  <div className="flex justify-between"><span>Lot:</span><span>{lotSize}</span></div>
                 )}
               </div>
             </div>
@@ -418,12 +346,10 @@ const MobileTradingInterface = ({ accountMode }: MobileTradingInterfaceProps) =>
         </CardContent>
       </Card>
 
-      {/* Open Positions - Only for live mode with V2 positions panel integration */}
+      {/* Demo positions notice */}
       {accountMode === 'demo' && (
         <CollapsibleCard title="Open Positions">
-          <div className="text-center text-sm text-muted-foreground py-4">
-            Demo positions are shown in Trade History
-          </div>
+          <div className="text-center text-sm text-muted-foreground py-4">Demo positions are shown in Trade History</div>
         </CollapsibleCard>
       )}
 
@@ -431,8 +357,8 @@ const MobileTradingInterface = ({ accountMode }: MobileTradingInterfaceProps) =>
       {accountMode === 'live' && !isCorrectNetwork && (
         <div className="flex items-center gap-2 text-sm text-amber-600 bg-amber-50 dark:bg-amber-950/30 p-3 rounded-lg">
           <AlertTriangle className="h-4 w-4 shrink-0" />
-          <span>Switch to Polygon Amoy to trade</span>
-          <Button variant="outline" size="sm" className="ml-auto" onClick={switchToAmoy}>Switch</Button>
+          <span>Switch to {requiredNetworkName} to trade</span>
+          <Button variant="outline" size="sm" className="ml-auto" onClick={switchToRequiredNetwork}>Switch</Button>
         </div>
       )}
 
@@ -446,8 +372,7 @@ const MobileTradingInterface = ({ accountMode }: MobileTradingInterfaceProps) =>
       {accountMode === 'live' && isCorrectNetwork && maticLow && (
         <div className="flex items-center gap-2 text-sm text-amber-600 bg-amber-50 dark:bg-amber-950/30 p-3 rounded-lg">
           <AlertTriangle className="h-4 w-4 shrink-0" />
-          <span>Low MATIC for gas fees</span>
-          <a href="https://faucet.polygon.technology/" target="_blank" rel="noopener noreferrer" className="ml-auto text-xs underline">Get MATIC</a>
+          <span>Low gas token balance</span>
         </div>
       )}
 
@@ -484,7 +409,6 @@ const MobileTradingInterface = ({ accountMode }: MobileTradingInterfaceProps) =>
         </Button>
       </div>
 
-      {/* Bottom padding to prevent content being hidden behind sticky button */}
       <div className="h-20"></div>
     </main>
   );

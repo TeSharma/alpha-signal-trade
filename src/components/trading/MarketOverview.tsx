@@ -4,12 +4,17 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { TrendingUp, TrendingDown, BarChart3, Wifi, WifiOff, RefreshCw, Zap, Info } from "lucide-react"
 import { useMarketData } from '@/hooks/useMarketData'
-import { V1_TRADING_MARKETS, MARKET_METADATA, formatPrice, isMainnetOnly } from '@/config/markets'
+import { getMarketsForMode, MARKET_METADATA, formatPrice } from '@/config/markets'
 
-const MarketOverview = () => {
-  const { prices, isConnected, oracleAvailable, updatePrices, isLoading } = useMarketData()
+interface MarketOverviewProps {
+  accountMode?: 'demo' | 'live';
+}
+
+const MarketOverview = ({ accountMode = 'demo' }: MarketOverviewProps) => {
+  const { prices, isConnected, oracleAvailable, updatePrices, isLoading } = useMarketData(accountMode)
   const [selectedTimeframe, setSelectedTimeframe] = useState('1m')
 
+  const marketsForMode = getMarketsForMode(accountMode)
   const timeframes = ['1m', '5m', '15m', '1h', '4h', '1d']
 
   return (
@@ -82,7 +87,7 @@ const MarketOverview = () => {
         </CardContent>
       </Card>
 
-      {/* Market Overview */}
+      {/* Market Overview — only markets valid for the current mode */}
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
@@ -97,32 +102,30 @@ const MarketOverview = () => {
         </CardHeader>
         <CardContent>
           <div className="space-y-3">
-            {/* Mainnet-only pairs shown as disabled */}
-            {V1_TRADING_MARKETS.filter(p => isMainnetOnly(p)).map((pairName) => {
-              const meta = MARKET_METADATA[pairName]
-              return (
-                <div key={pairName} className="flex items-center justify-between p-3 border rounded-lg opacity-50">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 rounded-full bg-muted">
-                      <BarChart3 className="h-4 w-4 text-muted-foreground" />
-                    </div>
-                    <div>
-                      <p className="font-semibold">{meta?.icon} {pairName}</p>
-                      <Badge variant="outline" className="text-[10px]">Mainnet only</Badge>
-                    </div>
-                  </div>
-                  <div className="text-right text-sm text-muted-foreground">—</div>
-                </div>
-              )
-            })}
-
             {/* Active pairs with live data */}
-            {prices
-              .filter(item => (V1_TRADING_MARKETS as readonly string[]).includes(item.pair) && !isMainnetOnly(item.pair))
-              .map((item) => {
-              const meta = MARKET_METADATA[item.pair]
+            {marketsForMode.map((pairName) => {
+              const item = prices.find(p => p.pair === pairName)
+              const meta = MARKET_METADATA[pairName]
+              
+              if (!item) {
+                return (
+                  <div key={pairName} className="flex items-center justify-between p-3 border rounded-lg">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 rounded-full bg-muted">
+                        <BarChart3 className="h-4 w-4 text-muted-foreground" />
+                      </div>
+                      <div>
+                        <p className="font-semibold">{meta?.icon} {pairName}</p>
+                        <p className="text-xs text-muted-foreground">Waiting for oracle data...</p>
+                      </div>
+                    </div>
+                    <div className="text-right text-sm text-muted-foreground">—</div>
+                  </div>
+                )
+              }
+
               return (
-                <div key={item.pair} className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50 transition-colors cursor-pointer">
+                <div key={pairName} className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50 transition-colors cursor-pointer">
                   <div className="flex items-center gap-3">
                     <div className={`p-2 rounded-full ${
                       item.changePercent >= 0 ? 'bg-green-100' : 'bg-red-100'
@@ -134,13 +137,13 @@ const MarketOverview = () => {
                       )}
                     </div>
                     <div>
-                      <p className="font-semibold">{meta?.icon} {item.pair}</p>
+                      <p className="font-semibold">{meta?.icon} {pairName}</p>
                       <p className="text-sm text-gray-600">Vol: {item.volume}</p>
                     </div>
                   </div>
                   <div className="text-right">
                     <div className="flex items-center justify-end gap-1">
-                      <p className="font-semibold">{formatPrice(item.pair, item.price)}</p>
+                      <p className="font-semibold">{formatPrice(pairName, item.price)}</p>
                       {item.isOraclePrice && (
                         <span title="Chainlink Oracle">
                           <Zap className="h-3 w-3 text-yellow-500" />
@@ -159,18 +162,12 @@ const MarketOverview = () => {
                 </div>
               )
             })}
-            {prices.filter(item => (V1_TRADING_MARKETS as readonly string[]).includes(item.pair) && !isMainnetOnly(item.pair)).length === 0 && (
-              <div className="text-center py-6 text-muted-foreground">
-                <p>Waiting for oracle data...</p>
-                <p className="text-xs mt-1">POL/USD will appear once Chainlink feed is active</p>
-              </div>
-            )}
           </div>
           
           {/* Forex v2 Notice */}
           <div className="mt-4 flex items-center gap-2 text-sm text-muted-foreground bg-muted rounded-lg p-3">
             <Info className="h-4 w-4 shrink-0" />
-            <span>Forex markets (EUR/USD, GBP/USD, USD/JPY) coming in v2 with dedicated oracle integration</span>
+            <span>Forex markets (EUR/USD, GBP/USD, USD/JPY) — AI signals live, on-chain execution coming in v2</span>
           </div>
         </CardContent>
       </Card>

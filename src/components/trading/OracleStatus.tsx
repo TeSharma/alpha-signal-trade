@@ -4,21 +4,14 @@ import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Activity, AlertTriangle, CheckCircle, XCircle, RefreshCw, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { PRICE_ORACLE_V2_ADDRESS, PAIR_IDS } from '@/hooks/useOnChainTradingV2';
-import { AMOY_RPC_URL } from '@/config/contracts';
+import { getRpcUrl, getContractAddresses, type AccountMode } from '@/config/contracts';
+import { getMarketsForMode } from '@/config/markets';
 
 // Compute pair IDs locally without MetaMask provider
 const computePairIdLocal = (pair: string): string => {
   const web3 = new Web3();
   return web3.utils.keccak256(pair);
 };
-
-// RPC endpoints — Alchemy primary, public fallbacks
-const RPC_ENDPOINTS = [
-  AMOY_RPC_URL,
-  'https://polygon-amoy.drpc.org/',
-  'https://polygon-amoy-bor-rpc.publicnode.com'
-];
 
 // PriceOracleV2 ABI - minimal for getPrice
 const PRICE_ORACLE_V2_ABI = [
@@ -51,35 +44,50 @@ interface OracleFeedStatus {
 
 type OverallStatus = 'healthy' | 'degraded' | 'unavailable' | 'loading';
 
-// Staleness thresholds (in seconds)
-const STALE_THRESHOLD = 5 * 60; // 5 minutes - yellow warning
-const CRITICAL_THRESHOLD = 30 * 60; // 30 minutes - red warning
+const STALE_THRESHOLD = 5 * 60;
+const CRITICAL_THRESHOLD = 30 * 60;
 
-const OracleStatus = () => {
+interface OracleStatusProps {
+  accountMode?: AccountMode;
+}
+
+const OracleStatus = ({ accountMode = 'demo' }: OracleStatusProps) => {
   const [feedStatuses, setFeedStatuses] = useState<OracleFeedStatus[]>([]);
   const [overallStatus, setOverallStatus] = useState<OverallStatus>('loading');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
   const [isConnected, setIsConnected] = useState(false);
 
+  // Mode-aware config
+  const rpcUrl = getRpcUrl(accountMode);
+  const addresses = getContractAddresses(accountMode);
+  const oracleAddress = addresses.PriceOracleV2 as string;
+  const pairs = getMarketsForMode(accountMode);
+
+  // RPC endpoints with fallbacks
+  const RPC_ENDPOINTS = accountMode === 'demo'
+    ? [rpcUrl, 'https://polygon-amoy.drpc.org/', 'https://polygon-amoy-bor-rpc.publicnode.com']
+    : [rpcUrl, 'https://polygon-rpc.com/', 'https://polygon-bor-rpc.publicnode.com'];
+
   const fetchOracleStatus = useCallback(async (rpcIndex: number = 0) => {
+    if (!oracleAddress || oracleAddress === '') {
+      setOverallStatus('unavailable');
+      return;
+    }
+
     setIsRefreshing(true);
     const maxRetries = RPC_ENDPOINTS.length;
     
     try {
-      // Use public RPC instead of MetaMask provider to reduce load
       const endpoint = RPC_ENDPOINTS[rpcIndex % RPC_ENDPOINTS.length];
       const web3 = new Web3(endpoint);
-      const contract = new web3.eth.Contract(PRICE_ORACLE_V2_ABI as any, PRICE_ORACLE_V2_ADDRESS);
+      const contract = new web3.eth.Contract(PRICE_ORACLE_V2_ABI as any, oracleAddress);
       
-      // Check if contract is reachable
       try {
-        await web3.eth.getCode(PRICE_ORACLE_V2_ADDRESS);
+        await web3.eth.getCode(oracleAddress);
         setIsConnected(true);
       } catch (error: any) {
-        // Retry with fallback RPC
         if (rpcIndex < maxRetries - 1) {
-          console.log(`OracleStatus: Retrying with fallback RPC (attempt ${rpcIndex + 2}/${maxRetries})...`);
           return fetchOracleStatus(rpcIndex + 1);
         }
         setOverallStatus('unavailable');
@@ -87,36 +95,18 @@ const OracleStatus = () => {
         return;
       }
 
-      const pairs = Object.keys(PAIR_IDS);
       const currentTime = Math.floor(Date.now() / 1000);
       
       const statuses: OracleFeedStatus[] = await Promise.all(
         pairs.map(async (pair) => {
           try {
             const pairId = computePairIdLocal(pair);
-            if (!pairId) {
-              return {
-                pair,
-                available: false,
-                lastUpdated: null,
-                price: null,
-                isStale: true
-              };
-            }
 
-            // Check if feed exists
             const hasFeed = await contract.methods.hasFeed(pairId).call() as boolean;
             if (!hasFeed) {
-              return {
-                pair,
-                available: false,
-                lastUpdated: null,
-                price: null,
-                isStale: true
-              };
+              return { pair, available: false, lastUpdated: null, price: null, isStale: true };
             }
 
-            // Get price and timestamp
             const result = await contract.methods.getPrice(pairId).call() as { price: string; updatedAt: string };
             const updatedAt = Number(result.updatedAt);
             const price = web3.utils.fromWei(result.price, 'ether');
@@ -130,14 +120,7 @@ const OracleStatus = () => {
               isStale: staleness > STALE_THRESHOLD
             };
           } catch (error) {
-            console.error(`Error fetching oracle status for ${pair}:`, error);
-            return {
-              pair,
-              available: false,
-              lastUpdated: null,
-              price: null,
-              isStale: true
-            };
+            return { pair, available: false, lastUpdated: null, price: null, isStale: true };
           }
         })
       );
@@ -145,7 +128,6 @@ const OracleStatus = () => {
       setFeedStatuses(statuses);
       setLastRefresh(new Date());
 
-      // Determine overall status
       const availableFeeds = statuses.filter(s => s.available);
       const staleFeeds = statuses.filter(s => s.isStale);
       
@@ -162,52 +144,38 @@ const OracleStatus = () => {
     } finally {
       setIsRefreshing(false);
     }
-  }, []);
+  }, [oracleAddress, pairs, RPC_ENDPOINTS]);
 
   useEffect(() => {
     fetchOracleStatus();
-    
-    // Refresh every 60 seconds
     const interval = setInterval(fetchOracleStatus, 60000);
     return () => clearInterval(interval);
   }, [fetchOracleStatus]);
 
   const getStatusIcon = () => {
     switch (overallStatus) {
-      case 'healthy':
-        return <CheckCircle className="h-4 w-4 text-green-500" />;
-      case 'degraded':
-        return <AlertTriangle className="h-4 w-4 text-yellow-500" />;
-      case 'unavailable':
-        return <XCircle className="h-4 w-4 text-red-500" />;
-      case 'loading':
-        return <Activity className="h-4 w-4 text-muted-foreground animate-pulse" />;
+      case 'healthy': return <CheckCircle className="h-4 w-4 text-green-500" />;
+      case 'degraded': return <AlertTriangle className="h-4 w-4 text-yellow-500" />;
+      case 'unavailable': return <XCircle className="h-4 w-4 text-red-500" />;
+      case 'loading': return <Activity className="h-4 w-4 text-muted-foreground animate-pulse" />;
     }
   };
 
   const getStatusText = () => {
     switch (overallStatus) {
-      case 'healthy':
-        return 'Oracle Active';
-      case 'degraded':
-        return 'Feeds Stale';
-      case 'unavailable':
-        return 'Oracle Offline';
-      case 'loading':
-        return 'Connecting...';
+      case 'healthy': return 'Oracle Active';
+      case 'degraded': return 'Feeds Stale';
+      case 'unavailable': return 'Oracle Offline';
+      case 'loading': return 'Connecting...';
     }
   };
 
   const getStatusColor = () => {
     switch (overallStatus) {
-      case 'healthy':
-        return 'bg-green-50 border-green-200 dark:bg-green-950/20 dark:border-green-800';
-      case 'degraded':
-        return 'bg-yellow-50 border-yellow-200 dark:bg-yellow-950/20 dark:border-yellow-800';
-      case 'unavailable':
-        return 'bg-red-50 border-red-200 dark:bg-red-950/20 dark:border-red-800';
-      case 'loading':
-        return 'bg-muted border-border';
+      case 'healthy': return 'bg-green-50 border-green-200 dark:bg-green-950/20 dark:border-green-800';
+      case 'degraded': return 'bg-yellow-50 border-yellow-200 dark:bg-yellow-950/20 dark:border-yellow-800';
+      case 'unavailable': return 'bg-red-50 border-red-200 dark:bg-red-950/20 dark:border-red-800';
+      case 'loading': return 'bg-muted border-border';
     }
   };
 
@@ -291,7 +259,7 @@ const OracleStatus = () => {
                       </>
                     ) : (
                       <>
-                        <span className="text-xs text-muted-foreground">Simulated</span>
+                        <span className="text-xs text-muted-foreground">No feed</span>
                         <XCircle className="h-3 w-3 text-red-400" />
                       </>
                     )}
