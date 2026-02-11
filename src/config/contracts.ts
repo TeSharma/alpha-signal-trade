@@ -4,6 +4,9 @@
 export const AMOY_RPC_URL = import.meta.env.VITE_ALCHEMY_AMOY_RPC
   || 'https://rpc-amoy.polygon.technology/';
 
+export const POLYGON_RPC_URL = import.meta.env.VITE_ALCHEMY_POLYGON_RPC
+  || 'https://polygon-rpc.com/';
+
 export const CONTRACT_ADDRESSES = {
   amoy: {
     TokenizedCurrency: "0xdb204732615f1EC2bDb1Aae2032bC9DE7aA8c164",
@@ -12,7 +15,13 @@ export const CONTRACT_ADDRESSES = {
     TradingPlatformV2: "0x133DC29e4D6f366E8Ad05454eba452c7BC56573D",
     Treasury: "0x09C2B58F6004176bD83cc000d804eD3c1041754E",
   },
-  polygon: {},
+  polygon: {
+    TokenizedCurrency: "",
+    TUSDFaucet: "",
+    PriceOracleV2: "",
+    TradingPlatformV2: "",
+    Treasury: "",
+  },
 } as const;
 
 // ============================================
@@ -23,6 +32,29 @@ export const CHAIN_IDS = {
   polygon: 137,       // Polygon Mainnet
   mainnet: 1,         // Ethereum Mainnet
 } as const;
+
+// ============================================
+// MODE-AWARE HELPERS
+// ============================================
+export type AccountMode = 'demo' | 'live';
+
+export const getRequiredChainId = (mode: AccountMode): number =>
+  mode === 'demo' ? CHAIN_IDS.amoy : CHAIN_IDS.polygon;
+
+export const getRequiredChainHex = (mode: AccountMode): string =>
+  mode === 'demo' ? '0x13882' : '0x89';
+
+export const getRpcUrl = (mode: AccountMode): string =>
+  mode === 'demo' ? AMOY_RPC_URL : POLYGON_RPC_URL;
+
+export const getNetworkParams = (mode: AccountMode) =>
+  mode === 'demo' ? AMOY_NETWORK_PARAMS : POLYGON_NETWORK_PARAMS;
+
+export const getContractAddresses = (mode: AccountMode) =>
+  mode === 'demo' ? CONTRACT_ADDRESSES.amoy : CONTRACT_ADDRESSES.polygon;
+
+export const getNetworkName = (mode: AccountMode): string =>
+  mode === 'demo' ? 'Polygon Amoy' : 'Polygon Mainnet';
 
 // ============================================
 // TRADING MINIMUMS (per network)
@@ -55,17 +87,25 @@ export const getMinimums = (chainId?: number) => {
 // FEE CONFIGURATION (matches smart contract)
 // ============================================
 // ============================================
-// REQUIRED NETWORK (Polygon Amoy)
+// REQUIRED NETWORK — legacy exports (prefer mode-aware helpers above)
 // ============================================
 export const REQUIRED_CHAIN_ID = CHAIN_IDS.amoy; // 80002
 export const REQUIRED_CHAIN_ID_HEX = '0x13882';
 
 export const AMOY_NETWORK_PARAMS = {
-  chainId: REQUIRED_CHAIN_ID_HEX,
+  chainId: '0x13882',
   chainName: 'Polygon Amoy Testnet',
   rpcUrls: [AMOY_RPC_URL],
   nativeCurrency: { name: 'MATIC', symbol: 'MATIC', decimals: 18 },
   blockExplorerUrls: ['https://amoy.polygonscan.com/'],
+} as const;
+
+export const POLYGON_NETWORK_PARAMS = {
+  chainId: '0x89',
+  chainName: 'Polygon Mainnet',
+  rpcUrls: [POLYGON_RPC_URL],
+  nativeCurrency: { name: 'POL', symbol: 'POL', decimals: 18 },
+  blockExplorerUrls: ['https://polygonscan.com/'],
 } as const;
 
 export const FEE_CONFIG = {

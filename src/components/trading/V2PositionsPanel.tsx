@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { RefreshCw, TrendingUp, TrendingDown, AlertTriangle, X } from "lucide-react";
-import { useOnChainTradingV2, PositionV2, PAIR_IDS } from '@/hooks/useOnChainTradingV2';
+import { useOnChainTradingV2, PositionV2 } from '@/hooks/useOnChainTradingV2';
 import { useNetworkEnforcement } from '@/hooks/useNetworkEnforcement';
 
 interface V2PositionsPanelProps {
