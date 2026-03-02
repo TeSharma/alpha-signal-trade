@@ -75,7 +75,7 @@ export const useMarketData = (accountMode: 'demo' | 'live' = 'demo') => {
       // Check if oracle is deployed
       const oracleAddress = contractAddresses.PriceOracleV2 as string;
       const zeroAddress = '0x0000000000000000000000000000000000000000';
-      if (oracleAddress && oracleAddress.length > 0 && oracleAddress.toLowerCase() !== zeroAddress.toLowerCase()) {
+      if (oracleAddress && oracleAddress !== '' && oracleAddress.length > 2 && oracleAddress.toLowerCase() !== zeroAddress.toLowerCase()) {
         setOracleAvailable(true);
       } else {
         setOracleAvailable(false);
