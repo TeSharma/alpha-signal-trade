@@ -341,14 +341,17 @@ export const useOnChainTradingV2 = (accountMode: AccountMode = 'demo') => {
   }, [RPC_ENDPOINTS]);
 
   const getTradingContract = useCallback((web3: Web3) => {
+    if (!TRADING_PLATFORM_V2_ADDRESS) return null;
     return new web3.eth.Contract(TRADING_PLATFORM_V2_ABI as any, TRADING_PLATFORM_V2_ADDRESS);
   }, [TRADING_PLATFORM_V2_ADDRESS]);
 
   const getOracleContract = useCallback((web3: Web3) => {
+    if (!PRICE_ORACLE_V2_ADDRESS) return null;
     return new web3.eth.Contract(PRICE_ORACLE_V2_ABI as any, PRICE_ORACLE_V2_ADDRESS);
   }, [PRICE_ORACLE_V2_ADDRESS]);
 
   const getCollateralContract = useCallback((web3: Web3) => {
+    if (!TUSD_ADDRESS) return null;
     return new web3.eth.Contract(ERC20_ABI as any, TUSD_ADDRESS);
   }, [TUSD_ADDRESS]);
 
@@ -362,6 +365,10 @@ export const useOnChainTradingV2 = (accountMode: AccountMode = 'demo') => {
       
       const oracleContract = getOracleContract(web3);
       const tradingContract = getTradingContract(web3);
+      
+      if (!oracleContract || !tradingContract) {
+        return { success: false, error: 'Contracts not deployed on this network' };
+      }
       
       let priceResult: any;
       let hasFeed = false;
@@ -451,6 +458,7 @@ export const useOnChainTradingV2 = (accountMode: AccountMode = 'demo') => {
     marginAmount: string
   ): Promise<boolean> => {
     const collateralContract = getCollateralContract(web3);
+    if (!collateralContract || !TRADING_PLATFORM_V2_ADDRESS) return false;
     const marginWei = web3.utils.toWei(marginAmount, 'mwei');
 
     try {
@@ -517,6 +525,7 @@ export const useOnChainTradingV2 = (accountMode: AccountMode = 'demo') => {
     try {
       const { web3, account } = await getWeb3AndAccount();
       const collateralContract = getCollateralContract(web3);
+      if (!collateralContract) return '0';
       const balance = await collateralContract.methods.balanceOf(account).call() as unknown as string;
       return web3.utils.fromWei(balance, 'mwei');
     } catch (error) {
@@ -542,6 +551,7 @@ export const useOnChainTradingV2 = (accountMode: AccountMode = 'demo') => {
     try {
       const { web3 } = await getWeb3AndAccount();
       const contract = getTradingContract(web3);
+      if (!contract) return null;
 
       const [maxLeverage, maintenanceMarginBps, maxProfitBps, priceTimeout, feeConfig] = await Promise.all([
         contract.methods.maxLeverage().call(),
@@ -577,6 +587,7 @@ export const useOnChainTradingV2 = (accountMode: AccountMode = 'demo') => {
     try {
       const { web3 } = await getWeb3AndAccount();
       const contract = getTradingContract(web3);
+      if (!contract) return null;
 
       const result: any = await contract.methods.getFeeConfig().call();
       
@@ -650,6 +661,7 @@ export const useOnChainTradingV2 = (accountMode: AccountMode = 'demo') => {
       }
 
       const contract = getTradingContract(web3);
+      if (!contract) throw new Error('Trading contract not deployed on this network');
       const marginWei = web3.utils.toWei(params.margin, 'mwei');
       const isLong = params.direction === 'buy';
 
@@ -705,6 +717,7 @@ export const useOnChainTradingV2 = (accountMode: AccountMode = 'demo') => {
 
       const { web3, account } = await getWeb3AndAccount();
       const contract = getTradingContract(web3);
+      if (!contract) throw new Error('Trading contract not deployed on this network');
 
       toast({
         title: 'Closing Position',
@@ -746,6 +759,7 @@ export const useOnChainTradingV2 = (accountMode: AccountMode = 'demo') => {
 
       const { web3, account } = await getWeb3AndAccount();
       const contract = getTradingContract(web3);
+      if (!contract) throw new Error('Trading contract not deployed on this network');
 
       toast({
         title: 'Liquidating Position',
@@ -781,6 +795,7 @@ export const useOnChainTradingV2 = (accountMode: AccountMode = 'demo') => {
     try {
       const { web3, account } = await getWeb3AndAccount();
       const contract = getTradingContract(web3);
+      if (!contract) return [];
 
       const positionIds: any[] = await contract.methods
         .getUserOpenPositions(account)
@@ -829,6 +844,7 @@ export const useOnChainTradingV2 = (accountMode: AccountMode = 'demo') => {
     try {
       const { web3, account } = await getWeb3AndAccount();
       const contract = getTradingContract(web3);
+      if (!contract) return [];
 
       const positionIds: any[] = await contract.methods
         .getUserPositions(account)
@@ -882,6 +898,7 @@ export const useOnChainTradingV2 = (accountMode: AccountMode = 'demo') => {
     try {
       const { web3 } = await getWeb3AndAccount();
       const contract = getTradingContract(web3);
+      if (!contract) return null;
 
       const position: any = await contract.methods.getPosition(positionId).call();
       
