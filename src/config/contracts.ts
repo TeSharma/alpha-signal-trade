@@ -7,6 +7,9 @@ export const AMOY_RPC_URL = import.meta.env.VITE_ALCHEMY_AMOY_RPC
 export const POLYGON_RPC_URL = import.meta.env.VITE_ALCHEMY_POLYGON_RPC
   || 'https://polygon-rpc.com/';
 
+// Native USDC on Polygon Mainnet (6 decimals — same unit as tUSD mwei)
+export const POLYGON_USDC = '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359';
+
 export const CONTRACT_ADDRESSES = {
   amoy: {
     TokenizedCurrency: "0xdb204732615f1EC2bDb1Aae2032bC9DE7aA8c164",
@@ -16,10 +19,10 @@ export const CONTRACT_ADDRESSES = {
     Treasury: "0x09C2B58F6004176bD83cc000d804eD3c1041754E",
   },
   polygon: {
-    TokenizedCurrency: "",
-    TUSDFaucet: "",
-    PriceOracleV2: "",
-    TradingPlatformV2: "",
+    TokenizedCurrency: POLYGON_USDC,  // USDC is the collateral token in live mode
+    TUSDFaucet: "",                   // No faucet on mainnet
+    PriceOracleV2: "",                // Set after running deploy-mainnet.js
+    TradingPlatformV2: "",            // Set after running deploy-mainnet.js
     Treasury: "",
   },
 } as const;
