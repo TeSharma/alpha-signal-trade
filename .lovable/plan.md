@@ -1,60 +1,66 @@
 
 
-## Fix Oracle Crash: Empty Address Guards
+## Deploy to Polygon Mainnet with USDC Collateral
 
-### Problem
-Components crash with "Contract address not specified" because `CONTRACT_ADDRESSES.polygon` has empty strings. When any code path evaluates live-mode addresses (or components don't pass `accountMode`), Web3 throws on contract instantiation.
+### Overview
+
+Deploy PriceOracleV2 and TradingPlatformV2 on Polygon Mainnet using native USDC as collateral and Chainlink mainnet feeds for BTC/USD, ETH/USD, and POL/USD. Update frontend config with mainnet addresses. Oracle goes green immediately after deployment.
+
+### Architecture
+
+```text
+Polygon Mainnet (137)
+├── PriceOracleV2 (new deploy)
+│   ├── BTC/USD → Chainlink 0xc907E116054Ad103354f2D350FD2514433D57F6f
+│   ├── ETH/USD → Chainlink 0xF9680D99D6C9589e2a93a78A04A279e509205945
+│   └── POL/USD → Chainlink 0xAB594600376Ec9fD91F8e8dC3ef219F1735Db534
+├── TradingPlatformV2 (new deploy, USDC collateral)
+└── Collateral: USDC (0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359)
+```
 
 ### Changes
 
-#### 1. `src/hooks/useOnChainTradingV2.ts`
-- Add early guards in `getTradingContract`, `getOracleContract`, `getCollateralContract` -- return `null` if the address is empty
-- Add guard in `preflightCheck` to return failure if oracle address is empty
-- Add guard in `ensureApproval` to check collateral address
+#### 1. New file: `scripts/deploy-mainnet.js`
 
-#### 2. `src/hooks/useMarketData.ts`
-- The oracle address guard at line 78 already exists but only checks for zero address. Also check for empty string `''` explicitly (polygon addresses are `""` not `"0x0..."`).
+Mainnet deployment script that:
+- Deploys PriceOracleV2
+- Registers BTC/USD, ETH/USD, POL/USD Chainlink feeds (all 8 decimals)
+- Deploys TradingPlatformV2 with USDC (`0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359`) as collateral
+- Verifies all feeds return valid prices
+- Saves deployment to `deployments/polygon-deployment.json`
+- Auto-updates `src/config/contracts.ts` polygon addresses
 
-#### 3. `src/components/trading/V2PositionsPanel.tsx`
-- Currently calls `useOnChainTradingV2()` with no `accountMode` argument (defaults to `'demo'`). This is fine for now since demo is the default, but add a guard in `fetchPositions` to skip if contract addresses are empty.
-- Pass `accountMode` prop down (or accept it defaults to demo).
+**Important**: USDC on Polygon has 6 decimals (same as tUSD's `mwei`), so the existing `toWei(amount, 'mwei')` logic in the hooks works without changes.
 
-#### 4. `src/components/trading/TokenBalances.tsx`
-- Currently hardcoded to `CONTRACT_ADDRESSES.amoy` via `useTokenContracts`. This is fine -- amoy addresses exist. No change needed here.
+**Chainlink feed addresses (Polygon Mainnet, all verified):**
+| Pair | Address | Decimals |
+|------|---------|----------|
+| BTC/USD | `0xc907E116054Ad103354f2D350FD2514433D57F6f` | 8 |
+| ETH/USD | `0xF9680D99D6C9589e2a93a78A04A279e509205945` | 8 |
+| POL/USD | `0xAB594600376Ec9fD91F8e8dC3ef219F1735Db534` | 8 |
 
-#### 5. `src/components/trading/AccountBalance.tsx`
-- No direct contract calls -- delegates to `useTrades` and `useApp`. No change needed.
+#### 2. Update: `src/config/contracts.ts`
 
-### Technical Details
+- Add USDC address constant: `POLYGON_USDC = '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359'`
+- Pre-fill `CONTRACT_ADDRESSES.polygon.TokenizedCurrency` with the USDC address (it's the collateral token in live mode)
+- Leave `PriceOracleV2` and `TradingPlatformV2` empty until you run the deploy script, then you paste the addresses back
 
-The guard pattern for contract factories:
+#### 3. Update: `src/hooks/useOnChainTradingV2.ts`
 
-```typescript
-const getTradingContract = useCallback((web3: Web3) => {
-  if (!TRADING_PLATFORM_V2_ADDRESS) return null;
-  return new web3.eth.Contract(TRADING_PLATFORM_V2_ABI as any, TRADING_PLATFORM_V2_ADDRESS);
-}, [TRADING_PLATFORM_V2_ADDRESS]);
-```
+- Add `MAINNET_PAIR_IDS` with keccak256 hashes for BTC/USD, ETH/USD, POL/USD
+- The existing mode-aware logic already selects the right addresses; no structural changes needed
 
-Then every caller of these functions checks for `null` before proceeding:
+### Deployment Steps (you run locally)
 
-```typescript
-const contract = getTradingContract(web3);
-if (!contract) {
-  return { success: false, error: 'Contracts not deployed on this network' };
-}
-```
-
-### Files to Modify
-
-| File | Change |
-|---|---|
-| `src/hooks/useOnChainTradingV2.ts` | Null-guard all 3 contract factory functions + callers |
-| `src/hooks/useMarketData.ts` | Add empty string check to oracle address validation |
-| `src/components/trading/V2PositionsPanel.tsx` | Guard `fetchPositions` against null contracts |
+1. Ensure `.env` has `POLYGON_RPC_URL` and `PRIVATE_KEY` set
+2. Fund deployer wallet with ~0.5 POL on mainnet for gas
+3. Run: `npx hardhat run scripts/deploy-mainnet.js --network polygon`
+4. Copy the output addresses into `src/config/contracts.ts` under `polygon` (the script auto-updates if run from the repo root)
+5. Oracle goes green, BTC/ETH/POL feeds show as active
 
 ### What This Fixes
-- No more "Contract address not specified" console errors
-- Oracle status correctly shows "unavailable" for live mode (no contracts deployed) without crashing
-- Demo mode continues working with real Amoy addresses via the Alchemy RPC secrets you just added
+
+- Oracle shows **green** in Live mode (real Chainlink feeds, updating every heartbeat)
+- Demo mode continues on Amoy with POL/USD (best-effort, may stay offline -- that's expected)
+- Live mode becomes the production-ready path with USDC collateral
 
