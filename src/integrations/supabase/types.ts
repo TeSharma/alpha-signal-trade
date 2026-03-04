@@ -457,30 +457,63 @@ export type Database = {
           confidence: number
           created_at: string
           direction: string
+          entry_zone: Json | null
+          execution_type: string | null
+          expires_at: string | null
+          explanation: string[] | null
           id: string
+          market: string | null
           pair: string
           recommendation: string
+          risk_data: Json | null
           signal_data: Json | null
+          status: string | null
+          stop_loss: number | null
+          strategy: string | null
+          take_profit: Json | null
+          timeframe: string | null
           user_id: string
         }
         Insert: {
           confidence: number
           created_at?: string
           direction: string
+          entry_zone?: Json | null
+          execution_type?: string | null
+          expires_at?: string | null
+          explanation?: string[] | null
           id?: string
+          market?: string | null
           pair: string
           recommendation: string
+          risk_data?: Json | null
           signal_data?: Json | null
+          status?: string | null
+          stop_loss?: number | null
+          strategy?: string | null
+          take_profit?: Json | null
+          timeframe?: string | null
           user_id: string
         }
         Update: {
           confidence?: number
           created_at?: string
           direction?: string
+          entry_zone?: Json | null
+          execution_type?: string | null
+          expires_at?: string | null
+          explanation?: string[] | null
           id?: string
+          market?: string | null
           pair?: string
           recommendation?: string
+          risk_data?: Json | null
           signal_data?: Json | null
+          status?: string | null
+          stop_loss?: number | null
+          strategy?: string | null
+          take_profit?: Json | null
+          timeframe?: string | null
           user_id?: string
         }
         Relationships: []

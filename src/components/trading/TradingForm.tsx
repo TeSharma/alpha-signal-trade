@@ -516,18 +516,26 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
   );
 };
 
-// AI Signal Check (mock implementation)
+// AI Signal Check via edge function
 const checkAISignal = async (pair: string, direction: string): Promise<AISignalResponse> => {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      resolve({
-        pair,
-        direction,
-        confidence: Math.floor(Math.random() * 100),
-        recommendation: Math.random() > 0.5 ? 'strong_buy' : 'hold'
-      });
-    }, 500);
-  });
+  try {
+    const res = await fetch(
+      `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/check-signal`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+        },
+        body: JSON.stringify({ pair, direction }),
+      }
+    );
+    if (!res.ok) throw new Error(`check-signal error: ${res.status}`);
+    return await res.json();
+  } catch (err) {
+    console.error('AI signal check failed, using fallback:', err);
+    return { pair, direction, confidence: 50, recommendation: 'hold' };
+  }
 };
 
 export default TradingForm;
