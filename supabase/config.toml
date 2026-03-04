@@ -1,1 +1,7 @@
 project_id = "trbgjsurjfubezcdzpao"
+
+[functions.generate-signal]
+verify_jwt = false
+
+[functions.check-signal]
+verify_jwt = false
