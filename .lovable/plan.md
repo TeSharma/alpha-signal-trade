@@ -1,66 +1,117 @@
 
 
-## Deploy to Polygon Mainnet with USDC Collateral
+## AI Trading OS: Signal Intelligence Layer
 
-### Overview
+### Current State
 
-Deploy PriceOracleV2 and TradingPlatformV2 on Polygon Mainnet using native USDC as collateral and Chainlink mainnet feeds for BTC/USD, ETH/USD, and POL/USD. Update frontend config with mainnet addresses. Oracle goes green immediately after deployment.
+- **Signals page** (`src/pages/Signals.tsx`): Hardcoded mock signals, no AI backend
+- **TradingForm**: Uses a mock `checkAISignal()` that returns `Math.random()` confidence
+- **Server** (`src/server.js`): Express server that cannot run in Lovable (no Node backend)
+- **Database**: `trading_signals` table exists in Supabase with `confidence`, `direction`, `pair`, `recommendation`, `signal_data` columns
+- **No edge functions** exist yet
+- **No LOVABLE_API_KEY** configured (only `HEDERA_OPERATOR_KEY` in secrets)
 
 ### Architecture
 
 ```text
-Polygon Mainnet (137)
-├── PriceOracleV2 (new deploy)
-│   ├── BTC/USD → Chainlink 0xc907E116054Ad103354f2D350FD2514433D57F6f
-│   ├── ETH/USD → Chainlink 0xF9680D99D6C9589e2a93a78A04A279e509205945
-│   └── POL/USD → Chainlink 0xAB594600376Ec9fD91F8e8dC3ef219F1735Db534
-├── TradingPlatformV2 (new deploy, USDC collateral)
-└── Collateral: USDC (0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359)
+Frontend (React)
+  ├── Signals Page → calls Edge Function → renders signal cards
+  ├── TradingForm → calls Edge Function → pre-trade AI check
+  └── Execution Adapter
+        ├── Crypto → useOnChainTradingV2 (existing)
+        └── Forex → manual display (existing)
+
+Supabase Edge Functions
+  ├── generate-signal (POST)
+  │     ├── Fetches OHLCV from public APIs (Binance for crypto)
+  │     ├── Calls Lovable AI (Gemini) with structured tool calling
+  │     ├── Returns Signal Object (spec format)
+  │     └── Stores in trading_signals table
+  └── check-signal (POST)
+        ├── Lightweight pre-trade check
+        └── Returns confidence + recommendation
 ```
 
-### Changes
+### Implementation Plan
 
-#### 1. New file: `scripts/deploy-mainnet.js`
+This is a multi-phase build. Phase 1 gets real AI signals flowing end-to-end.
 
-Mainnet deployment script that:
-- Deploys PriceOracleV2
-- Registers BTC/USD, ETH/USD, POL/USD Chainlink feeds (all 8 decimals)
-- Deploys TradingPlatformV2 with USDC (`0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359`) as collateral
-- Verifies all feeds return valid prices
-- Saves deployment to `deployments/polygon-deployment.json`
-- Auto-updates `src/config/contracts.ts` polygon addresses
+#### Phase 1: Backend (Edge Functions)
 
-**Important**: USDC on Polygon has 6 decimals (same as tUSD's `mwei`), so the existing `toWei(amount, 'mwei')` logic in the hooks works without changes.
+**1a. Enable Lovable AI Gateway**
+- Add `LOVABLE_API_KEY` secret (auto-provisioned)
 
-**Chainlink feed addresses (Polygon Mainnet, all verified):**
-| Pair | Address | Decimals |
-|------|---------|----------|
-| BTC/USD | `0xc907E116054Ad103354f2D350FD2514433D57F6f` | 8 |
-| ETH/USD | `0xF9680D99D6C9589e2a93a78A04A279e509205945` | 8 |
-| POL/USD | `0xAB594600376Ec9fD91F8e8dC3ef219F1735Db534` | 8 |
+**1b. Create `generate-signal` edge function**
+- Accepts `{ pair, timeframe }` 
+- Fetches current price from public API (Binance ticker for crypto, a forex API for FX)
+- Computes context data internally: session (ASIA/LONDON/NEW_YORK based on UTC hour), day of week, basic volatility estimate from price range
+- Calls Lovable AI with structured tool calling to extract the Signal Object:
+  - Uses `google/gemini-3-flash-preview` as the model
+  - System prompt encodes the 5-engine logic (Trend, Structure, Momentum, Risk, Confidence)
+  - Tool schema matches the spec's Signal Object exactly
+- Applies confidence threshold (< 0.60 = do not publish)
+- Stores valid signals in `trading_signals` table with full `signal_data` JSON
+- Returns the signal to the client
 
-#### 2. Update: `src/config/contracts.ts`
+**1c. Create `check-signal` edge function**
+- Lighter version for pre-trade validation in TradingForm
+- Returns `{ confidence, direction, recommendation, explanation[] }`
 
-- Add USDC address constant: `POLYGON_USDC = '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359'`
-- Pre-fill `CONTRACT_ADDRESSES.polygon.TokenizedCurrency` with the USDC address (it's the collateral token in live mode)
-- Leave `PriceOracleV2` and `TradingPlatformV2` empty until you run the deploy script, then you paste the addresses back
+**1d. Update `supabase/config.toml`** to register both functions
 
-#### 3. Update: `src/hooks/useOnChainTradingV2.ts`
+#### Phase 2: Database Migration
 
-- Add `MAINNET_PAIR_IDS` with keccak256 hashes for BTC/USD, ETH/USD, POL/USD
-- The existing mode-aware logic already selects the right addresses; no structural changes needed
+**2a. Extend `trading_signals` table**
+- Add columns: `market` (FOREX/CRYPTO), `entry_zone` (jsonb), `stop_loss` (numeric), `take_profit` (jsonb), `timeframe`, `strategy`, `risk_data` (jsonb), `explanation` (text[]), `execution_type` (ON_CHAIN/MANUAL), `expires_at` (timestamptz), `status` (active/expired/executed)
+- Add index on `(pair, status, created_at)`
 
-### Deployment Steps (you run locally)
+#### Phase 3: Frontend - Signals Page
 
-1. Ensure `.env` has `POLYGON_RPC_URL` and `PRIVATE_KEY` set
-2. Fund deployer wallet with ~0.5 POL on mainnet for gas
-3. Run: `npx hardhat run scripts/deploy-mainnet.js --network polygon`
-4. Copy the output addresses into `src/config/contracts.ts` under `polygon` (the script auto-updates if run from the repo root)
-5. Oracle goes green, BTC/ETH/POL feeds show as active
+**3a. Replace mock signals with real data**
+- Create `useSignals` hook that:
+  - Fetches active signals from `trading_signals` table
+  - Calls `generate-signal` edge function on demand (manual refresh)
+  - Subscribes to realtime updates
+- Signal cards render the full Signal Object (entry zone, SL, TP[], confidence, explanation, execution type)
+- "Approve" button for crypto signals pre-fills TradingForm parameters
+- "Approve" for forex signals shows copy-to-broker instructions
 
-### What This Fixes
+**3b. Replace mock `checkAISignal` in TradingForm**
+- Call `check-signal` edge function instead of `Math.random()`
 
-- Oracle shows **green** in Live mode (real Chainlink feeds, updating every heartbeat)
-- Demo mode continues on Amoy with POL/USD (best-effort, may stay offline -- that's expected)
-- Live mode becomes the production-ready path with USDC collateral
+#### Phase 4: Execution Adapter (1-Click Bridge)
+
+**4a. Crypto execution adapter**
+- When user approves a crypto signal, pre-fill `useOnChainTradingV2.openPosition` with signal parameters
+- Map signal's `entry_zone`, `stop_loss`, `take_profit[0]` to contract params
+- Existing on-chain flow handles the rest (approval, execution, confirmation)
+
+**4b. Forex manual execution**
+- Display formatted trade parameters for manual broker entry
+- Future: broker API integration placeholder
+
+### Delete
+
+- `src/server.js` -- Express server that can't run in Lovable; replaced by edge functions
+
+### Files to Create/Modify
+
+| File | Action |
+|---|---|
+| `supabase/functions/generate-signal/index.ts` | Create -- AI signal generation |
+| `supabase/functions/check-signal/index.ts` | Create -- pre-trade AI check |
+| `supabase/config.toml` | Update -- register functions |
+| `src/hooks/useSignals.ts` | Create -- signal fetching + realtime |
+| `src/pages/Signals.tsx` | Rewrite -- real signals, execution adapter |
+| `src/components/trading/TradingForm.tsx` | Update -- replace mock checkAISignal |
+| `src/types/signal.ts` | Create -- Signal Object TypeScript type |
+| DB migration | Extend `trading_signals` table |
+
+### Technical Notes
+
+- The AI system prompt will encode the 5-engine analysis framework. The LLM acts as the "intelligence layer" -- it receives market context and produces structured signal output via tool calling. This is deterministic in structure but ML-assisted in analysis.
+- Confidence thresholds enforced server-side: signals below 0.60 are never stored or returned.
+- AI logic is identical in demo and live modes (per spec: "AI logic does not change between modes").
+- The Signal Object format from the spec is used as-is for the tool calling schema.
+- OHLCV data will initially come from Binance public API (no key needed for ticker data). For forex, we'll use a free endpoint or compute from spread estimates until a proper data source is configured.
 
