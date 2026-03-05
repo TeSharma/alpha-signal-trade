@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Slider } from "@/components/ui/slider"
-import { TrendingUp, TrendingDown, Calculator, Activity, Zap, Link, AlertTriangle } from "lucide-react"
+import { TrendingUp, TrendingDown, Calculator, Activity, Zap, Link, AlertTriangle, Brain } from "lucide-react"
 import { useTrades } from '@/hooks/useTrades'
 import { useMarketData } from '@/hooks/useMarketData'
 import { useOnChainTradingV2 } from '@/hooks/useOnChainTradingV2'
@@ -14,6 +14,8 @@ import { useToast } from '@/components/ui/use-toast'
 import { useNetworkEnforcement } from '@/hooks/useNetworkEnforcement'
 import { getMinimums, isMainnet, FEE_CONFIG, calculateOpenFee, getNetworkName } from '@/config/contracts'
 import { getMarketsForMode, MARKET_METADATA, formatPrice } from '@/config/markets'
+import { useLocation } from 'react-router-dom'
+import type { SignalObject } from '@/types/signal'
 
 interface TradingFormProps {
   accountMode: 'demo' | 'live';
@@ -28,6 +30,8 @@ interface AISignalResponse {
 
 const TradingForm = ({ accountMode }: TradingFormProps) => {
   const availableMarkets = getMarketsForMode(accountMode)
+  const location = useLocation()
+  const prefill = (location.state as any)?.prefill as SignalObject | undefined
   const [selectedPair, setSelectedPair] = useState(availableMarkets[0] || 'POL/USD')
   const [tradeDirection, setTradeDirection] = useState<'buy' | 'sell'>('buy')
   const [lotSize, setLotSize] = useState('10')
@@ -39,6 +43,21 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
   const [signalResponse, setSignalResponse] = useState<AISignalResponse | null>(null)
   const [isLoadingSignal, setIsLoadingSignal] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [prefillApplied, setPrefillApplied] = useState(false)
+
+  // Apply signal prefill from AI Signals page
+  useEffect(() => {
+    if (prefill && !prefillApplied) {
+      console.info('[TradingForm] Pre-filling from AI signal:', prefill.pair, prefill.direction);
+      if (availableMarkets.includes(prefill.pair)) {
+        setSelectedPair(prefill.pair);
+      }
+      setTradeDirection(prefill.direction === 'LONG' ? 'buy' : 'sell');
+      if (prefill.stop_loss) setStopLoss(String(prefill.stop_loss));
+      if (prefill.take_profit?.length) setTakeProfit(String(prefill.take_profit[0]));
+      setPrefillApplied(true);
+    }
+  }, [prefill, prefillApplied, availableMarkets]);
   
   const { createTrade, accountBalance } = useTrades()
   const { prices, getCurrentPrice, getBidPrice, getAskPrice, oracleAvailable } = useMarketData(accountMode)
@@ -223,6 +242,13 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
+        {/* AI Signal Prefill Banner */}
+        {prefill && prefillApplied && (
+          <div className="flex items-center gap-2 text-sm bg-primary/10 text-primary p-3 rounded-lg">
+            <Brain className="h-4 w-4 shrink-0" />
+            <span>Pre-filled from AI Signal — <strong>{prefill.pair} {prefill.direction}</strong> ({(prefill.confidence <= 1 ? prefill.confidence * 100 : prefill.confidence).toFixed(0)}% confidence)</span>
+          </div>
+        )}
         {/* Market Pair Selection — only valid markets for current mode */}
         <div className="space-y-2">
           <Label>Market</Label>

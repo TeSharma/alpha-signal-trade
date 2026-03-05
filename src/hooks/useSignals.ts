@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import type { SignalObject } from '@/types/signal';
+import { isExpired } from '@/types/signal';
 import { useToast } from '@/components/ui/use-toast';
 
 export function useSignals() {
@@ -22,11 +23,9 @@ export function useSignals() {
       if (error) throw error;
 
       const mapped: SignalObject[] = (data || []).map((row: any) => {
-        // If signal_data contains the full object, use it
         if (row.signal_data && typeof row.signal_data === 'object' && row.signal_data.id) {
           return { ...row.signal_data, status: row.status, created_at: row.created_at } as SignalObject;
         }
-        // Fallback: construct from columns
         return {
           id: row.id,
           market: row.market || 'CRYPTO',
@@ -47,7 +46,11 @@ export function useSignals() {
         } as SignalObject;
       });
 
-      setSignals(mapped);
+      // Filter out expired signals client-side
+      const activeSignals = mapped.filter(s => !isExpired(s));
+      setSignals(activeSignals);
+
+      console.info('[Signals] Fetched %d signals, %d active', mapped.length, activeSignals.length);
     } catch (err: any) {
       console.error('Failed to fetch signals:', err);
     } finally {
@@ -57,6 +60,7 @@ export function useSignals() {
 
   const generateSignal = useCallback(async (pair: string, timeframe = '15m') => {
     setIsGenerating(true);
+    console.info('[Signals] Generating signal for %s @ %s', pair, timeframe);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const res = await fetch(
@@ -90,8 +94,8 @@ export function useSignals() {
         return null;
       }
 
+      console.info('[Signals] Generated: %s %s — %d%% confidence', data.direction, pair, (data.confidence * 100).toFixed(0));
       toast({ title: 'Signal Generated', description: `${data.direction} ${pair} — ${(data.confidence * 100).toFixed(0)}% confidence` });
-      // Refresh signals list
       await fetchSignals();
       return data as SignalObject;
     } catch (err: any) {
@@ -103,12 +107,10 @@ export function useSignals() {
     }
   }, [fetchSignals, toast]);
 
-  // Initial fetch
   useEffect(() => {
     fetchSignals();
   }, [fetchSignals]);
 
-  // Realtime subscription
   useEffect(() => {
     const channel = supabase
       .channel('trading_signals_realtime')
