@@ -37,18 +37,43 @@ async function fetchCryptoPrice(pair: string): Promise<{ price: number; high: nu
 }
 
 async function fetchForexPrice(pair: string): Promise<{ price: number; high: number; low: number }> {
-  // Use a free forex estimate based on known ranges
+  // Try free FX API first
+  const fxMap: Record<string, { base: string; target: string }> = {
+    "EUR/USD": { base: "EUR", target: "USD" },
+    "GBP/USD": { base: "GBP", target: "USD" },
+    "USD/JPY": { base: "USD", target: "JPY" },
+  };
+  const fx = fxMap[pair];
+  if (!fx) throw new Error(`Unsupported forex pair: ${pair}`);
+
+  try {
+    const res = await fetch(`https://open.er-api.com/v6/latest/${fx.base}`);
+    if (res.ok) {
+      const data = await res.json();
+      const rate = data.rates?.[fx.target];
+      if (rate) {
+        // For EUR/USD and GBP/USD the rate IS the price; for USD/JPY it's direct
+        const price = rate;
+        const range = price * 0.003; // estimate ~0.3% daily range
+        return { price, high: price + range / 2, low: price - range / 2 };
+      }
+    }
+  } catch (e) {
+    console.warn("FX API failed, using fallback:", e);
+  }
+
+  // Fallback estimates
   const estimates: Record<string, { price: number; range: number }> = {
     "EUR/USD": { price: 1.085, range: 0.005 },
     "GBP/USD": { price: 1.27, range: 0.008 },
     "USD/JPY": { price: 150.5, range: 1.5 },
   };
-  const est = estimates[pair];
-  if (!est) throw new Error(`Unsupported forex pair: ${pair}`);
+  const est = estimates[pair]!;
   return { price: est.price, high: est.price + est.range / 2, low: est.price - est.range / 2 };
 }
 
 const CRYPTO_PAIRS = ["BTC/USD", "ETH/USD", "POL/USD"];
+const MODEL_VERSION = "google/gemini-3-flash-preview";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -96,7 +121,7 @@ Analyze this market and produce a trading signal. Be conservative — only give 
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
+        model: MODEL_VERSION,
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: `Generate a trading signal for ${pair} on the ${timeframe} timeframe.` },
@@ -178,7 +203,7 @@ Analyze this market and produce a trading signal. Be conservative — only give 
     }
 
     const executionType = isCrypto ? "ON_CHAIN" : "MANUAL";
-    const expiresAt = new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString(); // 4h expiry
+    const expiresAt = new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString();
 
     const signal = {
       id: crypto.randomUUID(),
@@ -195,6 +220,7 @@ Analyze this market and produce a trading signal. Be conservative — only give 
       execution: { type: executionType, supported: true },
       explanation: signalData.explanation,
       expires_at: Math.floor(Date.now() / 1000) + 4 * 3600,
+      model_version: MODEL_VERSION,
     };
 
     // Store in DB
@@ -202,7 +228,6 @@ Analyze this market and produce a trading signal. Be conservative — only give 
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Get user from auth header
     const authHeader = req.headers.get("Authorization");
     let userId: string | null = null;
     if (authHeader) {
