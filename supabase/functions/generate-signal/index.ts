@@ -239,27 +239,30 @@ Analyze this market and produce a trading signal. Be conservative — only give 
       userId = user?.id || null;
     }
 
-    if (userId) {
-      await supabase.from("trading_signals").insert({
-        id: signal.id,
-        pair,
-        direction: signalData.direction,
-        confidence: signalData.confidence,
-        recommendation: signalData.strategy,
-        signal_data: signal,
-        user_id: userId,
-        market,
-        entry_zone: signalData.entry_zone,
-        stop_loss: signalData.stop_loss,
-        take_profit: signalData.take_profit,
-        timeframe,
-        strategy: signalData.strategy,
-        risk_data: signal.risk,
-        explanation: signalData.explanation,
-        execution_type: executionType,
-        expires_at: expiresAt,
-        status: "active",
-      });
+    const { error: insertError } = await supabase.from("trading_signals").insert({
+      id: signal.id,
+      pair,
+      direction: signalData.direction,
+      confidence: signalData.confidence,
+      recommendation: signalData.strategy,
+      signal_data: signal,
+      user_id: userId, // nullable — OK for anonymous users
+      market,
+      entry_zone: signalData.entry_zone,
+      stop_loss: signalData.stop_loss,
+      take_profit: signalData.take_profit,
+      timeframe,
+      strategy: signalData.strategy,
+      risk_data: signal.risk,
+      explanation: signalData.explanation,
+      execution_type: executionType,
+      expires_at: expiresAt,
+      status: "active",
+    });
+
+    if (insertError) {
+      console.error("Failed to store signal in DB:", insertError);
+      // Don't fail the response — still return the signal to the client
     }
 
     return new Response(JSON.stringify(signal), {

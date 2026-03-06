@@ -94,13 +94,24 @@ export function useSignals() {
         return null;
       }
 
-      console.info('[Signals] Generated: %s %s — %d%% confidence', data.direction, pair, (data.confidence * 100).toFixed(0));
-      toast({ title: 'Signal Generated', description: `${data.direction} ${pair} — ${(data.confidence * 100).toFixed(0)}% confidence` });
-      await fetchSignals();
-      return data as SignalObject;
+      const signal = data as SignalObject;
+      console.info('[Signals] Generated: %s %s — %d%% confidence', signal.direction, pair, (signal.confidence * 100).toFixed(0));
+      toast({ title: 'Signal Generated', description: `${signal.direction} ${pair} — ${(signal.confidence * 100).toFixed(0)}% confidence` });
+
+      // Add to local state immediately so it appears without waiting for DB sync
+      setSignals(prev => {
+        const exists = prev.some(s => s.id === signal.id);
+        if (exists) return prev;
+        return [signal, ...prev];
+      });
+
+      // Also refresh from DB in background
+      fetchSignals();
+      return signal;
     } catch (err: any) {
-      console.error('Generate signal error:', err);
-      toast({ title: 'Error', description: 'Failed to generate signal', variant: 'destructive' });
+      const errMsg = err?.message || String(err);
+      console.error('Generate signal error:', errMsg, err);
+      toast({ title: 'Error', description: `Signal generation failed: ${errMsg}`, variant: 'destructive' });
       return null;
     } finally {
       setIsGenerating(false);
