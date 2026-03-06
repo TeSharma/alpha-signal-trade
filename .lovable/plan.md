@@ -1,62 +1,61 @@
 
 
-## Fix: Signal Generation "Failed" Error
+## AI Agent Hardening: 5-Priority Implementation
 
-### Root Cause Analysis
+### Priority 1: End-to-End Signal Flow Validation
 
-The `generate-signal` edge function works perfectly (confirmed via direct test -- returned valid BTC/USD signal at 72% confidence). Two issues cause the "failed" experience:
+The edge functions (`generate-signal`, `check-signal`) are registered in `config.toml` and the code exists. The Signals page and `useSignals` hook are wired up. The `LOVABLE_API_KEY` secret is present.
 
-**Issue 1: Signals vanish after generation**
-- The edge function only stores signals in the DB when the user is authenticated (`if (userId) { insert... }`)
-- The `useSignals` hook calls `fetchSignals()` after generating, which queries the DB
-- If the user wasn't authenticated when generating, nothing was stored, so the list is empty
-- Even when authenticated, the generated signal is returned to the client but the hook ignores the return value and re-fetches from DB
+**Action**: Test `generate-signal` via the Supabase test tool, inspect logs, and fix any issues found. The console logs show ref warnings for `MobileSignalTabs` and `SignalList` (function components given refs) -- these need `React.forwardRef` or the ref needs removing.
 
-**Issue 2: Possible fetch failure from browser**
-- The `generateSignal` function in `useSignals.ts` catches all errors with a generic "Failed to generate signal" toast
-- No detailed error is shown -- could be CORS, network, or JSON parse error
-- The error is silently swallowed
+**Fixes needed**:
+- Fix `MobileSignalTabs` / `SignalList` ref warnings in `Signals.tsx` (Radix Tabs passes refs to children)
 
-### Fix Plan
+### Priority 2: Signal Expiry + Validity Guardrails
 
-#### 1. Display generated signal immediately (don't rely solely on DB)
+**Changes to `src/hooks/useSignals.ts`**:
+- After mapping signals, filter out expired ones: `expires_at > 0 && expires_at < Date.now()/1000`
+- Add `isExpired(signal)` and `isPriceInZone(signal, currentPrice)` helper exports
 
-In `src/hooks/useSignals.ts`:
-- When `generateSignal` returns a valid signal from the edge function, **add it to the local `signals` state immediately** instead of only relying on `fetchSignals()` from DB
-- This ensures the signal appears even if DB storage failed or was skipped
+**Changes to `src/pages/Signals.tsx`**:
+- Show expired badge on expired signals, disable Execute button
+- Add warning if current price is outside entry zone (requires price data)
 
-#### 2. Store signals for unauthenticated users
+### Priority 3: Improve Forex Data Source
 
-In `supabase/functions/generate-signal/index.ts`:
-- Remove the `if (userId)` guard -- always attempt to store the signal
-- For unauthenticated users, use a system/anonymous UUID as fallback user_id
+**Changes to `supabase/functions/generate-signal/index.ts`**:
+- Replace hardcoded `fetchForexPrice` with a call to a free FX API (e.g., `open.er-api.com` or `api.exchangerate.host`)
+- Fallback to current estimates if API fails
 
-**OR** (simpler): Make `user_id` nullable in the DB so signals can be stored without auth.
+### Priority 4: Signal-to-Trade Execution Bridge
 
-DB migration:
-```sql
-ALTER TABLE trading_signals ALTER COLUMN user_id DROP NOT NULL;
-```
+**Changes to `src/components/trading/TradingForm.tsx`**:
+- Import `useLocation` from react-router-dom
+- Read `location.state?.prefill` (a `SignalObject`)
+- On mount, if prefill exists: set `selectedPair`, `tradeDirection`, `stopLoss`, `takeProfit`
+- Show a banner: "Pre-filled from AI Signal — {pair} {direction}"
 
-Update RLS: Add a policy allowing anyone to view signals with null user_id.
+**Changes to `src/pages/Trade.tsx`**:
+- Pass prefill state down to `TradingForm` if needed (or TradingForm reads it directly)
 
-#### 3. Better error surfacing
+### Priority 5: Signal Metadata & Logging
 
-In `src/hooks/useSignals.ts`:
-- Log the actual error response body/status in `generateSignal`
-- Show the specific error message from the edge function instead of generic "Failed to generate signal"
+**Changes to `src/types/signal.ts`**:
+- Add optional fields: `model_version?: string`, `signal_strength?: number`
 
-#### 4. Edge function: add insert error handling
+**Changes to `supabase/functions/generate-signal/index.ts`**:
+- Add `model_version: "gemini-3-flash-preview"` to the stored signal
 
-In `supabase/functions/generate-signal/index.ts`:
-- Check the Supabase insert result for errors and log them
-- Don't fail the response if DB insert fails -- still return the signal
+**Client-side logging**:
+- Log signal generation, view, and execution events via `console.info` (lightweight, no new infra)
 
-### Files to Modify
+### Files to modify
 
-| File | Change |
+| File | Changes |
 |---|---|
-| `src/hooks/useSignals.ts` | Add signal to local state on success; better error logging |
-| `supabase/functions/generate-signal/index.ts` | Always store signals; handle insert errors; make user_id optional |
-| DB migration | Make `user_id` nullable on `trading_signals` |
+| `src/pages/Signals.tsx` | Fix ref warnings, add expiry UI |
+| `src/hooks/useSignals.ts` | Filter expired signals, add helpers |
+| `supabase/functions/generate-signal/index.ts` | Real forex API, model_version field |
+| `src/components/trading/TradingForm.tsx` | Read prefill from location state |
+| `src/types/signal.ts` | Add optional metadata fields |
 
