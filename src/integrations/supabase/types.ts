@@ -472,7 +472,7 @@ export type Database = {
           strategy: string | null
           take_profit: Json | null
           timeframe: string | null
-          user_id: string
+          user_id: string | null
         }
         Insert: {
           confidence: number
@@ -493,7 +493,7 @@ export type Database = {
           strategy?: string | null
           take_profit?: Json | null
           timeframe?: string | null
-          user_id: string
+          user_id?: string | null
         }
         Update: {
           confidence?: number
@@ -514,7 +514,7 @@ export type Database = {
           strategy?: string | null
           take_profit?: Json | null
           timeframe?: string | null
-          user_id?: string
+          user_id?: string | null
         }
         Relationships: []
       }
