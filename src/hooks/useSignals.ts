@@ -84,6 +84,13 @@ export function useSignals() {
         return null;
       }
 
+      const contentType = res.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) {
+        const text = await res.text();
+        console.error('Non-JSON response from generate-signal:', res.status, text.slice(0, 200));
+        toast({ title: 'Error', description: 'Signal service unavailable. The edge function may not be deployed.', variant: 'destructive' });
+        return null;
+      }
       const data = await res.json();
       if (data.error) {
         toast({ title: 'Signal Error', description: data.error, variant: 'destructive' });
