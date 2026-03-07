@@ -2,7 +2,7 @@ import React, { useState, forwardRef } from 'react';
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Brain, RefreshCw, Loader2 } from "lucide-react";
+import { Brain, RefreshCw, Loader2, BarChart3 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import Sidebar from "@/components/layout/Sidebar";
 import TopBar from "@/components/layout/TopBar";
@@ -10,6 +10,7 @@ import MobileHeader from "@/components/layout/MobileHeader";
 import { useSignals } from "@/hooks/useSignals";
 import type { SignalObject } from "@/types/signal";
 import { SignalCard } from "@/components/signals/SignalCard";
+import { SignalAnalytics } from "@/components/signals/SignalAnalytics";
 import { useNavigate } from "react-router-dom";
 
 const ALL_PAIRS = ['BTC/USD', 'ETH/USD', 'POL/USD', 'EUR/USD', 'GBP/USD', 'USD/JPY'];
@@ -51,7 +52,20 @@ const Signals = () => {
                 onGenerate={handleGenerate}
                 isGenerating={isGenerating}
               />
-              <SignalList signals={signals} isLoading={isLoading} onApprove={handleApprove} />
+              <Tabs defaultValue="signals" className="w-full">
+                <TabsList>
+                  <TabsTrigger value="signals">Active Signals</TabsTrigger>
+                  <TabsTrigger value="performance" className="flex items-center gap-1">
+                    <BarChart3 className="h-3 w-3" /> Performance
+                  </TabsTrigger>
+                </TabsList>
+                <TabsContent value="signals" className="mt-4">
+                  <SignalList signals={signals} isLoading={isLoading} onApprove={handleApprove} />
+                </TabsContent>
+                <TabsContent value="performance" className="mt-4">
+                  <SignalAnalytics />
+                </TabsContent>
+              </Tabs>
             </div>
           </main>
         </div>

@@ -5,3 +5,6 @@ verify_jwt = false
 
 [functions.check-signal]
 verify_jwt = false
+
+[functions.evaluate-signals]
+verify_jwt = false

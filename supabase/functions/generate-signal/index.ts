@@ -262,7 +262,21 @@ Analyze this market and produce a trading signal. Be conservative — only give 
 
     if (insertError) {
       console.error("Failed to store signal in DB:", insertError);
-      // Don't fail the response — still return the signal to the client
+    } else {
+      // Seed performance record
+      const entryMid = (signalData.entry_zone[0] + signalData.entry_zone[1]) / 2;
+      const { error: perfError } = await supabase.from("signal_performance").insert({
+        signal_id: signal.id,
+        pair,
+        direction: signalData.direction,
+        entry_price: entryMid,
+        stop_loss: signalData.stop_loss,
+        take_profit: signalData.take_profit[0] || null,
+        result: "open",
+        model_version: MODEL_VERSION,
+        strategy: signalData.strategy,
+      });
+      if (perfError) console.error("Failed to seed signal_performance:", perfError);
     }
 
     return new Response(JSON.stringify(signal), {
