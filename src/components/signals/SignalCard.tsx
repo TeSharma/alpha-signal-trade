@@ -50,6 +50,17 @@ export function SignalCard({ signal, onApprove }: SignalCardProps) {
                 Expired
               </Badge>
             )}
+            {signal.status === 'closed' && (
+              <Badge variant={signal.signal_strength !== undefined && signal.signal_strength > 0 ? 'default' : 'destructive'}
+                className={signal.signal_strength !== undefined && signal.signal_strength > 0 ? 'bg-green-600' : ''}>
+                {signal.signal_strength !== undefined && signal.signal_strength > 0 ? '✓ Win' : '✗ Loss'}
+              </Badge>
+            )}
+            {signal.status === 'executed' && (
+              <Badge variant="outline" className="border-yellow-500 text-yellow-500">
+                In Progress
+              </Badge>
+            )}
           </div>
           <div className="text-right text-sm text-muted-foreground">
             <p>{signal.strategy}</p>

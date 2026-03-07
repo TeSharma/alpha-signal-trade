@@ -21,7 +21,7 @@ export interface SignalObject {
   expires_at: number;
   created_at?: string;
   user_id?: string;
-  status?: 'active' | 'expired' | 'executed';
+  status?: 'active' | 'expired' | 'executed' | 'closed';
   model_version?: string;
   signal_strength?: number;
 }
