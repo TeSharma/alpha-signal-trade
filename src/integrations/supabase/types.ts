@@ -386,6 +386,65 @@ export type Database = {
         }
         Relationships: []
       }
+      signal_performance: {
+        Row: {
+          closed_at: string | null
+          created_at: string | null
+          direction: string
+          entry_price: number | null
+          id: string
+          model_version: string | null
+          pair: string
+          pnl_percent: number | null
+          result: string | null
+          signal_id: string
+          stop_loss: number | null
+          strategy: string | null
+          take_profit: number | null
+          time_to_target: string | null
+        }
+        Insert: {
+          closed_at?: string | null
+          created_at?: string | null
+          direction: string
+          entry_price?: number | null
+          id?: string
+          model_version?: string | null
+          pair: string
+          pnl_percent?: number | null
+          result?: string | null
+          signal_id: string
+          stop_loss?: number | null
+          strategy?: string | null
+          take_profit?: number | null
+          time_to_target?: string | null
+        }
+        Update: {
+          closed_at?: string | null
+          created_at?: string | null
+          direction?: string
+          entry_price?: number | null
+          id?: string
+          model_version?: string | null
+          pair?: string
+          pnl_percent?: number | null
+          result?: string | null
+          signal_id?: string
+          stop_loss?: number | null
+          strategy?: string | null
+          take_profit?: number | null
+          time_to_target?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "signal_performance_signal_id_fkey"
+            columns: ["signal_id"]
+            isOneToOne: true
+            referencedRelation: "trading_signals"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       trades: {
         Row: {
           account_mode: string
