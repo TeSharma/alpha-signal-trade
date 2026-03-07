@@ -1,61 +1,105 @@
 
 
-## AI Agent Hardening: 5-Priority Implementation
+## Signal Intelligence & Performance Tracking Layer
 
-### Priority 1: End-to-End Signal Flow Validation
+### Overview
 
-The edge functions (`generate-signal`, `check-signal`) are registered in `config.toml` and the code exists. The Signals page and `useSignals` hook are wired up. The `LOVABLE_API_KEY` secret is present.
+Add a performance tracking system that measures signal outcomes, computes strategy metrics, and displays analytics on the Signals page.
 
-**Action**: Test `generate-signal` via the Supabase test tool, inspect logs, and fix any issues found. The console logs show ref warnings for `MobileSignalTabs` and `SignalList` (function components given refs) -- these need `React.forwardRef` or the ref needs removing.
+### Database Changes
 
-**Fixes needed**:
-- Fix `MobileSignalTabs` / `SignalList` ref warnings in `Signals.tsx` (Radix Tabs passes refs to children)
+**New table: `signal_performance`**
 
-### Priority 2: Signal Expiry + Validity Guardrails
+```sql
+CREATE TABLE signal_performance (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  signal_id uuid REFERENCES trading_signals(id) ON DELETE CASCADE NOT NULL,
+  pair text NOT NULL,
+  direction text NOT NULL,
+  entry_price numeric,
+  stop_loss numeric,
+  take_profit numeric,
+  result text DEFAULT 'open' CHECK (result IN ('open', 'win', 'loss', 'expired')),
+  pnl_percent numeric DEFAULT 0,
+  time_to_target interval,
+  model_version text,
+  strategy text,
+  created_at timestamptz DEFAULT now(),
+  closed_at timestamptz,
+  UNIQUE(signal_id)
+);
 
-**Changes to `src/hooks/useSignals.ts`**:
-- After mapping signals, filter out expired ones: `expires_at > 0 && expires_at < Date.now()/1000`
-- Add `isExpired(signal)` and `isPriceInZone(signal, currentPrice)` helper exports
+ALTER TABLE signal_performance ENABLE ROW LEVEL SECURITY;
 
-**Changes to `src/pages/Signals.tsx`**:
-- Show expired badge on expired signals, disable Execute button
-- Add warning if current price is outside entry zone (requires price data)
+-- Public read for analytics
+CREATE POLICY "Anyone can view signal performance"
+  ON signal_performance FOR SELECT USING (true);
 
-### Priority 3: Improve Forex Data Source
+-- Only service role inserts (via edge function)
+CREATE POLICY "Service role can insert performance"
+  ON signal_performance FOR INSERT
+  WITH CHECK (true);
 
-**Changes to `supabase/functions/generate-signal/index.ts`**:
-- Replace hardcoded `fetchForexPrice` with a call to a free FX API (e.g., `open.er-api.com` or `api.exchangerate.host`)
-- Fallback to current estimates if API fails
+CREATE POLICY "Service role can update performance"
+  ON signal_performance FOR UPDATE USING (true);
+```
 
-### Priority 4: Signal-to-Trade Execution Bridge
+**Update `trading_signals.status`**: Add `'executed'` and `'closed'` to the lifecycle. No schema change needed since `status` is `text`, but the edge function and hooks will use the new values.
 
-**Changes to `src/components/trading/TradingForm.tsx`**:
-- Import `useLocation` from react-router-dom
-- Read `location.state?.prefill` (a `SignalObject`)
-- On mount, if prefill exists: set `selectedPair`, `tradeDirection`, `stopLoss`, `takeProfit`
-- Show a banner: "Pre-filled from AI Signal — {pair} {direction}"
+### Edge Function: `evaluate-signals`
 
-**Changes to `src/pages/Trade.tsx`**:
-- Pass prefill state down to `TradingForm` if needed (or TradingForm reads it directly)
+New edge function `supabase/functions/evaluate-signals/index.ts`:
 
-### Priority 5: Signal Metadata & Logging
+- Fetches all signals with status `active` or `executed`
+- For each signal, fetches current market price (Binance for crypto, FX API for forex)
+- Checks if price hit TP1 (win) or SL (loss)
+- If signal expired (beyond `expires_at`), marks as `expired`
+- Upserts result into `signal_performance`
+- Updates `trading_signals.status` to `closed` or `expired`
+- Returns a summary of evaluated signals
 
-**Changes to `src/types/signal.ts`**:
-- Add optional fields: `model_version?: string`, `signal_strength?: number`
+This function can be called manually or on a schedule.
 
-**Changes to `supabase/functions/generate-signal/index.ts`**:
-- Add `model_version: "gemini-3-flash-preview"` to the stored signal
+### Edge Function: Update `generate-signal`
 
-**Client-side logging**:
-- Log signal generation, view, and execution events via `console.info` (lightweight, no new infra)
+After inserting the signal into `trading_signals`, also insert an initial `signal_performance` row with `result = 'open'` and the signal's entry/SL/TP data. This seeds the performance record at generation time.
 
-### Files to modify
+### Frontend: Signal Analytics Dashboard
 
-| File | Changes |
+**New component: `src/components/signals/SignalAnalytics.tsx`**
+
+A card-based dashboard showing:
+- Total signals generated
+- Win rate (wins / (wins + losses))
+- Average RR achieved
+- Best performing strategy
+- Model version comparison (if multiple versions exist)
+
+Data fetched via a simple Supabase query on `signal_performance`.
+
+**Update `src/pages/Signals.tsx`**:
+- Add a new tab "Performance" alongside the signal list
+- Render `SignalAnalytics` in that tab
+
+### Signal Status Lifecycle
+
+```text
+active → executed → closed (win/loss)
+active → expired
+```
+
+The `SignalCard` already handles `expired` display. Add visual indicators for `executed` (in-progress) and `closed` (show result badge: win/loss with PnL%).
+
+### Files to Create/Modify
+
+| File | Change |
 |---|---|
-| `src/pages/Signals.tsx` | Fix ref warnings, add expiry UI |
-| `src/hooks/useSignals.ts` | Filter expired signals, add helpers |
-| `supabase/functions/generate-signal/index.ts` | Real forex API, model_version field |
-| `src/components/trading/TradingForm.tsx` | Read prefill from location state |
-| `src/types/signal.ts` | Add optional metadata fields |
+| DB migration | Create `signal_performance` table |
+| `supabase/functions/evaluate-signals/index.ts` | New edge function to check signal outcomes |
+| `supabase/functions/generate-signal/index.ts` | Seed `signal_performance` row on signal creation |
+| `supabase/config.toml` | Register `evaluate-signals` function |
+| `src/components/signals/SignalAnalytics.tsx` | New analytics dashboard component |
+| `src/components/signals/SignalCard.tsx` | Add result badges for closed signals |
+| `src/pages/Signals.tsx` | Add Performance tab |
+| `src/hooks/useSignalPerformance.ts` | New hook to fetch performance data |
 
