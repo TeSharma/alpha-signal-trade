@@ -221,6 +221,7 @@ Analyze this market and produce a trading signal. Be conservative — only give 
       explanation: signalData.explanation,
       expires_at: Math.floor(Date.now() / 1000) + 4 * 3600,
       model_version: MODEL_VERSION,
+      signal_source: "AI", // Track signal generation source
     };
 
     // Store in DB
