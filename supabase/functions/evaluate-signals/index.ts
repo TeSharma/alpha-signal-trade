@@ -102,13 +102,23 @@ serve(async (req) => {
       if (outcome) {
         const entryPrice = entryZone && entryZone.length >= 2 ? (entryZone[0] + entryZone[1]) / 2 : currentPrice;
         const pnlPercent = entryPrice > 0 ? ((currentPrice - entryPrice) / entryPrice) * 100 * (direction === "LONG" || direction === "buy" ? 1 : -1) : 0;
+        
+        const createdAt = new Date(sig.created_at).getTime();
+        const closedAt = Date.now();
+        const timeToTarget = Math.floor((closedAt - createdAt) / 1000); // seconds
+        
+        // Calculate slippage (execution vs midpoint of entry zone)
+        const slippage = entryPrice > 0 ? Math.abs((currentPrice - entryPrice) / entryPrice) * 100 : 0;
 
         await supabase.from("trading_signals").update({ status: "closed" }).eq("id", sig.id);
         await supabase.from("signal_performance").update({
           result: outcome,
           pnl_percent: parseFloat(pnlPercent.toFixed(4)),
-          closed_at: new Date().toISOString(),
-          time_to_target: `${Math.floor((now - new Date(sig.created_at).getTime()) / 1000)} seconds`,
+          closed_at: new Date(closedAt).toISOString(),
+          time_to_target: outcome === "win" ? `${timeToTarget} seconds` : null,
+          time_to_tp: outcome === "win" ? `${timeToTarget} seconds` : null,
+          time_to_sl: outcome === "loss" ? `${timeToTarget} seconds` : null,
+          slippage: parseFloat(slippage.toFixed(4)),
         }).eq("signal_id", sig.id);
 
         results.push({ signal_id: sig.id, pair: sig.pair, result: outcome });

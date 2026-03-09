@@ -221,6 +221,7 @@ Analyze this market and produce a trading signal. Be conservative — only give 
       explanation: signalData.explanation,
       expires_at: Math.floor(Date.now() / 1000) + 4 * 3600,
       model_version: MODEL_VERSION,
+      signal_source: "AI", // Track signal generation source
     };
 
     // Store in DB
@@ -263,13 +264,15 @@ Analyze this market and produce a trading signal. Be conservative — only give 
     if (insertError) {
       console.error("Failed to store signal in DB:", insertError);
     } else {
-      // Seed performance record
+      // Seed performance record with enhanced tracking
       const entryMid = (signalData.entry_zone[0] + signalData.entry_zone[1]) / 2;
       const { error: perfError } = await supabase.from("signal_performance").insert({
         signal_id: signal.id,
         pair,
         direction: signalData.direction,
         entry_price: entryMid,
+        entry_zone_low: signalData.entry_zone[0],
+        entry_zone_high: signalData.entry_zone[1],
         stop_loss: signalData.stop_loss,
         take_profit: signalData.take_profit[0] || null,
         result: "open",

@@ -329,6 +329,36 @@ export type Database = {
         }
         Relationships: []
       }
+      portfolio_history: {
+        Row: {
+          account_mode: string
+          balance: number
+          created_at: string | null
+          equity: number
+          id: string
+          open_positions: number
+          user_id: string
+        }
+        Insert: {
+          account_mode?: string
+          balance: number
+          created_at?: string | null
+          equity: number
+          id?: string
+          open_positions?: number
+          user_id: string
+        }
+        Update: {
+          account_mode?: string
+          balance?: number
+          created_at?: string | null
+          equity?: number
+          id?: string
+          open_positions?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -392,48 +422,66 @@ export type Database = {
           created_at: string | null
           direction: string
           entry_price: number | null
+          entry_zone_high: number | null
+          entry_zone_low: number | null
           id: string
+          max_drawdown: number | null
           model_version: string | null
           pair: string
           pnl_percent: number | null
           result: string | null
           signal_id: string
+          slippage: number | null
           stop_loss: number | null
           strategy: string | null
           take_profit: number | null
+          time_to_sl: string | null
           time_to_target: string | null
+          time_to_tp: string | null
         }
         Insert: {
           closed_at?: string | null
           created_at?: string | null
           direction: string
           entry_price?: number | null
+          entry_zone_high?: number | null
+          entry_zone_low?: number | null
           id?: string
+          max_drawdown?: number | null
           model_version?: string | null
           pair: string
           pnl_percent?: number | null
           result?: string | null
           signal_id: string
+          slippage?: number | null
           stop_loss?: number | null
           strategy?: string | null
           take_profit?: number | null
+          time_to_sl?: string | null
           time_to_target?: string | null
+          time_to_tp?: string | null
         }
         Update: {
           closed_at?: string | null
           created_at?: string | null
           direction?: string
           entry_price?: number | null
+          entry_zone_high?: number | null
+          entry_zone_low?: number | null
           id?: string
+          max_drawdown?: number | null
           model_version?: string | null
           pair?: string
           pnl_percent?: number | null
           result?: string | null
           signal_id?: string
+          slippage?: number | null
           stop_loss?: number | null
           strategy?: string | null
           take_profit?: number | null
+          time_to_sl?: string | null
           time_to_target?: string | null
+          time_to_tp?: string | null
         }
         Relationships: [
           {
@@ -453,12 +501,16 @@ export type Database = {
           created_at: string
           direction: string
           entry_price: number
+          execution_latency: number | null
+          execution_price: number | null
           exit_price: number | null
           id: string
           lot_size: number
           pair: string
           pnl: number | null
           settlement_chain: string | null
+          signal_id: string | null
+          slippage: number | null
           source_chain: string | null
           status: string
           stop_loss: number | null
@@ -474,12 +526,16 @@ export type Database = {
           created_at?: string
           direction: string
           entry_price: number
+          execution_latency?: number | null
+          execution_price?: number | null
           exit_price?: number | null
           id?: string
           lot_size: number
           pair: string
           pnl?: number | null
           settlement_chain?: string | null
+          signal_id?: string | null
+          slippage?: number | null
           source_chain?: string | null
           status?: string
           stop_loss?: number | null
@@ -495,12 +551,16 @@ export type Database = {
           created_at?: string
           direction?: string
           entry_price?: number
+          execution_latency?: number | null
+          execution_price?: number | null
           exit_price?: number | null
           id?: string
           lot_size?: number
           pair?: string
           pnl?: number | null
           settlement_chain?: string | null
+          signal_id?: string | null
+          slippage?: number | null
           source_chain?: string | null
           status?: string
           stop_loss?: number | null
@@ -509,7 +569,15 @@ export type Database = {
           updated_at?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "trades_signal_id_fkey"
+            columns: ["signal_id"]
+            isOneToOne: false
+            referencedRelation: "trading_signals"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       trading_signals: {
         Row: {

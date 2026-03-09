@@ -8,3 +8,6 @@ verify_jwt = false
 
 [functions.evaluate-signals]
 verify_jwt = false
+
+[functions.execute-trade]
+verify_jwt = false
