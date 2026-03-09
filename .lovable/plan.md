@@ -1,71 +1,61 @@
 
 
-## Fix: Use Supabase Client for Edge Function Calls
+## AI Agent Hardening: 5-Priority Implementation
 
-### Root Cause
-The `generateSignal` function in `src/hooks/useSignals.ts` constructs the edge function URL manually using:
-```typescript
-fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-signal`)
-```
+### Priority 1: End-to-End Signal Flow Validation
 
-In the preview environment, `VITE_SUPABASE_URL` resolves to the Lovable preview server (e.g., `https://id-preview--...lovable.app`) instead of the Supabase function endpoint (`https://trbgjsurjfubezcdzpao.supabase.co`). This causes the request to hit the frontend server, which returns the HTML application instead of invoking the edge function.
+The edge functions (`generate-signal`, `check-signal`) are registered in `config.toml` and the code exists. The Signals page and `useSignals` hook are wired up. The `LOVABLE_API_KEY` secret is present.
 
-### Solution
-Replace the manual `fetch()` call with the Supabase client's `supabase.functions.invoke()` method. This method:
-- Automatically routes to the correct Supabase edge function endpoint
-- Handles authentication automatically using the current session
-- Returns a typed response with `{ data, error }` structure
+**Action**: Test `generate-signal` via the Supabase test tool, inspect logs, and fix any issues found. The console logs show ref warnings for `MobileSignalTabs` and `SignalList` (function components given refs) -- these need `React.forwardRef` or the ref needs removing.
 
-### Implementation
+**Fixes needed**:
+- Fix `MobileSignalTabs` / `SignalList` ref warnings in `Signals.tsx` (Radix Tabs passes refs to children)
 
-**Update `src/hooks/useSignals.ts`:**
+### Priority 2: Signal Expiry + Validity Guardrails
 
-Replace lines 65-94 with:
-```typescript
-const { data, error } = await supabase.functions.invoke('generate-signal', {
-  body: { pair, timeframe }
-});
+**Changes to `src/hooks/useSignals.ts`**:
+- After mapping signals, filter out expired ones: `expires_at > 0 && expires_at < Date.now()/1000`
+- Add `isExpired(signal)` and `isPriceInZone(signal, currentPrice)` helper exports
 
-if (error) {
-  // Handle specific error cases
-  if (error.message?.includes('429')) {
-    toast({ title: 'Rate Limited', description: 'Too many requests. Try again shortly.', variant: 'destructive' });
-    return null;
-  }
-  if (error.message?.includes('402')) {
-    toast({ title: 'Credits Exhausted', description: 'AI credits used up. Add more in workspace settings.', variant: 'destructive' });
-    return null;
-  }
-  
-  console.error('Edge function error:', error);
-  toast({ title: 'Error', description: error.message || 'Signal generation failed', variant: 'destructive' });
-  return null;
-}
+**Changes to `src/pages/Signals.tsx`**:
+- Show expired badge on expired signals, disable Execute button
+- Add warning if current price is outside entry zone (requires price data)
 
-if (!data) {
-  toast({ title: 'Error', description: 'No data returned from signal service', variant: 'destructive' });
-  return null;
-}
+### Priority 3: Improve Forex Data Source
 
-if (data.error) {
-  toast({ title: 'Signal Error', description: data.error, variant: 'destructive' });
-  return null;
-}
+**Changes to `supabase/functions/generate-signal/index.ts`**:
+- Replace hardcoded `fetchForexPrice` with a call to a free FX API (e.g., `open.er-api.com` or `api.exchangerate.host`)
+- Fallback to current estimates if API fails
 
-if (data.filtered) {
-  toast({ title: 'Low Confidence', description: `Signal for ${pair} below threshold (${(data.confidence * 100).toFixed(0)}%). Not published.` });
-  return null;
-}
+### Priority 4: Signal-to-Trade Execution Bridge
 
-const signal = data as SignalObject;
-```
+**Changes to `src/components/trading/TradingForm.tsx`**:
+- Import `useLocation` from react-router-dom
+- Read `location.state?.prefill` (a `SignalObject`)
+- On mount, if prefill exists: set `selectedPair`, `tradeDirection`, `stopLoss`, `takeProfit`
+- Show a banner: "Pre-filled from AI Signal — {pair} {direction}"
 
-### Benefits
-1. **Correct routing**: Requests go directly to Supabase edge function endpoint
-2. **Automatic auth**: No manual session fetching or authorization headers
-3. **Type safety**: Better error handling with structured response
-4. **Simpler code**: Less boilerplate for API calls
+**Changes to `src/pages/Trade.tsx`**:
+- Pass prefill state down to `TradingForm` if needed (or TradingForm reads it directly)
 
-### Files Modified
-- `src/hooks/useSignals.ts` — Replace manual fetch with `supabase.functions.invoke()`
+### Priority 5: Signal Metadata & Logging
+
+**Changes to `src/types/signal.ts`**:
+- Add optional fields: `model_version?: string`, `signal_strength?: number`
+
+**Changes to `supabase/functions/generate-signal/index.ts`**:
+- Add `model_version: "gemini-3-flash-preview"` to the stored signal
+
+**Client-side logging**:
+- Log signal generation, view, and execution events via `console.info` (lightweight, no new infra)
+
+### Files to modify
+
+| File | Changes |
+|---|---|
+| `src/pages/Signals.tsx` | Fix ref warnings, add expiry UI |
+| `src/hooks/useSignals.ts` | Filter expired signals, add helpers |
+| `supabase/functions/generate-signal/index.ts` | Real forex API, model_version field |
+| `src/components/trading/TradingForm.tsx` | Read prefill from location state |
+| `src/types/signal.ts` | Add optional metadata fields |
 

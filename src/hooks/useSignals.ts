@@ -62,40 +62,35 @@ export function useSignals() {
     setIsGenerating(true);
     console.info('[Signals] Generating signal for %s @ %s', pair, timeframe);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const res = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-signal`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${session?.access_token || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-          },
-          body: JSON.stringify({ pair, timeframe }),
+      const { data, error } = await supabase.functions.invoke('generate-signal', {
+        body: { pair, timeframe }
+      });
+
+      if (error) {
+        if (error.message?.includes('429')) {
+          toast({ title: 'Rate Limited', description: 'Too many requests. Try again shortly.', variant: 'destructive' });
+          return null;
         }
-      );
+        if (error.message?.includes('402')) {
+          toast({ title: 'Credits Exhausted', description: 'AI credits used up. Add more in workspace settings.', variant: 'destructive' });
+          return null;
+        }
+        
+        console.error('Edge function error:', error);
+        toast({ title: 'Error', description: error.message || 'Signal generation failed', variant: 'destructive' });
+        return null;
+      }
 
-      if (res.status === 429) {
-        toast({ title: 'Rate Limited', description: 'Too many requests. Try again shortly.', variant: 'destructive' });
-        return null;
-      }
-      if (res.status === 402) {
-        toast({ title: 'Credits Exhausted', description: 'AI credits used up. Add more in workspace settings.', variant: 'destructive' });
+      if (!data) {
+        toast({ title: 'Error', description: 'No data returned from signal service', variant: 'destructive' });
         return null;
       }
 
-      const contentType = res.headers.get('content-type') || '';
-      if (!contentType.includes('application/json')) {
-        const text = await res.text();
-        console.error('Non-JSON response from generate-signal:', res.status, text.slice(0, 200));
-        toast({ title: 'Error', description: 'Signal service unavailable. The edge function may not be deployed.', variant: 'destructive' });
-        return null;
-      }
-      const data = await res.json();
       if (data.error) {
         toast({ title: 'Signal Error', description: data.error, variant: 'destructive' });
         return null;
       }
+
       if (data.filtered) {
         toast({ title: 'Low Confidence', description: `Signal for ${pair} below threshold (${(data.confidence * 100).toFixed(0)}%). Not published.` });
         return null;
