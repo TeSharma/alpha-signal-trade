@@ -11,6 +11,9 @@ import MobileHeader from "@/components/layout/MobileHeader";
 import CollapsibleCard from "@/components/ui/collapsible-card";
 import { useTrades, Trade } from '@/hooks/useTrades';
 import { useOnChainTradingV2 } from '@/hooks/useOnChainTradingV2';
+import { usePortfolioHistory } from '@/hooks/usePortfolioHistory';
+import { EquityCurveChart } from '@/components/portfolio/EquityCurveChart';
+import { PortfolioStats } from '@/components/portfolio/PortfolioStats';
 import { formatDistanceToNow } from 'date-fns';
 
 const Dashboard = () => {
@@ -53,6 +56,10 @@ const DesktopDashboard = ({ accountMode, navigate }: DashboardProps) => {
   const [openPositionsCount, setOpenPositionsCount] = useState(0);
   const [floatingPnL, setFloatingPnL] = useState(0);
   const [isResetting, setIsResetting] = useState(false);
+  const [timeRange, setTimeRange] = useState<'1d' | '7d' | '30d' | 'all'>('7d');
+  
+  // Use portfolio history hook
+  const portfolioMetrics = usePortfolioHistory(accountMode, timeRange);
 
   // Fetch on-chain positions for live mode
   useEffect(() => {
@@ -188,6 +195,32 @@ const DesktopDashboard = ({ accountMode, navigate }: DashboardProps) => {
               )}
             </CardContent>
           </Card>
+        </div>
+
+        {/* Portfolio Performance Section */}
+        <div className="grid grid-cols-1 gap-6">
+          <EquityCurveChart
+            history={portfolioMetrics.history}
+            startingBalance={accountMode === 'demo' ? 10000 : 0}
+            peakEquity={portfolioMetrics.peakEquity}
+            maxDrawdownPercent={portfolioMetrics.maxDrawdownPercent}
+            onTimeRangeChange={setTimeRange}
+            currentTimeRange={timeRange}
+          />
+        </div>
+
+        <div className="grid grid-cols-1 gap-6">
+          <PortfolioStats
+            totalReturn={portfolioMetrics.totalReturn}
+            totalReturnPercent={portfolioMetrics.totalReturnPercent}
+            profitFactor={portfolioMetrics.profitFactor}
+            maxDrawdownPercent={portfolioMetrics.maxDrawdownPercent}
+            avgWin={portfolioMetrics.avgWin}
+            avgLoss={portfolioMetrics.avgLoss}
+            largestWin={portfolioMetrics.largestWin}
+            largestLoss={portfolioMetrics.largestLoss}
+            winRate={winRate}
+          />
         </div>
 
         <div className="grid grid-cols-1 gap-6">
