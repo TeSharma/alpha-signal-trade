@@ -157,9 +157,26 @@ export function SignalCard({ signal, onApprove }: SignalCardProps) {
 
         <div className="flex gap-2">
           {signal.execution.type === 'ON_CHAIN' ? (
-            <Button className="flex-1" onClick={() => onApprove(signal)} disabled={expired}>
-              <ArrowRight className="h-4 w-4 mr-2" />
-              {expired ? 'Signal Expired' : 'Execute On-Chain'}
+            <Button 
+              className="flex-1" 
+              onClick={handleExecute} 
+              disabled={expired || executing || signal.status === 'executed'}
+            >
+              {executing ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Executing...
+                </>
+              ) : expired ? (
+                'Signal Expired'
+              ) : signal.status === 'executed' ? (
+                'Already Executed'
+              ) : (
+                <>
+                  <ArrowRight className="h-4 w-4 mr-2" />
+                  Execute Trade
+                </>
+              )}
             </Button>
           ) : (
             <Button variant="secondary" className="flex-1" disabled>
