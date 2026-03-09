@@ -197,7 +197,33 @@ const DesktopDashboard = ({ accountMode, navigate }: DashboardProps) => {
           </Card>
         </div>
 
+        {/* Portfolio Performance Section */}
         <div className="grid grid-cols-1 gap-6">
+          <EquityCurveChart
+            history={portfolioMetrics.history}
+            startingBalance={accountMode === 'demo' ? 10000 : 0}
+            peakEquity={portfolioMetrics.peakEquity}
+            maxDrawdownPercent={portfolioMetrics.maxDrawdownPercent}
+            onTimeRangeChange={setTimeRange}
+            currentTimeRange={timeRange}
+          />
+        </div>
+
+        <div className="grid grid-cols-1 gap-6">
+          <PortfolioStats
+            totalReturn={portfolioMetrics.totalReturn}
+            totalReturnPercent={portfolioMetrics.totalReturnPercent}
+            profitFactor={portfolioMetrics.profitFactor}
+            maxDrawdownPercent={portfolioMetrics.maxDrawdownPercent}
+            avgWin={portfolioMetrics.avgWin}
+            avgLoss={portfolioMetrics.avgLoss}
+            largestWin={portfolioMetrics.largestWin}
+            largestLoss={portfolioMetrics.largestLoss}
+            winRate={winRate}
+          />
+        </div>
+
+        <div className="grid grid-cols-1 gap-6"
           <Card>
             <CardHeader>
               <div className="flex justify-between items-center">

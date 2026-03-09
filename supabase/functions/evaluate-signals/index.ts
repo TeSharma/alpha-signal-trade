@@ -110,7 +110,10 @@ serve(async (req) => {
         // Calculate slippage (execution vs midpoint of entry zone)
         const slippage = entryPrice > 0 ? Math.abs((currentPrice - entryPrice) / entryPrice) * 100 : 0;
 
-        await supabase.from("trading_signals").update({ status: "closed" }).eq("id", sig.id);
+        // Enhanced status transitions
+        const signalStatus = outcome === "win" ? "tp_hit" : "sl_hit";
+
+        await supabase.from("trading_signals").update({ status: signalStatus }).eq("id", sig.id);
         await supabase.from("signal_performance").update({
           result: outcome,
           pnl_percent: parseFloat(pnlPercent.toFixed(4)),
