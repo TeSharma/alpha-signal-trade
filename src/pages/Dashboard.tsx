@@ -223,7 +223,8 @@ const DesktopDashboard = ({ accountMode, navigate }: DashboardProps) => {
           />
         </div>
 
-        <div className="grid grid-cols-1 gap-6"
+        <div className="grid grid-cols-1 gap-6">
+          <Card>
           <Card>
             <CardHeader>
               <div className="flex justify-between items-center">
