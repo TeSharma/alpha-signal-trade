@@ -11,6 +11,9 @@ import MobileHeader from "@/components/layout/MobileHeader";
 import CollapsibleCard from "@/components/ui/collapsible-card";
 import { useTrades, Trade } from '@/hooks/useTrades';
 import { useOnChainTradingV2 } from '@/hooks/useOnChainTradingV2';
+import { usePortfolioHistory } from '@/hooks/usePortfolioHistory';
+import { EquityCurveChart } from '@/components/portfolio/EquityCurveChart';
+import { PortfolioStats } from '@/components/portfolio/PortfolioStats';
 import { formatDistanceToNow } from 'date-fns';
 
 const Dashboard = () => {
