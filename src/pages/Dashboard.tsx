@@ -56,6 +56,10 @@ const DesktopDashboard = ({ accountMode, navigate }: DashboardProps) => {
   const [openPositionsCount, setOpenPositionsCount] = useState(0);
   const [floatingPnL, setFloatingPnL] = useState(0);
   const [isResetting, setIsResetting] = useState(false);
+  const [timeRange, setTimeRange] = useState<'1d' | '7d' | '30d' | 'all'>('7d');
+  
+  // Use portfolio history hook
+  const portfolioMetrics = usePortfolioHistory(accountMode, timeRange);
 
   // Fetch on-chain positions for live mode
   useEffect(() => {
