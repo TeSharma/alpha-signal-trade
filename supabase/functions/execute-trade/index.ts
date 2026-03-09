@@ -285,6 +285,36 @@ Deno.serve(async (req) => {
 
     console.log(`[execute-trade] Trade created: ${trade.id} for signal ${signal_id} — ${signal.direction} ${signal.pair} @ ${entryPrice}`);
 
+    // 12. Capture portfolio snapshot after trade opens
+    const { data: allOpenTrades, error: openTradesError } = await supabase
+      .from('trades')
+      .select('pnl')
+      .eq('user_id', userId)
+      .eq('account_mode', account_mode)
+      .eq('status', 'open');
+
+    if (openTradesError) {
+      console.error('Error fetching open trades for snapshot:', openTradesError);
+    }
+
+    const unrealizedPnL = (allOpenTrades || []).reduce((sum, t) => sum + (t.pnl || 0), 0);
+    const currentEquity = accountBalance + unrealizedPnL;
+    const openPositionsCount = (allOpenTrades || []).length;
+
+    const { error: snapshotError } = await supabase
+      .from('portfolio_history')
+      .insert({
+        user_id: userId,
+        account_mode: account_mode,
+        balance: accountBalance,
+        equity: currentEquity,
+        open_positions: openPositionsCount,
+      });
+
+    if (snapshotError) {
+      console.error('Error creating portfolio snapshot:', snapshotError);
+    }
+
     return new Response(
       JSON.stringify({
         success: true,
