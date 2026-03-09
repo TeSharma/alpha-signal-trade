@@ -225,7 +225,6 @@ const DesktopDashboard = ({ accountMode, navigate }: DashboardProps) => {
 
         <div className="grid grid-cols-1 gap-6">
           <Card>
-          <Card>
             <CardHeader>
               <div className="flex justify-between items-center">
                 <CardTitle>Recent Trades</CardTitle>
