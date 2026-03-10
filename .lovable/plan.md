@@ -1,61 +1,44 @@
 
 
-## AI Agent Hardening: 5-Priority Implementation
+# Centralized Signal Generation
 
-### Priority 1: End-to-End Signal Flow Validation
+## Problem
+Currently every user can trigger `generate-signal` edge function directly, burning AI credits per user. Signals should be generated centrally and shared.
 
-The edge functions (`generate-signal`, `check-signal`) are registered in `config.toml` and the code exists. The Signals page and `useSignals` hook are wired up. The `LOVABLE_API_KEY` secret is present.
+## Changes
 
-**Action**: Test `generate-signal` via the Supabase test tool, inspect logs, and fix any issues found. The console logs show ref warnings for `MobileSignalTabs` and `SignalList` (function components given refs) -- these need `React.forwardRef` or the ref needs removing.
+### 1. Create a new edge function: `generate-signals-batch`
+A server-only function that loops through all supported pairs and timeframes, calls the AI, and stores signals. This will be invoked by the existing cron job instead of `evaluate-signals`.
 
-**Fixes needed**:
-- Fix `MobileSignalTabs` / `SignalList` ref warnings in `Signals.tsx` (Radix Tabs passes refs to children)
+Actually, simpler approach: **reuse the existing `generate-signal` function** but add a second cron job that calls it for each pair. The function already stores signals with `user_id = null` (public signals).
 
-### Priority 2: Signal Expiry + Validity Guardrails
+### 2. Update cron job (SQL insert)
+Schedule `generate-signal` to run every 15 minutes for each supported pair (BTC/USD, ETH/USD, POL/USD, EUR/USD, GBP/USD, USD/JPY). This means 6 sequential HTTP calls from a single cron job, or 6 separate cron entries.
 
-**Changes to `src/hooks/useSignals.ts`**:
-- After mapping signals, filter out expired ones: `expires_at > 0 && expires_at < Date.now()/1000`
-- Add `isExpired(signal)` and `isPriceInZone(signal, currentPrice)` helper exports
+### 3. Update `useSignals` hook
+- Remove `generateSignal` function entirely (no client-side AI invocation)
+- Replace with just `refreshSignals` (re-fetch from DB)
+- Keep real-time subscription as-is
 
-**Changes to `src/pages/Signals.tsx`**:
-- Show expired badge on expired signals, disable Execute button
-- Add warning if current price is outside entry zone (requires price data)
+### 4. Update `Signals.tsx` page
+- Remove pair/timeframe selectors (signals are pre-generated for all pairs)
+- Rename "Generate Signal" button to "Refresh Signals"
+- Button calls `refreshSignals()` instead of `generateSignal()`
+- Add client-side pair filter dropdown to filter displayed signals by pair
+- Remove `isGenerating` state references
 
-### Priority 3: Improve Forex Data Source
+### 5. Update `generate-signal/index.ts`
+- Ensure signals are always stored with `user_id = null` so they're visible to all users via the existing RLS policy ("Anyone can view public signals" where `user_id IS NULL`)
 
-**Changes to `supabase/functions/generate-signal/index.ts`**:
-- Replace hardcoded `fetchForexPrice` with a call to a free FX API (e.g., `open.er-api.com` or `api.exchangerate.host`)
-- Fallback to current estimates if API fails
+## Files to modify
 
-### Priority 4: Signal-to-Trade Execution Bridge
+| File | Change |
+|------|--------|
+| `src/hooks/useSignals.ts` | Remove `generateSignal`, keep `refreshSignals` only |
+| `src/pages/Signals.tsx` | Rename button to "Refresh Signals", remove AI generation, add pair filter for display |
+| `supabase/functions/generate-signal/index.ts` | Ensure `user_id` is always null for centralized signals |
+| Cron SQL (via insert tool) | Add scheduled calls for all 6 pairs every 15 min |
 
-**Changes to `src/components/trading/TradingForm.tsx`**:
-- Import `useLocation` from react-router-dom
-- Read `location.state?.prefill` (a `SignalObject`)
-- On mount, if prefill exists: set `selectedPair`, `tradeDirection`, `stopLoss`, `takeProfit`
-- Show a banner: "Pre-filled from AI Signal — {pair} {direction}"
-
-**Changes to `src/pages/Trade.tsx`**:
-- Pass prefill state down to `TradingForm` if needed (or TradingForm reads it directly)
-
-### Priority 5: Signal Metadata & Logging
-
-**Changes to `src/types/signal.ts`**:
-- Add optional fields: `model_version?: string`, `signal_strength?: number`
-
-**Changes to `supabase/functions/generate-signal/index.ts`**:
-- Add `model_version: "gemini-3-flash-preview"` to the stored signal
-
-**Client-side logging**:
-- Log signal generation, view, and execution events via `console.info` (lightweight, no new infra)
-
-### Files to modify
-
-| File | Changes |
-|---|---|
-| `src/pages/Signals.tsx` | Fix ref warnings, add expiry UI |
-| `src/hooks/useSignals.ts` | Filter expired signals, add helpers |
-| `supabase/functions/generate-signal/index.ts` | Real forex API, model_version field |
-| `src/components/trading/TradingForm.tsx` | Read prefill from location state |
-| `src/types/signal.ts` | Add optional metadata fields |
+## Cron Strategy
+Single cron job that calls a new batch wrapper, OR modify `generate-signal` to accept a `batch: true` param that iterates all pairs. The batch approach is cleaner -- one cron entry, one function call that generates for all pairs.
 
