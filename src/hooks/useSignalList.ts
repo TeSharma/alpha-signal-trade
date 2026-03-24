@@ -146,7 +146,15 @@ export function useSignalList() {
       const { data, error, count } = await query;
 
       if (error) {
-        throw error;
+        console.error('Supabase query error:', error);
+        toast({
+          title: 'Database Error',
+          description: 'Failed to fetch signals. Please check your connection and try again.',
+          variant: 'destructive',
+        });
+        setSignals([]);
+        setPagination(prev => ({ ...prev, total: 0, hasMore: false }));
+        return;
       }
 
       if (!data) {

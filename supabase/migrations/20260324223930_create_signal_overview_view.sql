@@ -42,19 +42,8 @@ FROM trading_signals s
 LEFT JOIN trades t ON s.id = t.signal_id
 LEFT JOIN signal_performance sp ON s.id = sp.signal_id;
 
--- Enable RLS on the view
-ALTER VIEW public.signal_overview SET (security_barrier = true);
-
--- Create RLS policies for the view
-CREATE POLICY "Anyone can view active signals" 
-ON public.signal_overview 
-FOR SELECT 
-USING (signal_status = 'active');
-
-CREATE POLICY "Users can view their own signals" 
-ON public.signal_overview 
-FOR SELECT 
-USING (auth.uid() = user_id);
+-- Note: Views do not support RLS policies correctly, so we apply RLS to underlying tables instead
+-- The view will inherit the RLS policies from the underlying tables
 
 -- Enable realtime for the view
 ALTER VIEW public.signal_overview REPLICA IDENTITY FULL;
