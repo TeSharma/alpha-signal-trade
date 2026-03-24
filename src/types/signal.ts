@@ -24,6 +24,20 @@ export interface SignalObject {
   status?: 'active' | 'expired' | 'executed' | 'closed';
   model_version?: string;
   signal_strength?: number;
+  // Trade context fields
+  trade_id?: string;
+  trade_status?: 'OPEN' | 'CLOSED' | 'LIQUIDATED';
+  trade_entry_price?: number;
+  trade_exit_price?: number;
+  trade_pnl?: number;
+  trade_result?: 'WIN' | 'LOSS';
+  trade_account_mode?: 'demo' | 'live';
+  // Performance context fields
+  signal_performance_result?: 'WIN' | 'LOSS';
+  signal_performance_pnl?: number;
+  signal_time_to_target?: number;
+  signal_model_version?: string;
+  signal_strategy?: string;
 }
 
 /** Check if a signal has expired */
