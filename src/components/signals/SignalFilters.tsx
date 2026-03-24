@@ -58,7 +58,7 @@ export const SignalFilters: React.FC = () => {
               <SelectValue placeholder="All Markets" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">All Markets</SelectItem>
+              <SelectItem value="all">All Markets</SelectItem>
               {availableMarkets.map(market => (
                 <SelectItem key={market} value={market}>{market}</SelectItem>
               ))}
@@ -74,7 +74,7 @@ export const SignalFilters: React.FC = () => {
               <SelectValue placeholder="Direction" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">Direction</SelectItem>
+              <SelectItem value="all">Direction</SelectItem>
               {availableDirections.map(direction => (
                 <SelectItem key={direction} value={direction}>
                   <div className="flex items-center gap-1">
@@ -95,7 +95,7 @@ export const SignalFilters: React.FC = () => {
               <SelectValue placeholder="Status" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">Status</SelectItem>
+              <SelectItem value="all">Status</SelectItem>
               {availableStatuses.map(status => (
                 <SelectItem key={status} value={status}>{status}</SelectItem>
               ))}
