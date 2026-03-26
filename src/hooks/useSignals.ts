@@ -30,7 +30,7 @@ export function useSignals() {
           id: row.id,
           market: row.market || 'CRYPTO',
           pair: row.pair,
-          direction: row.direction === 'buy' || row.direction === 'LONG' ? 'LONG' : 'SHORT',
+          direction: row.direction === 'buy' || row.direction === 'long' || row.direction === 'LONG' ? 'LONG' : 'SHORT',
           entry_zone: row.entry_zone || [0, 0],
           stop_loss: row.stop_loss || 0,
           take_profit: row.take_profit || [],
