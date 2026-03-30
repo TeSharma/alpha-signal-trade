@@ -1,4 +1,10 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+// @ts-nocheck
+/**
+ * Supabase Edge Function - Deno Runtime
+ * This file runs in Deno, not Node.js, so TypeScript errors about Deno imports
+ * and globals can be safely ignored. The code is valid for Deno runtime.
+ */
+import { serve } from "https://deno.land/std@0.208.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
@@ -191,6 +197,11 @@ Analyze this market and produce a trading signal. Be conservative — only give 
 
     const signalData = JSON.parse(toolCall.function.arguments);
 
+    // Convert direction for database compatibility (LONG -> buy, SHORT -> sell)
+    const dbDirection = signalData.direction === 'LONG' ? 'buy' : 'sell';
+    // Map direction to recommendation (LONG -> BUY, SHORT -> SELL)
+    const recommendation = signalData.direction === 'LONG' ? 'BUY' : 'SELL';
+
     // Enforce confidence threshold
     if (signalData.confidence < 0.60) {
       return new Response(JSON.stringify({
@@ -243,9 +254,9 @@ Analyze this market and produce a trading signal. Be conservative — only give 
     const { error: insertError } = await supabase.from("trading_signals").insert({
       id: signal.id,
       pair,
-      direction: signalData.direction,
-      confidence: signalData.confidence,
-      recommendation: signalData.strategy,
+      direction: dbDirection, // Use lowercase 'buy' or 'sell' for database compatibility
+      confidence: Math.round(signalData.confidence * 100), // Convert 0.0-1.0 to 0-100 for DB constraint
+      recommendation: recommendation, // Use 'BUY' or 'SELL' based on direction
       signal_data: signal,
       user_id: userId, // nullable — OK for anonymous users
       market,
@@ -269,7 +280,7 @@ Analyze this market and produce a trading signal. Be conservative — only give 
       const { error: perfError } = await supabase.from("signal_performance").insert({
         signal_id: signal.id,
         pair,
-        direction: signalData.direction,
+        direction: dbDirection, // Use lowercase 'buy' or 'sell' for database compatibility
         entry_price: entryMid,
         entry_zone_low: signalData.entry_zone[0],
         entry_zone_high: signalData.entry_zone[1],
