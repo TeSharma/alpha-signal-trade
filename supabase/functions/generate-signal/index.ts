@@ -6,6 +6,7 @@
  */
 import { serve } from "https://deno.land/std@0.208.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import OpenAI from "npm:openai@^4.0.0";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -88,8 +89,12 @@ serve(async (req) => {
     const { pair, timeframe = "15m" } = await req.json();
     if (!pair) throw new Error("pair is required");
 
+    const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
+
+    if (!OPENAI_API_KEY && !LOVABLE_API_KEY) {
+      throw new Error("Either OPENAI_API_KEY or LOVABLE_API_KEY must be configured");
+    }
 
     const isCrypto = CRYPTO_PAIRS.includes(pair);
     const market = isCrypto ? "CRYPTO" : "FOREX";
@@ -120,82 +125,106 @@ Current market context:
 
 Analyze this market and produce a trading signal. Be conservative — only give confidence >= 0.60 if there's a clear setup. Consider the session timing and volatility regime.`;
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
+    // Define the tool schema for structured output
+    const signalTool = {
+      type: "function",
+      function: {
+        name: "emit_signal",
+        description: "Emit a structured trading signal after analysis",
+        parameters: {
+          type: "object",
+          properties: {
+            direction: { type: "string", enum: ["LONG", "SHORT"] },
+            entry_zone: {
+              type: "array",
+              items: { type: "number" },
+              minItems: 2,
+              maxItems: 2,
+              description: "Price range [low, high] for entry",
+            },
+            stop_loss: { type: "number", description: "Stop loss price" },
+            take_profit: {
+              type: "array",
+              items: { type: "number" },
+              description: "Take profit targets (1-3 levels)",
+            },
+            strategy: { type: "string", description: "Strategy name, e.g. Trend Continuation, Reversal" },
+            confidence: { type: "number", description: "Confidence score 0.0 to 1.0" },
+            rr: { type: "number", description: "Risk-reward ratio" },
+            risk_level: { type: "string", enum: ["LOW", "MODERATE", "HIGH"] },
+            explanation: {
+              type: "array",
+              items: { type: "string" },
+              description: "3-5 bullet points explaining the signal reasoning",
+            },
+          },
+          required: ["direction", "entry_zone", "stop_loss", "take_profit", "strategy", "confidence", "rr", "risk_level", "explanation"],
+          additionalProperties: false,
+        },
       },
-      body: JSON.stringify({
-        model: MODEL_VERSION,
+    };
+
+    let signalData;
+    let modelUsed = MODEL_VERSION;
+
+    if (OPENAI_API_KEY) {
+      // Use OpenAI SDK
+      const openai = new OpenAI({ apiKey: OPENAI_API_KEY });
+
+      const aiResponse = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: `Generate a trading signal for ${pair} on the ${timeframe} timeframe.` },
         ],
-        tools: [
-          {
-            type: "function",
-            function: {
-              name: "emit_signal",
-              description: "Emit a structured trading signal after analysis",
-              parameters: {
-                type: "object",
-                properties: {
-                  direction: { type: "string", enum: ["LONG", "SHORT"] },
-                  entry_zone: {
-                    type: "array",
-                    items: { type: "number" },
-                    minItems: 2,
-                    maxItems: 2,
-                    description: "Price range [low, high] for entry",
-                  },
-                  stop_loss: { type: "number", description: "Stop loss price" },
-                  take_profit: {
-                    type: "array",
-                    items: { type: "number" },
-                    description: "Take profit targets (1-3 levels)",
-                  },
-                  strategy: { type: "string", description: "Strategy name, e.g. Trend Continuation, Reversal" },
-                  confidence: { type: "number", description: "Confidence score 0.0 to 1.0" },
-                  rr: { type: "number", description: "Risk-reward ratio" },
-                  risk_level: { type: "string", enum: ["LOW", "MODERATE", "HIGH"] },
-                  explanation: {
-                    type: "array",
-                    items: { type: "string" },
-                    description: "3-5 bullet points explaining the signal reasoning",
-                  },
-                },
-                required: ["direction", "entry_zone", "stop_loss", "take_profit", "strategy", "confidence", "rr", "risk_level", "explanation"],
-                additionalProperties: false,
-              },
-            },
-          },
-        ],
+        tools: [signalTool],
         tool_choice: { type: "function", function: { name: "emit_signal" } },
-      }),
-    });
+      });
 
-    if (!response.ok) {
-      if (response.status === 429) {
-        return new Response(JSON.stringify({ error: "Rate limit exceeded. Try again shortly." }), {
-          status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+      modelUsed = "gpt-4o-mini";
+      const toolCall = aiResponse.choices?.[0]?.message?.tool_calls?.[0];
+      if (!toolCall) throw new Error("No tool call in OpenAI response");
+      signalData = JSON.parse(toolCall.function.arguments);
+    } else {
+      // Use Lovable AI Gateway (fallback)
+      const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${LOVABLE_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: MODEL_VERSION,
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: `Generate a trading signal for ${pair} on the ${timeframe} timeframe.` },
+          ],
+          tools: [signalTool],
+          tool_choice: { type: "function", function: { name: "emit_signal" } },
+        }),
+      });
+
+      if (!response.ok) {
+        if (response.status === 429) {
+          return new Response(JSON.stringify({ error: "Rate limit exceeded. Try again shortly." }), {
+            status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        if (response.status === 402) {
+          return new Response(JSON.stringify({ error: "AI credits exhausted. Please add credits." }), {
+            status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        const errText = await response.text();
+        console.error("AI gateway error:", response.status, errText);
+        throw new Error(`AI gateway error: ${response.status}`);
       }
-      if (response.status === 402) {
-        return new Response(JSON.stringify({ error: "AI credits exhausted. Please add credits." }), {
-          status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      const errText = await response.text();
-      console.error("AI gateway error:", response.status, errText);
-      throw new Error(`AI gateway error: ${response.status}`);
+
+      const aiResult = await response.json();
+      const toolCall = aiResult.choices?.[0]?.message?.tool_calls?.[0];
+      if (!toolCall) throw new Error("No tool call in AI response");
+      signalData = JSON.parse(toolCall.function.arguments);
     }
-
-    const aiResult = await response.json();
-    const toolCall = aiResult.choices?.[0]?.message?.tool_calls?.[0];
-    if (!toolCall) throw new Error("No tool call in AI response");
-
-    const signalData = JSON.parse(toolCall.function.arguments);
 
     // Convert direction for database compatibility (LONG -> buy, SHORT -> sell)
     const dbDirection = signalData.direction === 'LONG' ? 'buy' : 'sell';
@@ -231,7 +260,7 @@ Analyze this market and produce a trading signal. Be conservative — only give 
       execution: { type: executionType, supported: true },
       explanation: signalData.explanation,
       expires_at: Math.floor(Date.now() / 1000) + 4 * 3600,
-      model_version: MODEL_VERSION,
+      model_version: modelUsed,
       signal_source: "AI", // Track signal generation source
     };
 
@@ -287,7 +316,7 @@ Analyze this market and produce a trading signal. Be conservative — only give 
         stop_loss: signalData.stop_loss,
         take_profit: signalData.take_profit[0] || null,
         result: "open",
-        model_version: MODEL_VERSION,
+        model_version: modelUsed,
         strategy: signalData.strategy,
       });
       if (perfError) console.error("Failed to seed signal_performance:", perfError);
