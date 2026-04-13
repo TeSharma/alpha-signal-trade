@@ -488,6 +488,13 @@ export type Database = {
             foreignKeyName: "signal_performance_signal_id_fkey"
             columns: ["signal_id"]
             isOneToOne: true
+            referencedRelation: "signal_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "signal_performance_signal_id_fkey"
+            columns: ["signal_id"]
+            isOneToOne: true
             referencedRelation: "trading_signals"
             referencedColumns: ["id"]
           },
@@ -570,6 +577,13 @@ export type Database = {
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "trades_signal_id_fkey"
+            columns: ["signal_id"]
+            isOneToOne: false
+            referencedRelation: "signal_overview"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "trades_signal_id_fkey"
             columns: ["signal_id"]
@@ -737,7 +751,41 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      signal_overview: {
+        Row: {
+          confidence: number | null
+          created_at: string | null
+          direction: string | null
+          entry_zone: Json | null
+          execution_type: string | null
+          expires_at: string | null
+          explanation: string[] | null
+          id: string | null
+          market: string | null
+          pair: string | null
+          risk: Json | null
+          signal_model_version: string | null
+          signal_performance_pnl: number | null
+          signal_performance_result: string | null
+          signal_status: string | null
+          signal_strategy: string | null
+          signal_strength: number | null
+          signal_time_to_target: number | null
+          stop_loss: number | null
+          strategy: string | null
+          take_profit: Json | null
+          timeframe: string | null
+          trade_account_mode: string | null
+          trade_entry_price: number | null
+          trade_exit_price: number | null
+          trade_id: string | null
+          trade_pnl: number | null
+          trade_result: string | null
+          trade_status: string | null
+          user_id: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       calculate_trade_pnl: {

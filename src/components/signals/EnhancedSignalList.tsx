@@ -6,11 +6,12 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Loader2, AlertCircle } from 'lucide-react';
 
-interface EnhancedSignalListProps {
+export interface EnhancedSignalListProps {
   defaultView?: 'all' | 'my-trades';
+  pairFilter?: string;
 }
 
-export const EnhancedSignalList: React.FC<EnhancedSignalListProps> = ({ defaultView = 'all' }) => {
+export const EnhancedSignalList: React.FC<EnhancedSignalListProps> = ({ defaultView = 'all', pairFilter }) => {
   const {
     signals,
     isLoading,
@@ -120,12 +121,13 @@ export const EnhancedSignalList: React.FC<EnhancedSignalListProps> = ({ defaultV
         ) : (
           <>
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-              {signals.map((signal) => (
+              {signals
+                .filter((signal) => !pairFilter || signal.pair === pairFilter)
+                .map((signal) => (
                 <EnhancedSignalCard
                   key={signal.id}
                   signal={signal}
                   onApprove={(s) => {
-                    // Handle trade approval
                     console.log('Trade approved for signal:', s.id);
                   }}
                 />
