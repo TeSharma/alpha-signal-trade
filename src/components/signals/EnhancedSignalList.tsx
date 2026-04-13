@@ -6,11 +6,12 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Loader2, AlertCircle } from 'lucide-react';
 
-interface EnhancedSignalListProps {
+export interface EnhancedSignalListProps {
   defaultView?: 'all' | 'my-trades';
+  pairFilter?: string;
 }
 
-export const EnhancedSignalList: React.FC<EnhancedSignalListProps> = ({ defaultView = 'all' }) => {
+export const EnhancedSignalList: React.FC<EnhancedSignalListProps> = ({ defaultView = 'all', pairFilter }) => {
   const {
     signals,
     isLoading,
