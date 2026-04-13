@@ -1,4 +1,4 @@
-# Shtraders AI Powered Decentralized Trading Platform
+#                           Shtraders (Alpha-Signal-Trade) 
 
 Shtraders is an AI powered decentralized trading platform that combines real time market analysis, automated signal generation, and integrated trade execution.
 
