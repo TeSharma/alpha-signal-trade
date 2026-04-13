@@ -1,44 +1,58 @@
 
 
-# Centralized Signal Generation
+# Fix: Centralized Signal Generation
 
-## Problem
-Currently every user can trigger `generate-signal` edge function directly, burning AI credits per user. Signals should be generated centrally and shared.
+## Root Cause
 
-## Changes
+The `generate-signal/index.ts` file is a **stub** with no AI logic — it just returns `{"success": true, "message": "Signal generation function initialized"}`. That's exactly what you're seeing. The function was never actually implemented.
 
-### 1. Create a new edge function: `generate-signals-batch`
-A server-only function that loops through all supported pairs and timeframes, calls the AI, and stores signals. This will be invoked by the existing cron job instead of `evaluate-signals`.
+## Plan
 
-Actually, simpler approach: **reuse the existing `generate-signal` function** but add a second cron job that calls it for each pair. The function already stores signals with `user_id = null` (public signals).
+### Step 1: Rewrite `generate-signal/index.ts` with actual AI logic
 
-### 2. Update cron job (SQL insert)
-Schedule `generate-signal` to run every 15 minutes for each supported pair (BTC/USD, ETH/USD, POL/USD, EUR/USD, GBP/USD, USD/JPY). This means 6 sequential HTTP calls from a single cron job, or 6 separate cron entries.
+Replace the stub with a working function that:
+- Accepts `{ pair, timeframe }` OR `{ batch: true }` (for cron)
+- Calls the Lovable AI Gateway (same pattern as `check-signal/index.ts`) with structured tool calling
+- Inserts results into `trading_signals` table with `user_id = null` (public/shared signals)
+- Returns the generated signal data
 
-### 3. Update `useSignals` hook
-- Remove `generateSignal` function entirely (no client-side AI invocation)
-- Replace with just `refreshSignals` (re-fetch from DB)
-- Keep real-time subscription as-is
+The AI prompt will request structured output via tool calling with fields: `market`, `pair`, `direction`, `entry_zone`, `stop_loss`, `take_profit`, `confidence`, `strategy`, `risk_level`, `rr_ratio`, `explanation`.
 
-### 4. Update `Signals.tsx` page
-- Remove pair/timeframe selectors (signals are pre-generated for all pairs)
-- Rename "Generate Signal" button to "Refresh Signals"
-- Button calls `refreshSignals()` instead of `generateSignal()`
-- Add client-side pair filter dropdown to filter displayed signals by pair
-- Remove `isGenerating` state references
+Signals with confidence < 0.6 will be filtered (not inserted).
 
-### 5. Update `generate-signal/index.ts`
-- Ensure signals are always stored with `user_id = null` so they're visible to all users via the existing RLS policy ("Anyone can view public signals" where `user_id IS NULL`)
+Expiry set to `now() + interval based on timeframe` (e.g., 15m timeframe → 30min expiry).
 
-## Files to modify
+### Step 2: Update `useSignals.ts` — remove client-side generation
 
-| File | Change |
+- Remove `generateSignal` function and `isGenerating` state
+- Keep only `fetchSignals` (renamed as `refreshSignals`) and real-time subscription
+- The hook returns `{ signals, isLoading, refreshSignals }`
+
+### Step 3: Update `Signals.tsx` — remove Generate button, simplify UI
+
+- Remove the "Generate Signal" dialog, pair/timeframe selectors, and `isGenerating` state
+- Keep only "Refresh Signals" button that re-fetches from DB
+- Add a simple pair filter dropdown to filter displayed signals client-side
+- Remove unused imports (Dialog, Select, Sparkles, etc.)
+
+### Step 4: Schedule cron job for batch generation
+
+Execute SQL (via insert tool) to schedule `generate-signal` with `{ "batch": true }` every 15 minutes. The batch mode will iterate through all 6 pairs (BTC/USD, ETH/USD, POL/USD, EUR/USD, GBP/USD, USD/JPY) and generate signals for each.
+
+### Step 5: Deploy and verify
+
+- Deploy the updated edge function
+- Test with curl to confirm AI logic executes and DB insert works
+- Verify frontend fetches shared signals correctly
+
+---
+
+## Files
+
+| File | Action |
 |------|--------|
-| `src/hooks/useSignals.ts` | Remove `generateSignal`, keep `refreshSignals` only |
-| `src/pages/Signals.tsx` | Rename button to "Refresh Signals", remove AI generation, add pair filter for display |
-| `supabase/functions/generate-signal/index.ts` | Ensure `user_id` is always null for centralized signals |
-| Cron SQL (via insert tool) | Add scheduled calls for all 6 pairs every 15 min |
-
-## Cron Strategy
-Single cron job that calls a new batch wrapper, OR modify `generate-signal` to accept a `batch: true` param that iterates all pairs. The batch approach is cleaner -- one cron entry, one function call that generates for all pairs.
+| `supabase/functions/generate-signal/index.ts` | **Rewrite** — full AI signal generation with batch support |
+| `src/hooks/useSignals.ts` | **Modify** — remove `generateSignal`, keep `refreshSignals` only |
+| `src/pages/Signals.tsx` | **Modify** — remove Generate dialog, add pair filter |
+| Cron SQL | **Insert** — schedule batch generation every 15 min |
 
