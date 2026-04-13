@@ -2,15 +2,12 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import type { SignalObject } from '@/types/signal';
 import { isExpired } from '@/types/signal';
-import { useToast } from '@/components/ui/use-toast';
 
 export function useSignals() {
   const [signals, setSignals] = useState<SignalObject[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [isGenerating, setIsGenerating] = useState(false);
-  const { toast } = useToast();
 
-  const fetchSignals = useCallback(async () => {
+  const refreshSignals = useCallback(async () => {
     setIsLoading(true);
     try {
       const { data, error } = await (supabase
@@ -18,7 +15,7 @@ export function useSignals() {
         .select('*') as any)
         .eq('status', 'active')
         .order('created_at', { ascending: false })
-        .limit(20);
+        .limit(50);
 
       if (error) throw error;
 
@@ -46,10 +43,8 @@ export function useSignals() {
         } as SignalObject;
       });
 
-      // Filter out expired signals client-side
       const activeSignals = mapped.filter(s => !isExpired(s));
       setSignals(activeSignals);
-
       console.info('[Signals] Fetched %d signals, %d active', mapped.length, activeSignals.length);
     } catch (err: any) {
       console.error('Failed to fetch signals:', err);
@@ -58,82 +53,20 @@ export function useSignals() {
     }
   }, []);
 
-  const generateSignal = useCallback(async (pair: string, timeframe = '15m') => {
-    setIsGenerating(true);
-    console.info('[Signals] Generating signal for %s @ %s', pair, timeframe);
-    try {
-      const { data, error } = await supabase.functions.invoke('generate-signal', {
-        body: { pair, timeframe }
-      });
-
-      if (error) {
-        if (error.message?.includes('429')) {
-          toast({ title: 'Rate Limited', description: 'Too many requests. Try again shortly.', variant: 'destructive' });
-          return null;
-        }
-        if (error.message?.includes('402')) {
-          toast({ title: 'Credits Exhausted', description: 'AI credits used up. Add more in workspace settings.', variant: 'destructive' });
-          return null;
-        }
-        
-        console.error('Edge function error:', error);
-        toast({ title: 'Error', description: error.message || 'Signal generation failed', variant: 'destructive' });
-        return null;
-      }
-
-      if (!data) {
-        toast({ title: 'Error', description: 'No data returned from signal service', variant: 'destructive' });
-        return null;
-      }
-
-      if (data.error) {
-        toast({ title: 'Signal Error', description: data.error, variant: 'destructive' });
-        return null;
-      }
-
-      if (data.filtered) {
-        toast({ title: 'Low Confidence', description: `Signal for ${pair} below threshold (${(data.confidence * 100).toFixed(0)}%). Not published.` });
-        return null;
-      }
-
-      const signal = data as SignalObject;
-      console.info('[Signals] Generated: %s %s — %d%% confidence', signal.direction, pair, (signal.confidence * 100).toFixed(0));
-      toast({ title: 'Signal Generated', description: `${signal.direction} ${pair} — ${(signal.confidence * 100).toFixed(0)}% confidence` });
-
-      // Add to local state immediately so it appears without waiting for DB sync
-      setSignals(prev => {
-        const exists = prev.some(s => s.id === signal.id);
-        if (exists) return prev;
-        return [signal, ...prev];
-      });
-
-      // Also refresh from DB in background
-      fetchSignals();
-      return signal;
-    } catch (err: any) {
-      const errMsg = err?.message || String(err);
-      console.error('Generate signal error:', errMsg, err);
-      toast({ title: 'Error', description: `Signal generation failed: ${errMsg}`, variant: 'destructive' });
-      return null;
-    } finally {
-      setIsGenerating(false);
-    }
-  }, [fetchSignals, toast]);
-
   useEffect(() => {
-    fetchSignals();
-  }, [fetchSignals]);
+    refreshSignals();
+  }, [refreshSignals]);
 
   useEffect(() => {
     const channel = supabase
       .channel('trading_signals_realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'trading_signals' }, () => {
-        fetchSignals();
+        refreshSignals();
       })
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, [fetchSignals]);
+  }, [refreshSignals]);
 
-  return { signals, isLoading, isGenerating, generateSignal, refreshSignals: fetchSignals };
+  return { signals, isLoading, refreshSignals };
 }
