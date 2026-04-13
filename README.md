@@ -10,10 +10,10 @@ It is designed to bridge the gap between traditional trading platforms and Web3 
 
 Shtraders enables users to:
 
-* Receive AI-generated trading signals (Forex & Crypto)
+* Receive AI generated trading signals (Forex & Crypto)
 * Execute trades directly through an integrated trading engine
 * Validate manual trades using AI confirmation
-* Manage portfolios with real-time balance tracking
+* Manage portfolios with real time balance tracking
 * Automate signal generation with scheduled AI pipelines
 
 ---
@@ -22,7 +22,7 @@ Shtraders enables users to:
 
 ### 1. AI Signal Generation Engine
 
-* Multi-step pipeline (Market Data → Analysis → AI → Validation)
+* Multi step pipeline (Market Data → Analysis → AI → Validation)
 * Supports Forex & Crypto markets
 * Uses technical indicators (RSI, ATR, Trend detection)
 * Enforces:
@@ -89,7 +89,7 @@ Users can submit their own trades and receive:
 ### Backend
 
 * Supabase (PostgreSQL, Auth, Edge Functions)
-* AI Gateway (structured tool-calling)
+* AI Gateway (structured tool calling)
 * Cron jobs via `pg_cron`
 
 ### Frontend
