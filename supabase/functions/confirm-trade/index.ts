@@ -502,43 +502,88 @@ Return ONLY valid JSON with this structure:
         userId = user?.id || null;
       }
 
-      // Insert the confirmed/modified trade
-      const { error: insertError } = await supabase.from("trading_signals").insert({
+      // Schema Mapping Functions
+      function mapSignalToDB(signal: any): any {
+        return {
+          ...signal,
+          user_id: userId,
+          status: "active",
+          source: "user"
+        };
+      }
+      
+      function filterToSchema(payload: any): any {
+        const allowedColumns = [
+          "pair", "direction", "confidence", "recommendation",
+          "entry_zone", "stop_loss", "take_profit", "timeframe",
+          "strategy", "market", "risk", "explanation", "execution",
+          "expires_at", "signal_data", "user_id", "status", "source",
+          "ai_decision", "ai_comment"
+        ];
+        
+        const filtered: any = {};
+        for (const key of allowedColumns) {
+          if (payload[key] !== undefined) {
+            filtered[key] = payload[key];
+          }
+        }
+        return filtered;
+      }
+
+      // Build unified signal object
+      const signal = {
         pair,
         direction,
-        confidence: Math.round(aiResponse.confidence * 100),
+        confidence: aiResponse.confidence,
         recommendation: direction.toUpperCase(),
-        signal_data: {
-          pair,
-          direction,
-          entry_zone: finalEntry,
-          stop_loss: finalSL,
-          take_profit: finalTP,
-          confidence: aiResponse.confidence,
-          strategy: "user_trade",
-          timeframe,
-          ai_comment: aiResponse.feedback,
-          source: "user",
-          ai_decision: aiResponse.decision,
-        },
-        user_id: userId,
-        market: marketData.trend === "uptrend" || marketData.trend === "downtrend" ? "FOREX" : "CRYPTO",
+
         entry_zone: finalEntry,
         stop_loss: finalSL,
         take_profit: finalTP,
+
         timeframe,
         strategy: "user_trade",
-        explanation: [aiResponse.feedback],
-        execution_type: "MANUAL",
-        expires_at: new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString(),
-        status: "active",
-        source: "user",
-        ai_decision: aiResponse.decision,
-        ai_comment: aiResponse.feedback,
-      });
 
-      if (insertError) {
-        console.error("Failed to store confirmed trade:", insertError);
+        market: "FOREX",
+
+        risk: {
+          rr: calculateRR({ pair, direction, entry, stop_loss, take_profit }),
+        },
+
+        explanation: [aiResponse.feedback],
+
+        execution: {
+          type: "MANUAL",
+        },
+
+        expires_at: new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString(),
+
+        // IMPORTANT: store EVERYTHING raw here
+        signal_data: {
+          ai_decision: aiResponse.decision,
+          ai_feedback: aiResponse.feedback,
+          original_input: { pair, direction, entry, stop_loss, take_profit }
+        },
+        
+        ai_decision: aiResponse.decision,
+        ai_comment: aiResponse.feedback
+      };
+
+      // 🚀 USE SCHEMA MAPPER
+      const rawPayload = mapSignalToDB(signal);
+      const dbPayload = filterToSchema(rawPayload);
+
+      console.log("CONFIRM TRADE DB PAYLOAD:", dbPayload);
+
+      const { data, error } = await supabase
+        .from("trading_signals")
+        .insert(dbPayload)
+        .select();
+
+      if (error) {
+        console.error("CONFIRM TRADE INSERT ERROR:", error);
+      } else {
+        console.log("CONFIRM TRADE INSERT SUCCESS:", data);
       }
     }
 
