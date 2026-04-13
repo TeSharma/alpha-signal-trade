@@ -121,12 +121,13 @@ export const EnhancedSignalList: React.FC<EnhancedSignalListProps> = ({ defaultV
         ) : (
           <>
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-              {signals.map((signal) => (
+              {signals
+                .filter((signal) => !pairFilter || signal.pair === pairFilter)
+                .map((signal) => (
                 <EnhancedSignalCard
                   key={signal.id}
                   signal={signal}
                   onApprove={(s) => {
-                    // Handle trade approval
                     console.log('Trade approved for signal:', s.id);
                   }}
                 />
