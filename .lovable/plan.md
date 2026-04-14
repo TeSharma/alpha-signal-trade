@@ -1,58 +1,64 @@
 
 
-# Fix: Centralized Signal Generation
+# Signal System Upgrade
 
-## Root Cause
+## Overview
+Seven upgrades to the signal generation, filtering, execution, and feedback loop.
 
-The `generate-signal/index.ts` file is a **stub** with no AI logic — it just returns `{"success": true, "message": "Signal generation function initialized"}`. That's exactly what you're seeing. The function was never actually implemented.
+## Changes
 
-## Plan
+### 1. Edge Function: `generate-signal/index.ts` — Tighten thresholds & M30 timeframe
 
-### Step 1: Rewrite `generate-signal/index.ts` with actual AI logic
+- Change default timeframe from `"15m"` to `"30m"`
+- Change expiry for `"30m"` from 60 to 40 minutes (30-45 range)
+- Raise confidence filter from `0.60` to `0.75`
+- Add RR filter: reject signals with `rr_ratio < 2.2`
+- Add duplicate check: before inserting, query `trading_signals` for existing active signal with same `pair` — skip if found
+- Add performance feedback: query `signal_performance` for recent results by pair/strategy and inject win rate stats into the AI system prompt so the model self-corrects
 
-Replace the stub with a working function that:
-- Accepts `{ pair, timeframe }` OR `{ batch: true }` (for cron)
-- Calls the Lovable AI Gateway (same pattern as `check-signal/index.ts`) with structured tool calling
-- Inserts results into `trading_signals` table with `user_id = null` (public/shared signals)
-- Returns the generated signal data
+### 2. Edge Function: `evaluate-signals/index.ts` — Add expired signal cleanup
 
-The AI prompt will request structured output via tool calling with fields: `market`, `pair`, `direction`, `entry_zone`, `stop_loss`, `take_profit`, `confidence`, `strategy`, `risk_level`, `rr_ratio`, `explanation`.
+- After evaluating signals, delete (or mark) signals that expired more than 24 hours ago to keep the table clean
 
-Signals with confidence < 0.6 will be filtered (not inserted).
+### 3. Update cron jobs (via SQL insert tool)
 
-Expiry set to `now() + interval based on timeframe` (e.g., 15m timeframe → 30min expiry).
+- Update `generate-signals-batch` schedule from `*/15` to `*/30`
+- Add new cron job `cleanup-expired-signals` that runs every 6 hours, setting old expired signals' status and cleaning up
 
-### Step 2: Update `useSignals.ts` — remove client-side generation
+### 4. Frontend: `useSignals.ts` — Limit to top 5
 
-- Remove `generateSignal` function and `isGenerating` state
-- Keep only `fetchSignals` (renamed as `refreshSignals`) and real-time subscription
-- The hook returns `{ signals, isLoading, refreshSignals }`
+- Change `.limit(50)` to `.limit(5)` and ensure `order('confidence', { ascending: false })`
 
-### Step 3: Update `Signals.tsx` — remove Generate button, simplify UI
+### 5. Frontend: `useSignalList.ts` — Limit to top 5
 
-- Remove the "Generate Signal" dialog, pair/timeframe selectors, and `isGenerating` state
-- Keep only "Refresh Signals" button that re-fetches from DB
-- Add a simple pair filter dropdown to filter displayed signals client-side
-- Remove unused imports (Dialog, Select, Sparkles, etc.)
+- Change `pageSize` default from `20` to `5`
 
-### Step 4: Schedule cron job for batch generation
+### 6. Frontend: `EnhancedSignalCard.tsx` — Wire Execute Trade to real flow
 
-Execute SQL (via insert tool) to schedule `generate-signal` with `{ "batch": true }` every 15 minutes. The batch mode will iterate through all 6 pairs (BTC/USD, ETH/USD, POL/USD, EUR/USD, GBP/USD, USD/JPY) and generate signals for each.
+- Replace the simulated `setTimeout` in `handleExecuteTrade` with actual call to `execute-trade` edge function via `supabase.functions.invoke('execute-trade', { body: { signal_id, account_mode } })`
+- On success, show trade details; on failure, show error
 
-### Step 5: Deploy and verify
+### 7. Signals page header text
 
-- Deploy the updated edge function
-- Test with curl to confirm AI logic executes and DB insert works
-- Verify frontend fetches shared signals correctly
+- Update description from "every 15 minutes" to "every 30 minutes"
 
----
+## Files to modify
 
-## Files
-
-| File | Action |
+| File | Change |
 |------|--------|
-| `supabase/functions/generate-signal/index.ts` | **Rewrite** — full AI signal generation with batch support |
-| `src/hooks/useSignals.ts` | **Modify** — remove `generateSignal`, keep `refreshSignals` only |
-| `src/pages/Signals.tsx` | **Modify** — remove Generate dialog, add pair filter |
-| Cron SQL | **Insert** — schedule batch generation every 15 min |
+| `supabase/functions/generate-signal/index.ts` | Confidence ≥ 0.75, RR ≥ 2.2, duplicate check, M30 default, 40min expiry, performance feedback in prompt |
+| `supabase/functions/evaluate-signals/index.ts` | Add cleanup of signals expired > 24h |
+| `src/hooks/useSignals.ts` | Limit to 5, order by confidence desc |
+| `src/hooks/useSignalList.ts` | Change pageSize to 5 |
+| `src/components/signals/EnhancedSignalCard.tsx` | Wire Execute Trade to `execute-trade` edge function |
+| `src/pages/Signals.tsx` | Update "every 15 minutes" text to "every 30 minutes" |
+| Cron SQL (insert tool) | Update batch schedule to `*/30`, add cleanup cron |
+
+## Technical Details
+
+**Performance feedback loop**: Before generating a signal for a pair, the edge function will query `signal_performance` for the last 20 results for that pair. It calculates win rate and avg PnL, then includes this in the AI system prompt: "Historical performance for BTC/USD: 65% win rate, avg PnL +1.2%. Adjust your analysis accordingly."
+
+**Duplicate prevention**: `SELECT id FROM trading_signals WHERE pair = $pair AND status = 'active' LIMIT 1` — if a row exists, skip generation for that pair.
+
+**Cleanup cron**: Runs every 6 hours. Updates signals with `status = 'active'` and `expires_at < now()` to `status = 'expired'`, then deletes signals with `status = 'expired'` and `expires_at < now() - interval '24 hours'`.
 
