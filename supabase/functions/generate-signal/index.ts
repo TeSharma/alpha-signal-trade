@@ -19,7 +19,7 @@ const ALL_PAIRS = [
 const EXPIRY_MINUTES: Record<string, number> = {
   "5m": 15,
   "15m": 30,
-  "30m": 60,
+  "30m": 40,
   "1h": 120,
   "4h": 480,
 };
@@ -35,9 +35,9 @@ serve(async (req) => {
     const body = await req.json();
     const isBatch = body.batch === true;
     const pair = body.pair as string | undefined;
-    const timeframe = (body.timeframe as string) || "15m";
+    const timeframe = (body.timeframe as string) || "30m";
 
-    console.log("[generate-signal] DB PAYLOAD", JSON.stringify({ isBatch, pair, timeframe }));
+    console.log("[generate-signal] PAYLOAD", JSON.stringify({ isBatch, pair, timeframe }));
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
@@ -54,27 +54,28 @@ serve(async (req) => {
       for (const p of ALL_PAIRS) {
         const result = await generateForPair(supabaseClient, LOVABLE_API_KEY, p.pair, p.market, timeframe);
         results.push(result);
-        // Small delay between calls to avoid rate limits
         await new Promise((r) => setTimeout(r, 2000));
       }
       const ok = results.filter((r) => r.ok).length;
       const filtered = results.filter((r) => r.filtered).length;
-      const failed = results.filter((r) => !r.ok && !r.filtered).length;
-      console.log(`[generate-signal] BATCH COMPLETE: ${ok} inserted, ${filtered} filtered, ${failed} failed`);
-      return respond({ success: true, inserted: ok, filtered, failed, results });
+      const skipped = results.filter((r) => r.skipped).length;
+      const failed = results.filter((r) => !r.ok && !r.filtered && !r.skipped).length;
+      console.log(`[generate-signal] BATCH COMPLETE: ${ok} inserted, ${filtered} filtered, ${skipped} skipped (duplicate), ${failed} failed`);
+      return respond({ success: true, inserted: ok, filtered, skipped, failed, results });
     }
 
     if (!pair) {
       return respond({ error: "Missing 'pair' or 'batch' flag" }, 400);
     }
 
-    const market = pair.includes("USD") && !["EUR/USD", "GBP/USD", "USD/JPY"].includes(pair) ? "CRYPTO" : "FOREX";
-    const actualMarket = ALL_PAIRS.find((p) => p.pair === pair)?.market || market;
-
+    const actualMarket = ALL_PAIRS.find((p) => p.pair === pair)?.market || "CRYPTO";
     const result = await generateForPair(supabaseClient, LOVABLE_API_KEY, pair, actualMarket, timeframe);
 
+    if (result.skipped) {
+      return respond({ skipped: true, message: `Active signal already exists for ${pair}` });
+    }
     if (result.filtered) {
-      return respond({ filtered: true, confidence: result.confidence, message: `Signal for ${pair} below 0.60 threshold. Not published.` });
+      return respond({ filtered: true, confidence: result.confidence, rr: result.rr, message: `Signal for ${pair} below quality threshold. Not published.` });
     }
     if (!result.ok) {
       return respond({ error: result.error }, 500);
@@ -86,16 +87,59 @@ serve(async (req) => {
   }
 });
 
+async function getPerformanceFeedback(supabase: any, pair: string): Promise<string> {
+  try {
+    const { data, error } = await supabase
+      .from("signal_performance")
+      .select("result, pnl_percent, strategy")
+      .eq("pair", pair)
+      .in("result", ["win", "loss"])
+      .order("created_at", { ascending: false })
+      .limit(20);
+
+    if (error || !data || data.length === 0) return "";
+
+    const total = data.length;
+    const wins = data.filter((r: any) => r.result === "win").length;
+    const winRate = ((wins / total) * 100).toFixed(1);
+    const avgPnl = (data.reduce((s: number, r: any) => s + (r.pnl_percent || 0), 0) / total).toFixed(2);
+
+    return `\n\nHistorical performance for ${pair} (last ${total} signals): ${winRate}% win rate, avg PnL ${avgPnl}%. Use this data to calibrate your confidence and improve signal quality. If win rate is below 50%, be more conservative with entry zones and tighter with stop losses.`;
+  } catch {
+    return "";
+  }
+}
+
+async function checkDuplicate(supabase: any, pair: string): Promise<boolean> {
+  const { data } = await supabase
+    .from("trading_signals")
+    .select("id")
+    .eq("pair", pair)
+    .eq("status", "active")
+    .limit(1);
+  return !!(data && data.length > 0);
+}
+
 async function generateForPair(
   supabase: any,
   apiKey: string,
   pair: string,
   market: string,
   timeframe: string
-): Promise<{ ok: boolean; filtered?: boolean; confidence?: number; signal?: any; error?: string }> {
+): Promise<{ ok: boolean; filtered?: boolean; skipped?: boolean; confidence?: number; rr?: number; signal?: any; error?: string }> {
   console.log(`[generate-signal] Generating for ${pair} @ ${timeframe}`);
 
   try {
+    // Duplicate check
+    const hasDuplicate = await checkDuplicate(supabase, pair);
+    if (hasDuplicate) {
+      console.log(`[generate-signal] SKIPPED — active signal already exists for ${pair}`);
+      return { ok: false, skipped: true };
+    }
+
+    // Performance feedback loop
+    const perfFeedback = await getPerformanceFeedback(supabase, pair);
+
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -111,10 +155,12 @@ async function generateForPair(
 1. Trend Engine — identify the dominant trend direction
 2. Structure Engine — key support/resistance levels
 3. Momentum Engine — RSI, MACD, volume analysis
-4. Risk Engine — calculate risk/reward ratio
-5. Confidence Engine — aggregate signal quality score
+4. Risk Engine — calculate risk/reward ratio (must be >= 2.2)
+5. Confidence Engine — aggregate signal quality score (only output signals with confidence >= 0.75)
 
-Generate a trading signal for the given pair and timeframe. Be realistic with price levels. For crypto pairs use current approximate market prices. For forex pairs use standard pip-level precision.`,
+Generate a trading signal for the given pair and timeframe. Be realistic with price levels. For crypto pairs use current approximate market prices. For forex pairs use standard pip-level precision.
+
+IMPORTANT: Only generate HIGH QUALITY signals. Confidence must be >= 0.75 and risk/reward ratio must be >= 2.2. If market conditions are unclear, set confidence below 0.75 to filter it out.${perfFeedback}`,
           },
           {
             role: "user",
@@ -137,10 +183,10 @@ Generate a trading signal for the given pair and timeframe. Be realistic with pr
                   tp1: { type: "number", description: "Take profit target 1" },
                   tp2: { type: "number", description: "Take profit target 2" },
                   tp3: { type: "number", description: "Take profit target 3" },
-                  confidence: { type: "number", description: "Signal confidence from 0.0 to 1.0" },
+                  confidence: { type: "number", description: "Signal confidence from 0.0 to 1.0 — only output >= 0.75 for high quality" },
                   strategy: { type: "string", description: "Strategy name, e.g. Trend Following, Mean Reversion, Breakout" },
                   risk_level: { type: "string", enum: ["LOW", "MODERATE", "HIGH"], description: "Risk classification" },
-                  rr_ratio: { type: "number", description: "Risk/Reward ratio (e.g. 2.5)" },
+                  rr_ratio: { type: "number", description: "Risk/Reward ratio — must be >= 2.2" },
                   reason1: { type: "string", description: "First reason for the signal" },
                   reason2: { type: "string", description: "Second reason for the signal" },
                   reason3: { type: "string", description: "Third reason for the signal" },
@@ -173,15 +219,21 @@ Generate a trading signal for the given pair and timeframe. Be realistic with pr
     }
 
     const args = JSON.parse(toolCall.function.arguments);
-    console.log(`[generate-signal] AI returned: ${args.direction} ${pair} @ ${args.confidence} confidence`);
+    console.log(`[generate-signal] AI returned: ${args.direction} ${pair} @ confidence=${args.confidence} rr=${args.rr_ratio}`);
 
-    // Filter low confidence
-    if (args.confidence < 0.6) {
-      console.log(`[generate-signal] FILTERED — confidence ${args.confidence} < 0.60`);
-      return { ok: false, filtered: true, confidence: args.confidence };
+    // Filter: confidence >= 0.75
+    if (args.confidence < 0.75) {
+      console.log(`[generate-signal] FILTERED — confidence ${args.confidence} < 0.75`);
+      return { ok: false, filtered: true, confidence: args.confidence, rr: args.rr_ratio };
     }
 
-    const expiryMinutes = EXPIRY_MINUTES[timeframe] || 60;
+    // Filter: RR >= 2.2
+    if (args.rr_ratio < 2.2) {
+      console.log(`[generate-signal] FILTERED — RR ${args.rr_ratio} < 2.2`);
+      return { ok: false, filtered: true, confidence: args.confidence, rr: args.rr_ratio };
+    }
+
+    const expiryMinutes = EXPIRY_MINUTES[timeframe] || 40;
     const expiresAt = new Date(Date.now() + expiryMinutes * 60_000).toISOString();
 
     const signalRow = {
@@ -243,13 +295,6 @@ Generate a trading signal for the given pair and timeframe. Be realistic with pr
 function respond(body: any, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: {
-      ...{
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Headers":
-          "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
-      },
-      "Content-Type": "application/json",
-    },
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
 }

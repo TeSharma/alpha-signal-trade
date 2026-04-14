@@ -128,7 +128,30 @@ serve(async (req) => {
       }
     }
 
-    return new Response(JSON.stringify({ evaluated: signals.length, resolved: results.length, results }), {
+    // Cleanup: delete signals expired > 24 hours ago
+    const { data: deleted, error: cleanupErr } = await supabase
+      .from("trading_signals")
+      .delete()
+      .in("status", ["expired", "tp_hit", "sl_hit"])
+      .lt("expires_at", new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
+      .select("id");
+
+    if (cleanupErr) {
+      console.warn("Cleanup error:", cleanupErr);
+    } else {
+      console.log(`[evaluate-signals] Cleaned up ${deleted?.length || 0} old signals`);
+    }
+
+    // Also expire active signals past their expiry that weren't caught above
+    const { error: expireErr } = await supabase
+      .from("trading_signals")
+      .update({ status: "expired" })
+      .eq("status", "active")
+      .lt("expires_at", new Date().toISOString());
+
+    if (expireErr) console.warn("Expire cleanup error:", expireErr);
+
+    return new Response(JSON.stringify({ evaluated: signals.length, resolved: results.length, cleaned: deleted?.length || 0, results }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {

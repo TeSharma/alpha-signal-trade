@@ -110,7 +110,7 @@ function SignalHeader({ onRefresh, isRefreshing, compact, selectedPair, onPairCh
       {!compact && (
         <>
           <h1 className="text-3xl font-bold text-foreground">AI Trading Signals</h1>
-          <p className="text-muted-foreground">Centralized AI-powered signals updated every 15 minutes</p>
+          <p className="text-muted-foreground">Centralized AI-powered signals updated every 30 minutes</p>
         </>
       )}
       <div className="flex items-center gap-2 flex-wrap">

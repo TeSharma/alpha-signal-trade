@@ -41,7 +41,7 @@ export function useSignalList() {
   });
   const [pagination, setPagination] = useState<SignalPagination>({
     page: 1,
-    pageSize: 20,
+    pageSize: 5,
     total: 0,
     hasMore: true
   });
