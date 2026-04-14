@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 import { SignalObject } from '@/types/signal';
 import { useToast } from '@/components/ui/use-toast';
-// import { executeTrade } from '@/integrations/supabase/functions';
+import { supabase } from '@/integrations/supabase/client';
 
 interface EnhancedSignalCardProps {
   signal: SignalObject;
@@ -127,20 +127,19 @@ export const EnhancedSignalCard: React.FC<EnhancedSignalCardProps> = ({ signal, 
 
     setIsExecuting(true);
     try {
-      // TODO: Implement actual trade execution
-      // const result = await executeTrade(signal.id);
-      
-      // Simulate successful trade execution
-      setTimeout(() => {
-        toast({
-          title: "Trade Executed",
-          description: `Successfully executed trade for ${signal.pair}`,
-          variant: "default",
-        });
-        onApprove(signal);
-        setIsExecuting(false);
-      }, 1000);
-      
+      const { data, error } = await supabase.functions.invoke('execute-trade', {
+        body: { signal_id: signal.id, account_mode: 'demo' },
+      });
+
+      if (error) throw new Error(error.message || 'Execution failed');
+      if (data?.error) throw new Error(data.error);
+
+      toast({
+        title: "Trade Executed",
+        description: `${signal.direction} ${signal.pair} @ ${data.entry_price} — Trade ID: ${data.trade_id?.slice(0, 8)}`,
+        variant: "default",
+      });
+      onApprove(signal);
     } catch (error: any) {
       console.error('Trade execution failed:', error);
       toast({
@@ -148,6 +147,7 @@ export const EnhancedSignalCard: React.FC<EnhancedSignalCardProps> = ({ signal, 
         description: error.message || "Failed to execute trade. Please try again.",
         variant: "destructive",
       });
+    } finally {
       setIsExecuting(false);
     }
   };

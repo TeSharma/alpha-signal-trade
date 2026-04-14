@@ -14,8 +14,8 @@ export function useSignals() {
         .from('trading_signals')
         .select('*') as any)
         .eq('status', 'active')
-        .order('created_at', { ascending: false })
-        .limit(50);
+        .order('confidence', { ascending: false })
+        .limit(5);
 
       if (error) throw error;
 
