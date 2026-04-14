@@ -1,64 +1,39 @@
+Fix: Show Only Active Signals on the Signals Page
 
+## Problem
 
-# Signal System Upgrade
-
-## Overview
-Seven upgrades to the signal generation, filtering, execution, and feedback loop.
+The `useSignalList` hook queries the `signal_overview` view without filtering by `signal_status`. The DB has 6 active signals and many expired/closed ones (sl_hit, tp_hit). All are returned and displayed, with expired ones appearing because they have the same confidence and the query doesn't prioritize active status.
 
 ## Changes
 
-### 1. Edge Function: `generate-signal/index.ts` — Tighten thresholds & M30 timeframe
+### 1. `src/hooks/useSignalList.ts` — Add default status filter
 
-- Change default timeframe from `"15m"` to `"30m"`
-- Change expiry for `"30m"` from 60 to 40 minutes (30-45 range)
-- Raise confidence filter from `0.60` to `0.75`
-- Add RR filter: reject signals with `rr_ratio < 2.2`
-- Add duplicate check: before inserting, query `trading_signals` for existing active signal with same `pair` — skip if found
-- Add performance feedback: query `signal_performance` for recent results by pair/strategy and inject win rate stats into the AI system prompt so the model self-corrects
+In the `fetchSignals` function, add `.eq('signal_status', 'active')` to the query by default, so only active signals are fetched. Also order by `created_at desc` as secondary sort to show newest first when confidence is equal.
 
-### 2. Edge Function: `evaluate-signals/index.ts` — Add expired signal cleanup
+Additionally, update `buildQuery` to only apply the manual status filter if explicitly set, otherwise default to `active`.
 
-- After evaluating signals, delete (or mark) signals that expired more than 24 hours ago to keep the table clean
+### 2. `src/hooks/useSignals.ts` — Already correct
 
-### 3. Update cron jobs (via SQL insert tool)
+This hook already filters by `status = 'active'` and uses `isExpired()` client-side. No changes needed.
 
-- Update `generate-signals-batch` schedule from `*/15` to `*/30`
-- Add new cron job `cleanup-expired-signals` that runs every 6 hours, setting old expired signals' status and cleaning up
+### 3. `src/hooks/useSignalList.ts` — Add expiry-based client filter
 
-### 4. Frontend: `useSignals.ts` — Limit to top 5
+As a safety net, filter out signals where `expires_at` is in the past on the client side (similar to how `useSignals` uses `isExpired()`), in case the DB status hasn't been updated yet.
 
-- Change `.limit(50)` to `.limit(5)` and ensure `order('confidence', { ascending: false })`
+### 4. Real-time auto-replacement
 
-### 5. Frontend: `useSignalList.ts` — Limit to top 5
+The existing real-time subscription on `trading_signals` already triggers `refreshSignals()` on any change. When new signals are inserted and old ones are marked expired, the list will auto-update. No additional changes needed for real-time replacement.
 
-- Change `pageSize` default from `20` to `5`
-
-### 6. Frontend: `EnhancedSignalCard.tsx` — Wire Execute Trade to real flow
-
-- Replace the simulated `setTimeout` in `handleExecuteTrade` with actual call to `execute-trade` edge function via `supabase.functions.invoke('execute-trade', { body: { signal_id, account_mode } })`
-- On success, show trade details; on failure, show error
-
-### 7. Signals page header text
-
-- Update description from "every 15 minutes" to "every 30 minutes"
+5. Track TP/SL outcomes and update signal_performance table
 
 ## Files to modify
 
-| File | Change |
-|------|--------|
-| `supabase/functions/generate-signal/index.ts` | Confidence ≥ 0.75, RR ≥ 2.2, duplicate check, M30 default, 40min expiry, performance feedback in prompt |
-| `supabase/functions/evaluate-signals/index.ts` | Add cleanup of signals expired > 24h |
-| `src/hooks/useSignals.ts` | Limit to 5, order by confidence desc |
-| `src/hooks/useSignalList.ts` | Change pageSize to 5 |
-| `src/components/signals/EnhancedSignalCard.tsx` | Wire Execute Trade to `execute-trade` edge function |
-| `src/pages/Signals.tsx` | Update "every 15 minutes" text to "every 30 minutes" |
-| Cron SQL (insert tool) | Update batch schedule to `*/30`, add cleanup cron |
 
-## Technical Details
+| File                         | Change                                                                        |
+| ---------------------------- | ----------------------------------------------------------------------------- |
+| `src/hooks/useSignalList.ts` | Add `signal_status = 'active'` filter to query, add client-side expiry filter |
 
-**Performance feedback loop**: Before generating a signal for a pair, the edge function will query `signal_performance` for the last 20 results for that pair. It calculates win rate and avg PnL, then includes this in the AI system prompt: "Historical performance for BTC/USD: 65% win rate, avg PnL +1.2%. Adjust your analysis accordingly."
 
-**Duplicate prevention**: `SELECT id FROM trading_signals WHERE pair = $pair AND status = 'active' LIMIT 1` — if a row exists, skip generation for that pair.
+## Summary
 
-**Cleanup cron**: Runs every 6 hours. Updates signals with `status = 'active'` and `expires_at < now()` to `status = 'expired'`, then deletes signals with `status = 'expired'` and `expires_at < now() - interval '24 hours'`.
-
+One file change. The query will default to showing only active signals, and a client-side filter will catch any signals whose status hasn't been updated yet but are past their expiry time.
