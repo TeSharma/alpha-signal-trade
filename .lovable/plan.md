@@ -1,7 +1,8 @@
-Fix: Show Only Active Signals on the Signals Page
+
+
+# Fix: Show Only Active Signals on the Signals Page
 
 ## Problem
-
 The `useSignalList` hook queries the `signal_overview` view without filtering by `signal_status`. The DB has 6 active signals and many expired/closed ones (sl_hit, tp_hit). All are returned and displayed, with expired ones appearing because they have the same confidence and the query doesn't prioritize active status.
 
 ## Changes
@@ -24,16 +25,12 @@ As a safety net, filter out signals where `expires_at` is in the past on the cli
 
 The existing real-time subscription on `trading_signals` already triggers `refreshSignals()` on any change. When new signals are inserted and old ones are marked expired, the list will auto-update. No additional changes needed for real-time replacement.
 
-5. Track TP/SL outcomes and update signal_performance table
-
 ## Files to modify
 
-
-| File                         | Change                                                                        |
-| ---------------------------- | ----------------------------------------------------------------------------- |
+| File | Change |
+|------|--------|
 | `src/hooks/useSignalList.ts` | Add `signal_status = 'active'` filter to query, add client-side expiry filter |
 
-
 ## Summary
-
 One file change. The query will default to showing only active signals, and a client-side filter will catch any signals whose status hasn't been updated yet but are past their expiry time.
+
