@@ -62,9 +62,11 @@ export function useSignalList() {
   const buildQuery = useCallback((baseQuery: any) => {
     const f = debouncedFilters.current;
     
-    // Status filters
+    // Status filters — default to active only
     if (f.status && f.status.length > 0) {
       baseQuery = baseQuery.in('signal_status', f.status);
+    } else {
+      baseQuery = baseQuery.eq('signal_status', 'active');
     }
     
     // Trade status filters
