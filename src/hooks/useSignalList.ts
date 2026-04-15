@@ -133,7 +133,8 @@ export function useSignalList() {
       let query = (supabase as any)
         .from('signal_overview')
         .select('*', { count: 'exact' })
-        .order(sort.field, { ascending: sort.direction === 'asc' });
+        .order(sort.field, { ascending: sort.direction === 'asc' })
+        .order('created_at', { ascending: false });
 
       // Apply filters
       query = buildQuery(query);
@@ -205,12 +206,19 @@ export function useSignalList() {
         signal_strategy: row.signal_strategy
       }));
 
+      // Client-side safety: filter out expired signals whose status hasn't been updated yet
+      const now = Date.now() / 1000;
+      const activeSignals = mappedSignals.filter(s => {
+        if (!s.expires_at || s.expires_at <= 0) return true;
+        return s.expires_at > now;
+      });
+
       if (isRefresh) {
-        setSignals(mappedSignals);
-        lastCursor.current = mappedSignals.length > 0 ? mappedSignals[mappedSignals.length - 1].created_at : null;
+        setSignals(activeSignals);
+        lastCursor.current = activeSignals.length > 0 ? activeSignals[activeSignals.length - 1].created_at : null;
       } else {
-        setSignals(prev => [...prev, ...mappedSignals]);
-        lastCursor.current = mappedSignals.length > 0 ? mappedSignals[mappedSignals.length - 1].created_at : null;
+        setSignals(prev => [...prev, ...activeSignals]);
+        lastCursor.current = activeSignals.length > 0 ? activeSignals[activeSignals.length - 1].created_at : null;
       }
 
       setPagination(prev => ({
