@@ -9,6 +9,7 @@ export interface MarketMeta {
   layer: 'on-chain' | 'signal';
   network: 'all' | 'mainnet-only' | 'amoy-only';
   description?: string;
+  binanceSymbol?: string; // Binance WebSocket symbol (crypto only)
 }
 
 // ─── ON-CHAIN TRADING MARKETS (Crypto – Chainlink required) ──────────────
@@ -26,9 +27,9 @@ export type V1SignalPair = typeof V1_SIGNAL_MARKETS[number];
 // Combined metadata for all v1 markets
 export const MARKET_METADATA: Record<string, MarketMeta> = {
   // Crypto (on-chain)
-  'BTC/USD':   { symbol: 'BTC',   icon: '₿', decimals: 2, layer: 'on-chain', network: 'mainnet-only' },
-  'ETH/USD':   { symbol: 'ETH',   icon: 'Ξ', decimals: 2, layer: 'on-chain', network: 'mainnet-only' },
-  'POL/USD':   { symbol: 'POL',   icon: '⬡', decimals: 4, layer: 'on-chain', network: 'all' },
+  'BTC/USD':   { symbol: 'BTC',   icon: '₿', decimals: 2, layer: 'on-chain', network: 'mainnet-only', binanceSymbol: 'btcusdt' },
+  'ETH/USD':   { symbol: 'ETH',   icon: 'Ξ', decimals: 2, layer: 'on-chain', network: 'mainnet-only', binanceSymbol: 'ethusdt' },
+  'POL/USD':   { symbol: 'POL',   icon: '⬡', decimals: 4, layer: 'on-chain', network: 'all', binanceSymbol: 'maticusdt' },
   // Forex (signals only)
   'EUR/USD':   { symbol: 'EUR',   icon: '€', decimals: 5, layer: 'signal', network: 'all', description: 'AI Signals Only' },
   'GBP/USD':   { symbol: 'GBP',   icon: '£', decimals: 5, layer: 'signal', network: 'all', description: 'AI Signals Only' },
