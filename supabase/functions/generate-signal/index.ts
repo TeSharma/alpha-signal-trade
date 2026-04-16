@@ -198,7 +198,7 @@ IMPORTANT: Only generate HIGH QUALITY signals. Confidence must be >= 0.75 and ri
           },
           {
             role: "user",
-            content: `Generate a ${timeframe} trading signal for ${pair} (${market} market). Analyze current conditions and provide a structured signal.`,
+            content: `Generate a ${timeframe} trading signal for ${pair} (${market} market). Analyze current conditions and provide a structured signal.${priceContext}`,
           },
         ],
         tools: [
