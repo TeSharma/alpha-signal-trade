@@ -1,35 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import Web3 from 'web3';
-import { CONTRACT_ADDRESSES, AMOY_RPC_URL, POLYGON_RPC_URL } from '@/config/contracts';
-import { V1_AMOY_MARKETS, V1_MAINNET_MARKETS } from '@/config/markets';
-
-// PriceOracleV2 ABI (uses bytes32 pairId)
-const PRICE_ORACLE_V2_ABI = [
-  {
-    inputs: [{ name: 'pairId', type: 'bytes32' }],
-    name: 'getPrice',
-    outputs: [
-      { name: 'price', type: 'uint256' },
-      { name: 'updatedAt', type: 'uint256' }
-    ],
-    stateMutability: 'view',
-    type: 'function'
-  },
-  {
-    inputs: [{ name: 'pairId', type: 'bytes32' }],
-    name: 'hasFeed',
-    outputs: [{ name: '', type: 'bool' }],
-    stateMutability: 'view',
-    type: 'function'
-  },
-  {
-    inputs: [{ name: 'pairId', type: 'bytes32' }],
-    name: 'getDecimals',
-    outputs: [{ name: '', type: 'uint8' }],
-    stateMutability: 'view',
-    type: 'function'
-  }
-];
+import { supabase } from '@/integrations/supabase/client';
+import { V1_SIGNAL_MARKETS, V1_TRADING_MARKETS, MARKET_METADATA } from '@/config/markets';
 
 export interface MarketPrice {
   pair: string;
@@ -44,176 +15,265 @@ export interface MarketPrice {
   low24h: number;
   lastUpdate: Date;
   isOraclePrice: boolean;
-  updatedAt?: number; // Oracle timestamp
+  source: 'binance' | 'twelvedata' | 'oracle';
+  updatedAt?: number;
 }
 
-export const useMarketData = (accountMode: 'demo' | 'live' = 'demo') => {
-  const [web3, setWeb3] = useState<Web3 | null>(null);
+// Binance symbol mapping
+const BINANCE_SYMBOL_MAP: Record<string, string> = {
+  'BTC/USD': 'btcusdt',
+  'ETH/USD': 'ethusdt',
+  'POL/USD': 'maticusdt',
+};
+
+const BINANCE_TO_PAIR: Record<string, string> = {};
+for (const [pair, sym] of Object.entries(BINANCE_SYMBOL_MAP)) {
+  BINANCE_TO_PAIR[sym.toUpperCase()] = pair;
+}
+
+const CRYPTO_PAIRS = [...V1_TRADING_MARKETS];
+const FOREX_PAIRS = [...V1_SIGNAL_MARKETS];
+
+export const useMarketData = (_accountMode: 'demo' | 'live' = 'demo') => {
   const [prices, setPrices] = useState<Record<string, MarketPrice>>({});
   const [isConnected, setIsConnected] = useState(false);
-  const [oracleAvailable, setOracleAvailable] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const pairIdsRef = useRef<Record<string, string>>({});
+  const [isLoading, setIsLoading] = useState(true);
+  const wsRef = useRef<WebSocket | null>(null);
+  const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
+  const reconnectAttemptsRef = useRef(0);
+  const openPricesRef = useRef<Record<string, number>>({});
+  const forexBasePricesRef = useRef<Record<string, number>>({});
 
-  // Mode-aware config
-  const rpcUrl = accountMode === 'demo' ? AMOY_RPC_URL : POLYGON_RPC_URL;
-  const oraclePairs = accountMode === 'demo' ? [...V1_AMOY_MARKETS] : [...V1_MAINNET_MARKETS];
-  const contractAddresses = accountMode === 'demo' ? CONTRACT_ADDRESSES.amoy : CONTRACT_ADDRESSES.polygon;
-
-  // Initialize Web3 with mode-aware RPC
-  useEffect(() => {
-    const initWeb3 = async () => {
-      const web3Instance = new Web3(rpcUrl);
-      setWeb3(web3Instance);
-      setIsConnected(true);
-      
-      // Pre-compute pair IDs
-      oraclePairs.forEach(pair => {
-        pairIdsRef.current[pair] = web3Instance.utils.keccak256(pair);
-      });
-      
-      // Check if oracle is deployed
-      const oracleAddress = contractAddresses.PriceOracleV2 as string;
-      const zeroAddress = '0x0000000000000000000000000000000000000000';
-      if (oracleAddress && oracleAddress !== '' && oracleAddress.length > 2 && oracleAddress.toLowerCase() !== zeroAddress.toLowerCase()) {
-        setOracleAvailable(true);
-      } else {
-        setOracleAvailable(false);
-      }
-    };
-    
-    initWeb3();
-  }, [rpcUrl, accountMode]);
-
-  // Fetch price from PriceOracleV2
-  const fetchOraclePrice = useCallback(async (pair: string): Promise<{ price: number; updatedAt: number; decimals: number } | null> => {
-    if (!web3 || !oracleAvailable) return null;
-    
-    const pairId = pairIdsRef.current[pair];
-    if (!pairId) return null;
-    
+  // --- Binance 24hr initial fetch for open prices ---
+  const fetch24hrData = useCallback(async () => {
     try {
-      const contract = new web3.eth.Contract(PRICE_ORACLE_V2_ABI as any, contractAddresses.PriceOracleV2);
-      
-      // Check if feed exists first
-      const hasFeed: boolean = await contract.methods.hasFeed(pairId).call();
-      if (!hasFeed) {
-        return null;
-      }
-      
-      const [priceResult, decimals]: [any, any] = await Promise.all([
-        contract.methods.getPrice(pairId).call(),
-        contract.methods.getDecimals(pairId).call()
-      ]);
-      
-      const price = Number(priceResult.price) / Math.pow(10, Number(decimals));
-      const updatedAt = Number(priceResult.updatedAt);
-      
-      return { price, updatedAt, decimals: Number(decimals) };
-    } catch (error) {
-      // Silent fail - oracle may not have this feed configured
-      return null;
-    }
-  }, [web3, oracleAvailable, contractAddresses.PriceOracleV2]);
-
-  // Create market price object
-  const createMarketPrice = (
-    pair: string, 
-    newPrice: number, 
-    basePrice: number, 
-    isOraclePrice: boolean,
-    updatedAt?: number
-  ): MarketPrice => {
-    const change = newPrice - basePrice;
-    const changePercent = (change / basePrice) * 100;
-    const spreadPips = newPrice * 0.0001;
-    const bid = newPrice - spreadPips / 2;
-    const ask = newPrice + spreadPips / 2;
-
-    return {
-      pair,
-      price: Number(newPrice.toFixed(5)),
-      change: Number(change.toFixed(5)),
-      changePercent: Number(changePercent.toFixed(2)),
-      volume: `${(Math.random() * 5 + 1).toFixed(1)}B`,
-      bid: Number(bid.toFixed(5)),
-      ask: Number(ask.toFixed(5)),
-      spread: Number((ask - bid).toFixed(5)),
-      high24h: Number((newPrice * (1 + Math.random() * 0.02)).toFixed(5)),
-      low24h: Number((newPrice * (1 - Math.random() * 0.02)).toFixed(5)),
-      lastUpdate: new Date(),
-      isOraclePrice,
-      updatedAt
-    };
-  };
-
-  // Update all prices — only from oracle, no fallbacks
-  const updatePrices = useCallback(async () => {
-    if (!web3) return;
-    
-    setIsLoading(true);
-    
-    try {
-      const newPrices: Record<string, MarketPrice> = {};
-      
-      const oracleResults = await Promise.all(
-        oraclePairs.map(async (pair) => {
-          const oracleResult = await fetchOraclePrice(pair);
-          return { pair, oracleResult };
+      const symbols = CRYPTO_PAIRS.map(p => BINANCE_SYMBOL_MAP[p]).filter(Boolean);
+      const results = await Promise.all(
+        symbols.map(async (sym) => {
+          const res = await fetch(`https://api.binance.com/api/v3/ticker/24hr?symbol=${sym.toUpperCase()}`);
+          if (!res.ok) return null;
+          return res.json();
         })
       );
-      
-      // Only add pairs with real oracle data
-      oracleResults.forEach(({ pair, oracleResult }) => {
-        if (oracleResult && oracleResult.price > 0) {
-          const previousPrice = prices[pair]?.price || oracleResult.price;
-          newPrices[pair] = createMarketPrice(pair, oracleResult.price, previousPrice, true, oracleResult.updatedAt);
-        }
+
+      const newPrices: Record<string, MarketPrice> = {};
+      results.forEach((data) => {
+        if (!data) return;
+        const pair = BINANCE_TO_PAIR[data.symbol];
+        if (!pair) return;
+        const price = parseFloat(data.lastPrice);
+        const openPrice = parseFloat(data.openPrice);
+        openPricesRef.current[pair] = openPrice;
+        const change = price - openPrice;
+        const changePercent = openPrice > 0 ? (change / openPrice) * 100 : 0;
+        const meta = MARKET_METADATA[pair];
+        const spreadPips = price * 0.0001;
+
+        newPrices[pair] = {
+          pair,
+          price: Number(price.toFixed(meta?.decimals ?? 2)),
+          change: Number(change.toFixed(meta?.decimals ?? 2)),
+          changePercent: Number(changePercent.toFixed(2)),
+          volume: formatVolume(parseFloat(data.quoteVolume)),
+          bid: Number((price - spreadPips / 2).toFixed(meta?.decimals ?? 2)),
+          ask: Number((price + spreadPips / 2).toFixed(meta?.decimals ?? 2)),
+          spread: Number(spreadPips.toFixed(meta?.decimals ?? 2)),
+          high24h: Number(parseFloat(data.highPrice).toFixed(meta?.decimals ?? 2)),
+          low24h: Number(parseFloat(data.lowPrice).toFixed(meta?.decimals ?? 2)),
+          lastUpdate: new Date(),
+          isOraclePrice: false,
+          source: 'binance',
+        };
       });
-      
-      setPrices(newPrices);
-    } catch (error) {
-      console.error('Error updating prices:', error);
-    } finally {
-      setIsLoading(false);
+
+      setPrices(prev => ({ ...prev, ...newPrices }));
+    } catch (err) {
+      console.error('[useMarketData] 24hr fetch error:', err);
     }
-  }, [web3, fetchOraclePrice, prices, oraclePairs]);
+  }, []);
 
-  // Initial load and periodic updates
+  // --- Binance WebSocket ---
+  const connectWebSocket = useCallback(() => {
+    const streams = CRYPTO_PAIRS
+      .map(p => BINANCE_SYMBOL_MAP[p])
+      .filter(Boolean)
+      .map(s => `${s}@miniTicker`)
+      .join('/');
+
+    const wsUrl = `wss://stream.binance.com:9443/stream?streams=${streams}`;
+    const ws = new WebSocket(wsUrl);
+    wsRef.current = ws;
+
+    ws.onopen = () => {
+      setIsConnected(true);
+      reconnectAttemptsRef.current = 0;
+      console.log('[useMarketData] Binance WS connected');
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        const msg = JSON.parse(event.data);
+        const data = msg.data;
+        if (!data?.s) return;
+
+        const pair = BINANCE_TO_PAIR[data.s];
+        if (!pair) return;
+
+        const price = parseFloat(data.c); // close price
+        const high24h = parseFloat(data.h);
+        const low24h = parseFloat(data.l);
+        const volume = parseFloat(data.q); // quote volume
+        const openPrice = openPricesRef.current[pair] || parseFloat(data.o);
+        const change = price - openPrice;
+        const changePercent = openPrice > 0 ? (change / openPrice) * 100 : 0;
+        const meta = MARKET_METADATA[pair];
+        const dec = meta?.decimals ?? 2;
+        const spreadPips = price * 0.0001;
+
+        setPrices(prev => ({
+          ...prev,
+          [pair]: {
+            pair,
+            price: Number(price.toFixed(dec)),
+            change: Number(change.toFixed(dec)),
+            changePercent: Number(changePercent.toFixed(2)),
+            volume: formatVolume(volume),
+            bid: Number((price - spreadPips / 2).toFixed(dec)),
+            ask: Number((price + spreadPips / 2).toFixed(dec)),
+            spread: Number(spreadPips.toFixed(dec)),
+            high24h: Number(high24h.toFixed(dec)),
+            low24h: Number(low24h.toFixed(dec)),
+            lastUpdate: new Date(),
+            isOraclePrice: false,
+            source: 'binance',
+          },
+        }));
+      } catch {
+        // ignore parse errors
+      }
+    };
+
+    ws.onclose = () => {
+      setIsConnected(false);
+      console.log('[useMarketData] Binance WS disconnected');
+      // Exponential backoff reconnect
+      const delay = Math.min(1000 * Math.pow(2, reconnectAttemptsRef.current), 30000);
+      reconnectAttemptsRef.current++;
+      reconnectTimeoutRef.current = setTimeout(connectWebSocket, delay);
+    };
+
+    ws.onerror = (err) => {
+      console.error('[useMarketData] Binance WS error:', err);
+      ws.close();
+    };
+  }, []);
+
+  // --- Forex REST polling via edge function ---
+  const fetchForexPrices = useCallback(async () => {
+    try {
+      const { data, error } = await supabase.functions.invoke('forex-prices', {
+        method: 'GET',
+      });
+
+      if (error) {
+        console.error('[useMarketData] Forex fetch error:', error);
+        return;
+      }
+
+      if (data?.prices) {
+        const forexPrices: Record<string, MarketPrice> = {};
+        for (const pair of FOREX_PAIRS) {
+          const price = data.prices[pair];
+          if (!price || price <= 0) continue;
+
+          // Store base price for change calculation
+          if (!forexBasePricesRef.current[pair]) {
+            forexBasePricesRef.current[pair] = price;
+          }
+
+          const basePrice = forexBasePricesRef.current[pair];
+          const change = price - basePrice;
+          const changePercent = basePrice > 0 ? (change / basePrice) * 100 : 0;
+          const meta = MARKET_METADATA[pair];
+          const dec = meta?.decimals ?? 5;
+          const spreadPips = pair.includes('JPY') ? 0.03 : 0.0003;
+
+          forexPrices[pair] = {
+            pair,
+            price: Number(price.toFixed(dec)),
+            change: Number(change.toFixed(dec)),
+            changePercent: Number(changePercent.toFixed(2)),
+            volume: '—',
+            bid: Number((price - spreadPips / 2).toFixed(dec)),
+            ask: Number((price + spreadPips / 2).toFixed(dec)),
+            spread: Number(spreadPips.toFixed(dec)),
+            high24h: Number((price * 1.005).toFixed(dec)),
+            low24h: Number((price * 0.995).toFixed(dec)),
+            lastUpdate: new Date(),
+            isOraclePrice: false,
+            source: 'twelvedata',
+          };
+        }
+        setPrices(prev => ({ ...prev, ...forexPrices }));
+      }
+    } catch (err) {
+      console.error('[useMarketData] Forex polling error:', err);
+    }
+  }, []);
+
+  // --- Initialize ---
   useEffect(() => {
-    if (!web3) return;
-    
-    updatePrices();
-    const interval = setInterval(updatePrices, 10000);
-    return () => clearInterval(interval);
-  }, [web3]); // Only depend on web3
+    setIsLoading(true);
 
-  const getPrice = (pair: string): MarketPrice | null => {
-    return prices[pair] || null;
-  };
+    // Fetch initial 24hr data, then connect WS
+    fetch24hrData().then(() => {
+      connectWebSocket();
+      setIsLoading(false);
+    });
 
-  const getCurrentPrice = (pair: string): number => {
-    return prices[pair]?.price || 0;
-  };
+    // Forex polling
+    fetchForexPrices();
+    const forexInterval = setInterval(fetchForexPrices, 60000);
 
-  const getBidPrice = (pair: string): number => {
-    return prices[pair]?.bid || getCurrentPrice(pair);
-  };
+    return () => {
+      clearInterval(forexInterval);
+      if (wsRef.current) {
+        wsRef.current.close();
+        wsRef.current = null;
+      }
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+      }
+    };
+  }, [fetch24hrData, connectWebSocket, fetchForexPrices]);
 
-  const getAskPrice = (pair: string): number => {
-    return prices[pair]?.ask || getCurrentPrice(pair);
-  };
+  const updatePrices = useCallback(async () => {
+    await fetch24hrData();
+    await fetchForexPrices();
+  }, [fetch24hrData, fetchForexPrices]);
+
+  const getPrice = (pair: string): MarketPrice | null => prices[pair] || null;
+  const getCurrentPrice = (pair: string): number => prices[pair]?.price || 0;
+  const getBidPrice = (pair: string): number => prices[pair]?.bid || getCurrentPrice(pair);
+  const getAskPrice = (pair: string): number => prices[pair]?.ask || getCurrentPrice(pair);
 
   return {
     prices: Object.values(prices),
     pricesMap: prices,
     isConnected,
     isLoading,
-    oracleAvailable,
+    oracleAvailable: false, // Reserved for future oracle overlay
     getPrice,
     getCurrentPrice,
     getBidPrice,
     getAskPrice,
-    updatePrices
+    updatePrices,
   };
 };
+
+function formatVolume(vol: number): string {
+  if (vol >= 1e9) return `${(vol / 1e9).toFixed(1)}B`;
+  if (vol >= 1e6) return `${(vol / 1e6).toFixed(1)}M`;
+  if (vol >= 1e3) return `${(vol / 1e3).toFixed(1)}K`;
+  return vol.toFixed(0);
+}

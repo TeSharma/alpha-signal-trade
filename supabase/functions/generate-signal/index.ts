@@ -120,6 +120,34 @@ async function checkDuplicate(supabase: any, pair: string): Promise<boolean> {
   return !!(data && data.length > 0);
 }
 
+async function fetchCurrentPrice(pair: string, market: string): Promise<number | null> {
+  try {
+    if (market === "CRYPTO") {
+      const symbolMap: Record<string, string> = {
+        "BTC/USD": "BTCUSDT",
+        "ETH/USD": "ETHUSDT",
+        "POL/USD": "MATICUSDT",
+      };
+      const symbol = symbolMap[pair];
+      if (!symbol) return null;
+      const res = await fetch(`https://api.binance.com/api/v3/ticker/price?symbol=${symbol}`);
+      if (!res.ok) return null;
+      const data = await res.json();
+      return parseFloat(data.price);
+    } else {
+      const apiKey = Deno.env.get("TWELVE_DATA_API_KEY");
+      if (!apiKey) return null;
+      const res = await fetch(`https://api.twelvedata.com/price?symbol=${pair}&apikey=${apiKey}`);
+      if (!res.ok) return null;
+      const data = await res.json();
+      return data.price ? parseFloat(data.price) : null;
+    }
+  } catch (e) {
+    console.error(`[generate-signal] Price fetch failed for ${pair}:`, e);
+    return null;
+  }
+}
+
 async function generateForPair(
   supabase: any,
   apiKey: string,
@@ -136,6 +164,12 @@ async function generateForPair(
       console.log(`[generate-signal] SKIPPED — active signal already exists for ${pair}`);
       return { ok: false, skipped: true };
     }
+
+    // Fetch real current price
+    const currentPrice = await fetchCurrentPrice(pair, market);
+    const priceContext = currentPrice
+      ? `\n\nCurrent live price of ${pair}: $${currentPrice.toLocaleString(undefined, { maximumFractionDigits: 6 })}. Use this as your reference for entry zones, stop loss, and take profit levels.`
+      : "";
 
     // Performance feedback loop
     const perfFeedback = await getPerformanceFeedback(supabase, pair);
@@ -164,7 +198,7 @@ IMPORTANT: Only generate HIGH QUALITY signals. Confidence must be >= 0.75 and ri
           },
           {
             role: "user",
-            content: `Generate a ${timeframe} trading signal for ${pair} (${market} market). Analyze current conditions and provide a structured signal.`,
+            content: `Generate a ${timeframe} trading signal for ${pair} (${market} market). Analyze current conditions and provide a structured signal.${priceContext}`,
           },
         ],
         tools: [
