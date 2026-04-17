@@ -20,6 +20,7 @@ const CHART_PAIRS = ['BTC/USD', 'ETH/USD', 'POL/USD', 'EUR/USD', 'GBP/USD', 'USD
 
 const Trade = () => {
   const [accountMode, setAccountMode] = useState<'demo' | 'live'>('demo');
+  const [chartPair, setChartPair] = useState<string>('BTC/USD');
 
   return (
     <div className="min-h-screen bg-gray-50">
