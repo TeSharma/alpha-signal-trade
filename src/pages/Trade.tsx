@@ -11,11 +11,16 @@ import AccountBalance from "@/components/trading/AccountBalance";
 import { DeploymentGuide } from "@/components/trading/DeploymentGuide";
 import V2PositionsPanel from "@/components/trading/V2PositionsPanel";
 import OracleStatus from "@/components/trading/OracleStatus";
+import TradingViewChart from "@/components/trading/TradingViewChart";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { getNetworkName } from '@/config/contracts';
+
+const CHART_PAIRS = ['BTC/USD', 'ETH/USD', 'POL/USD', 'EUR/USD', 'GBP/USD', 'USD/JPY'];
 
 const Trade = () => {
   const [accountMode, setAccountMode] = useState<'demo' | 'live'>('demo');
+  const [chartPair, setChartPair] = useState<string>('BTC/USD');
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -62,6 +67,22 @@ const Trade = () => {
                           <OracleStatus accountMode={accountMode} />
                         </div>
                       )}
+                      <div className="rounded-lg border border-border bg-card p-4 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <h2 className="text-lg font-semibold">Live Chart</h2>
+                          <Select value={chartPair} onValueChange={setChartPair}>
+                            <SelectTrigger className="w-[160px]">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {CHART_PAIRS.map((p) => (
+                                <SelectItem key={p} value={p}>{p}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <TradingViewChart pair={chartPair} height={500} />
+                      </div>
                       <MarketOverview accountMode={accountMode} />
                       {accountMode === 'live' && <V2PositionsPanel />}
                       <TradeHistory accountMode={accountMode} />
