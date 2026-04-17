@@ -11,15 +11,11 @@ import {
   CheckCircle, 
   XCircle,
   Loader2,
-  RefreshCw,
-  LineChart as LineChartIcon,
-  ChevronDown,
-  ChevronUp
+  RefreshCw
 } from 'lucide-react';
 import { SignalObject } from '@/types/signal';
 import { useToast } from '@/components/ui/use-toast';
 import { supabase } from '@/integrations/supabase/client';
-import { SignalChart } from './SignalChart';
 
 interface EnhancedSignalCardProps {
   signal: SignalObject;
