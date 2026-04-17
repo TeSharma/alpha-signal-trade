@@ -24,9 +24,25 @@ const MarketOverview = ({ accountMode = 'demo' }: MarketOverviewProps) => {
             <CardTitle>Market Overview</CardTitle>
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <div className="flex items-center gap-1">
-                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                Live Prices
+                {isConnected ? (
+                  <Wifi className="h-4 w-4 text-green-500" />
+                ) : (
+                  <WifiOff className="h-4 w-4 text-red-500" />
+                )}
+                <span className={isConnected ? 'text-green-500' : 'text-red-500'}>
+                  {isConnected ? 'Live' : 'Reconnecting…'}
+                </span>
               </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={updatePrices}
+                disabled={isLoading}
+                className="h-6 w-6 p-0"
+                aria-label="Refresh prices"
+              >
+                <RefreshCw className={`h-3 w-3 ${isLoading ? 'animate-spin' : ''}`} />
+              </Button>
             </div>
           </div>
         </CardHeader>
