@@ -11,8 +11,12 @@ import AccountBalance from "@/components/trading/AccountBalance";
 import { DeploymentGuide } from "@/components/trading/DeploymentGuide";
 import V2PositionsPanel from "@/components/trading/V2PositionsPanel";
 import OracleStatus from "@/components/trading/OracleStatus";
+import TradingViewChart from "@/components/trading/TradingViewChart";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { getNetworkName } from '@/config/contracts';
+
+const CHART_PAIRS = ['BTC/USD', 'ETH/USD', 'POL/USD', 'EUR/USD', 'GBP/USD', 'USD/JPY'];
 
 const Trade = () => {
   const [accountMode, setAccountMode] = useState<'demo' | 'live'>('demo');
