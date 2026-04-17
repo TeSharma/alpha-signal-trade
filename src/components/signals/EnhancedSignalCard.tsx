@@ -290,6 +290,29 @@ export const EnhancedSignalCard: React.FC<EnhancedSignalCardProps> = ({ signal, 
           </div>
         )}
 
+        {/* Chart toggle */}
+        <div className="border-t pt-3">
+          <button
+            type="button"
+            onClick={() => setShowChart((s) => !s)}
+            className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <LineChartIcon className="h-4 w-4" />
+            {showChart ? 'Hide chart' : 'Show chart with levels'}
+            {showChart ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+          </button>
+          {showChart && (
+            <div className="mt-3">
+              <SignalChart signal={signal} height={240} />
+              <div className="flex flex-wrap gap-3 mt-2 text-xs text-muted-foreground">
+                <span className="flex items-center gap-1"><span className="inline-block w-3 h-0.5 bg-blue-500" /> Entry zone</span>
+                <span className="flex items-center gap-1"><span className="inline-block w-3 h-0.5 bg-red-500" /> Stop loss</span>
+                <span className="flex items-center gap-1"><span className="inline-block w-3 h-0.5 bg-green-500" /> Take profit</span>
+              </div>
+            </div>
+          )}
+        </div>
+
         {/* Explanation */}
         {signal.explanation && signal.explanation.length > 0 && (
           <div className="border-t pt-4">
