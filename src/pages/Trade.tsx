@@ -67,6 +67,22 @@ const Trade = () => {
                           <OracleStatus accountMode={accountMode} />
                         </div>
                       )}
+                      <div className="rounded-lg border border-border bg-card p-4 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <h2 className="text-lg font-semibold">Live Chart</h2>
+                          <Select value={chartPair} onValueChange={setChartPair}>
+                            <SelectTrigger className="w-[160px]">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {CHART_PAIRS.map((p) => (
+                                <SelectItem key={p} value={p}>{p}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <TradingViewChart pair={chartPair} height={500} />
+                      </div>
                       <MarketOverview accountMode={accountMode} />
                       {accountMode === 'live' && <V2PositionsPanel />}
                       <TradeHistory accountMode={accountMode} />
