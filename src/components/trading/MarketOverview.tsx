@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -14,9 +14,6 @@ const ALL_DISPLAY_MARKETS = [...V1_TRADING_MARKETS, ...V1_SIGNAL_MARKETS];
 
 const MarketOverview = ({ accountMode = 'demo' }: MarketOverviewProps) => {
   const { prices, isConnected, updatePrices, isLoading } = useMarketData(accountMode)
-  const [selectedTimeframe, setSelectedTimeframe] = useState('1m')
-
-  const timeframes = ['1m', '5m', '15m', '1h', '4h', '1d']
 
   return (
     <div className="space-y-6">
