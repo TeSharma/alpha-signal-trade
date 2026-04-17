@@ -23,7 +23,7 @@ export interface MarketPrice {
 const BINANCE_SYMBOL_MAP: Record<string, string> = {
   'BTC/USD': 'btcusdt',
   'ETH/USD': 'ethusdt',
-  'POL/USD': 'maticusdt',
+  'POL/USD': 'polusdt',
 };
 
 const BINANCE_TO_PAIR: Record<string, string> = {};
