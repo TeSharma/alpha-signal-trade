@@ -24,7 +24,6 @@ interface EnhancedSignalCardProps {
 
 export const EnhancedSignalCard: React.FC<EnhancedSignalCardProps> = ({ signal, onApprove }) => {
   const [isExecuting, setIsExecuting] = useState(false);
-  const [showChart, setShowChart] = useState(false);
   const { toast } = useToast();
 
   const getDirectionIcon = (direction: string) => {
