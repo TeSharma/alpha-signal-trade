@@ -294,27 +294,25 @@ export const EnhancedSignalCard: React.FC<EnhancedSignalCardProps> = ({ signal, 
           </div>
           
           <Button
-            onClick={handleExecuteTrade}
-            disabled={isExecuting || !!signal.trade_id || (signal.expires_at && signal.expires_at < Math.floor(Date.now() / 1000))}
+            onClick={handleOpenExecuteDialog}
+            disabled={!!signal.trade_id || (signal.expires_at && signal.expires_at < Math.floor(Date.now() / 1000))}
             className={`${
-              signal.direction === 'LONG' 
-                ? 'bg-green-600 hover:bg-green-700' 
+              signal.direction === 'LONG'
+                ? 'bg-green-600 hover:bg-green-700'
                 : 'bg-red-600 hover:bg-red-700'
             } text-white`}
           >
-            {isExecuting ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Executing...
-              </>
-            ) : signal.trade_id ? (
-              'Executed'
-            ) : (
-              'Execute Trade'
-            )}
+            {signal.trade_id ? 'Executed' : 'Execute Trade'}
           </Button>
         </div>
       </CardFooter>
+
+      <ExecuteTradeDialog
+        signal={signal}
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        onExecuted={() => onApprove(signal)}
+      />
     </Card>
   );
 };
