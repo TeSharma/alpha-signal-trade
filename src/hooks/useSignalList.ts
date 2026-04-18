@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import type { SignalObject } from '@/types/signal';
 import { useToast } from '@/components/ui/use-toast';
+import { isForexMarketOpen } from '@/lib/marketHours';
 
 export interface SignalFilters {
   status?: string[];
@@ -80,7 +81,9 @@ export function useSignalList() {
     }
     
     // Market filters
-    if (f.market && f.market.length > 0) {
+    if (!isForexMarketOpen() && !f.myTrades) {
+      baseQuery = baseQuery.neq('market', 'FOREX');
+    } else if (f.market && f.market.length > 0) {
       baseQuery = baseQuery.in('market', f.market);
     }
     
@@ -209,6 +212,9 @@ export function useSignalList() {
       // Client-side safety: filter out expired signals whose status hasn't been updated yet
       const now = Date.now() / 1000;
       const activeSignals = mappedSignals.filter(s => {
+        if (!isForexMarketOpen() && !debouncedFilters.current.myTrades && s.market === 'FOREX') {
+          return false;
+        }
         if (!s.expires_at || s.expires_at <= 0) return true;
         return s.expires_at > now;
       });
