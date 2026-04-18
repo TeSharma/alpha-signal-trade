@@ -271,6 +271,10 @@ IMPORTANT: Only generate HIGH QUALITY signals. Confidence must be >= 0.75 and ri
     const args = JSON.parse(toolCall.function.arguments);
     console.log(`[generate-signal] AI returned: ${args.direction} ${pair} @ confidence=${args.confidence} rr=${args.rr_ratio}`);
 
+    // ===== Normalize SL/TP geometry to enforce correct sides + tight SL =====
+    normalizeSignalGeometry(args, pair, market);
+    console.log(`[generate-signal] Normalized: ${args.direction} entry=[${args.entry_low}, ${args.entry_high}] SL=${args.stop_loss} TP=[${args.tp1}, ${args.tp2}, ${args.tp3}]`);
+
     // Filter: confidence >= 0.75
     if (args.confidence < 0.75) {
       console.log(`[generate-signal] FILTERED — confidence ${args.confidence} < 0.75`);
