@@ -24,6 +24,17 @@ const EXPIRY_MINUTES: Record<string, number> = {
   "4h": 480,
 };
 
+function isForexMarketOpen(date = new Date()): boolean {
+  const day = date.getUTCDay();
+  const hour = date.getUTCHours();
+
+  if (day === 6) return false;
+  if (day === 0) return hour >= 22;
+  if (day === 5) return hour < 22;
+
+  return true;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -126,7 +137,7 @@ async function fetchCurrentPrice(pair: string, market: string): Promise<number |
       const symbolMap: Record<string, string> = {
         "BTC/USD": "BTCUSDT",
         "ETH/USD": "ETHUSDT",
-        "POL/USD": "MATICUSDT",
+        "POL/USD": "POLUSDT",
       };
       const symbol = symbolMap[pair];
       if (!symbol) return null;
@@ -158,6 +169,11 @@ async function generateForPair(
   console.log(`[generate-signal] Generating for ${pair} @ ${timeframe}`);
 
   try {
+    if (market === "FOREX" && !isForexMarketOpen()) {
+      console.log(`[generate-signal] SKIPPED — forex market closed for ${pair}`);
+      return { ok: false, skipped: true };
+    }
+
     // Duplicate check
     const hasDuplicate = await checkDuplicate(supabase, pair);
     if (hasDuplicate) {
