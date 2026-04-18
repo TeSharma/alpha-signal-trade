@@ -207,11 +207,24 @@ Deno.serve(async (req) => {
       positionSize = position_size_override;
     }
 
-    // Validate sufficient balance for position
-    const positionValue = positionSize * entryPrice;
-    if (positionValue > accountBalance) {
+    // Cap position size by available balance (don't risk more notional than account holds)
+    const maxPositionByBalance = accountBalance / entryPrice;
+    if (positionSize > maxPositionByBalance) {
+      positionSize = maxPositionByBalance;
+    }
+
+    // Cap by DB column constraint: numeric(10,4) → max < 1,000,000
+    const MAX_LOT_SIZE = 999999.9999;
+    if (positionSize > MAX_LOT_SIZE) {
+      positionSize = MAX_LOT_SIZE;
+    }
+
+    // Round to 4 decimals to match column scale
+    positionSize = Math.floor(positionSize * 10000) / 10000;
+
+    if (positionSize <= 0) {
       return new Response(
-        JSON.stringify({ error: `Insufficient balance for position: required $${positionValue.toFixed(2)}, available $${accountBalance.toFixed(2)}` }),
+        JSON.stringify({ error: 'Calculated position size is too small to execute' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
