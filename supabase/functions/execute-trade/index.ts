@@ -144,7 +144,8 @@ Deno.serve(async (req) => {
       .select('pnl')
       .eq('user_id', userId)
       .eq('account_mode', account_mode)
-      .gte('created_at', todayStart.toISOString());
+      .eq('status', 'closed')
+      .gte('closed_at', todayStart.toISOString());
 
     if (todayError) {
       console.error('Error fetching today trades:', todayError);
