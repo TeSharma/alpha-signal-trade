@@ -2,11 +2,10 @@ import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { TrendingUp, TrendingDown, Clock, Star, Shield, Target, ArrowRight, AlertTriangle, Loader2 } from "lucide-react";
+import { TrendingUp, TrendingDown, Clock, Star, Shield, Target, ArrowRight, AlertTriangle } from "lucide-react";
 import type { SignalObject } from "@/types/signal";
 import { isExpired } from "@/types/signal";
-import { supabase } from "@/integrations/supabase/client";
-import { useToast } from "@/hooks/use-toast";
+import { ExecuteTradeDialog } from "./ExecuteTradeDialog";
 
 function getTimeAgo(dateStr: string): string {
   const diff = Date.now() - new Date(dateStr).getTime();
