@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 import { SignalObject } from '@/types/signal';
 import { useToast } from '@/components/ui/use-toast';
-import { supabase } from '@/integrations/supabase/client';
+import { ExecuteTradeDialog } from './ExecuteTradeDialog';
 
 interface EnhancedSignalCardProps {
   signal: SignalObject;
