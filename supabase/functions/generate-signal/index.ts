@@ -271,6 +271,10 @@ IMPORTANT: Only generate HIGH QUALITY signals. Confidence must be >= 0.75 and ri
     const args = JSON.parse(toolCall.function.arguments);
     console.log(`[generate-signal] AI returned: ${args.direction} ${pair} @ confidence=${args.confidence} rr=${args.rr_ratio}`);
 
+    // ===== Normalize SL/TP geometry to enforce correct sides + tight SL =====
+    normalizeSignalGeometry(args, pair, market);
+    console.log(`[generate-signal] Normalized: ${args.direction} entry=[${args.entry_low}, ${args.entry_high}] SL=${args.stop_loss} TP=[${args.tp1}, ${args.tp2}, ${args.tp3}]`);
+
     // Filter: confidence >= 0.75
     if (args.confidence < 0.75) {
       console.log(`[generate-signal] FILTERED — confidence ${args.confidence} < 0.75`);
@@ -347,4 +351,71 @@ function respond(body: any, status = 200) {
     status,
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
+}
+
+// Force SL/TP to correct sides relative to direction with a tight pip buffer
+function normalizeSignalGeometry(args: any, pair: string, market: string) {
+  // Ensure entry_low <= entry_high
+  if (args.entry_low > args.entry_high) {
+    const tmp = args.entry_low;
+    args.entry_low = args.entry_high;
+    args.entry_high = tmp;
+  }
+
+  const entryMid = (args.entry_low + args.entry_high) / 2;
+
+  // Buffer = distance from entry edge to stop loss (tight, "few pips")
+  let buffer: number;
+  if (market === "CRYPTO") {
+    if (pair === "BTC/USD") buffer = entryMid * 0.0015;       // 0.15%
+    else if (pair === "ETH/USD") buffer = entryMid * 0.0015;  // 0.15%
+    else buffer = entryMid * 0.0025;                          // 0.25% (POL etc.)
+  } else {
+    // FOREX: 15 pips
+    buffer = pair.includes("JPY") ? 0.15 : 0.0015;
+  }
+
+  // RR ladder for TP1/TP2/TP3
+  const rrLadder = [1.0, 1.5, Math.max(2.2, args.rr_ratio || 2.2)];
+
+  if (args.direction === "LONG") {
+    args.stop_loss = args.entry_low - buffer;
+    const risk = entryMid - args.stop_loss;
+    args.tp1 = entryMid + risk * rrLadder[0];
+    args.tp2 = entryMid + risk * rrLadder[1];
+    args.tp3 = entryMid + risk * rrLadder[2];
+  } else {
+    // SHORT
+    args.stop_loss = args.entry_high + buffer;
+    const risk = args.stop_loss - entryMid;
+    args.tp1 = entryMid - risk * rrLadder[0];
+    args.tp2 = entryMid - risk * rrLadder[1];
+    args.tp3 = entryMid - risk * rrLadder[2];
+  }
+
+  // Round to pair-appropriate precision
+  const dp = getPairPrecision(pair);
+  args.entry_low = round(args.entry_low, dp);
+  args.entry_high = round(args.entry_high, dp);
+  args.stop_loss = round(args.stop_loss, dp);
+  args.tp1 = round(args.tp1, dp);
+  args.tp2 = round(args.tp2, dp);
+  args.tp3 = round(args.tp3, dp);
+
+  // Recompute rr_ratio from final geometry (TP3-based)
+  const finalRisk = Math.abs(entryMid - args.stop_loss);
+  const finalReward = Math.abs(args.tp3 - entryMid);
+  args.rr_ratio = finalRisk > 0 ? round(finalReward / finalRisk, 2) : args.rr_ratio;
+}
+
+function getPairPrecision(pair: string): number {
+  if (pair === "BTC/USD" || pair === "ETH/USD") return 2;
+  if (pair === "POL/USD") return 4;
+  if (pair.includes("JPY")) return 3;
+  return 5; // standard FX
+}
+
+function round(n: number, dp: number): number {
+  const f = Math.pow(10, dp);
+  return Math.round(n * f) / f;
 }

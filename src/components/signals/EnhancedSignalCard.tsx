@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 import { SignalObject } from '@/types/signal';
 import { useToast } from '@/components/ui/use-toast';
-import { supabase } from '@/integrations/supabase/client';
+import { ExecuteTradeDialog } from './ExecuteTradeDialog';
 
 interface EnhancedSignalCardProps {
   signal: SignalObject;
@@ -23,7 +23,7 @@ interface EnhancedSignalCardProps {
 }
 
 export const EnhancedSignalCard: React.FC<EnhancedSignalCardProps> = ({ signal, onApprove }) => {
-  const [isExecuting, setIsExecuting] = useState(false);
+  const [dialogOpen, setDialogOpen] = useState(false);
   const { toast } = useToast();
 
   const getDirectionIcon = (direction: string) => {
@@ -105,7 +105,7 @@ export const EnhancedSignalCard: React.FC<EnhancedSignalCardProps> = ({ signal, 
     return 'text-gray-600';
   };
 
-  const handleExecuteTrade = async () => {
+  const handleOpenExecuteDialog = () => {
     if (signal.trade_id) {
       toast({
         title: "Already Executed",
@@ -125,31 +125,7 @@ export const EnhancedSignalCard: React.FC<EnhancedSignalCardProps> = ({ signal, 
       return;
     }
 
-    setIsExecuting(true);
-    try {
-      const { data, error } = await supabase.functions.invoke('execute-trade', {
-        body: { signal_id: signal.id, account_mode: 'demo' },
-      });
-
-      if (error) throw new Error(error.message || 'Execution failed');
-      if (data?.error) throw new Error(data.error);
-
-      toast({
-        title: "Trade Executed",
-        description: `${signal.direction} ${signal.pair} @ ${data.entry_price} — Trade ID: ${data.trade_id?.slice(0, 8)}`,
-        variant: "default",
-      });
-      onApprove(signal);
-    } catch (error: any) {
-      console.error('Trade execution failed:', error);
-      toast({
-        title: "Execution Failed",
-        description: error.message || "Failed to execute trade. Please try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsExecuting(false);
-    }
+    setDialogOpen(true);
   };
 
   const formatPrice = (price: number) => {
@@ -318,27 +294,25 @@ export const EnhancedSignalCard: React.FC<EnhancedSignalCardProps> = ({ signal, 
           </div>
           
           <Button
-            onClick={handleExecuteTrade}
-            disabled={isExecuting || !!signal.trade_id || (signal.expires_at && signal.expires_at < Math.floor(Date.now() / 1000))}
+            onClick={handleOpenExecuteDialog}
+            disabled={!!signal.trade_id || (signal.expires_at && signal.expires_at < Math.floor(Date.now() / 1000))}
             className={`${
-              signal.direction === 'LONG' 
-                ? 'bg-green-600 hover:bg-green-700' 
+              signal.direction === 'LONG'
+                ? 'bg-green-600 hover:bg-green-700'
                 : 'bg-red-600 hover:bg-red-700'
             } text-white`}
           >
-            {isExecuting ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Executing...
-              </>
-            ) : signal.trade_id ? (
-              'Executed'
-            ) : (
-              'Execute Trade'
-            )}
+            {signal.trade_id ? 'Executed' : 'Execute Trade'}
           </Button>
         </div>
       </CardFooter>
+
+      <ExecuteTradeDialog
+        signal={signal}
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        onExecuted={() => onApprove(signal)}
+      />
     </Card>
   );
 };

@@ -2,11 +2,10 @@ import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { TrendingUp, TrendingDown, Clock, Star, Shield, Target, ArrowRight, AlertTriangle, Loader2 } from "lucide-react";
+import { TrendingUp, TrendingDown, Clock, Star, Shield, Target, ArrowRight, AlertTriangle } from "lucide-react";
 import type { SignalObject } from "@/types/signal";
 import { isExpired } from "@/types/signal";
-import { supabase } from "@/integrations/supabase/client";
-import { useToast } from "@/hooks/use-toast";
+import { ExecuteTradeDialog } from "./ExecuteTradeDialog";
 
 function getTimeAgo(dateStr: string): string {
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -24,61 +23,12 @@ interface SignalCardProps {
 }
 
 export function SignalCard({ signal, onApprove }: SignalCardProps) {
-  const [executing, setExecuting] = useState(false);
-  const { toast } = useToast();
+  const [dialogOpen, setDialogOpen] = useState(false);
   const isLong = signal.direction === 'LONG';
   const confidencePct = signal.confidence <= 1 ? (signal.confidence * 100).toFixed(0) : signal.confidence.toFixed(0);
   const highConf = parseFloat(confidencePct) >= 70;
   const timeAgo = signal.created_at ? getTimeAgo(signal.created_at) : '';
   const expired = isExpired(signal);
-
-  const handleExecute = async () => {
-    setExecuting(true);
-    try {
-      const { data, error } = await supabase.functions.invoke('execute-trade', {
-        body: {
-          signal_id: signal.id,
-          account_mode: 'demo', // Default to demo for now
-        }
-      });
-
-      if (error) {
-        console.error('Execute trade error:', error);
-        toast({
-          title: 'Execution Failed',
-          description: error.message || 'Failed to execute trade',
-          variant: 'destructive',
-        });
-        return;
-      }
-
-      if (data?.error) {
-        toast({
-          title: 'Execution Blocked',
-          description: data.error,
-          variant: 'destructive',
-        });
-        return;
-      }
-
-      toast({
-        title: 'Trade Executed',
-        description: `${data.direction} ${data.pair} — Position: ${data.position_size.toFixed(4)} @ $${data.entry_price.toFixed(2)}`,
-      });
-
-      // Call onApprove to refresh signals list
-      onApprove(signal);
-    } catch (err: any) {
-      console.error('Unexpected error:', err);
-      toast({
-        title: 'Error',
-        description: err?.message || 'An unexpected error occurred',
-        variant: 'destructive',
-      });
-    } finally {
-      setExecuting(false);
-    }
-  };
 
   return (
     <Card className={expired ? 'opacity-60' : ''}>
@@ -157,17 +107,12 @@ export function SignalCard({ signal, onApprove }: SignalCardProps) {
 
         <div className="flex gap-2">
           {signal.execution.type === 'ON_CHAIN' ? (
-            <Button 
-              className="flex-1" 
-              onClick={handleExecute} 
-              disabled={expired || executing || signal.status === 'executed'}
+            <Button
+              className="flex-1"
+              onClick={() => setDialogOpen(true)}
+              disabled={expired || signal.status === 'executed'}
             >
-              {executing ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Executing...
-                </>
-              ) : expired ? (
+              {expired ? (
                 'Signal Expired'
               ) : signal.status === 'executed' ? (
                 'Already Executed'
@@ -185,6 +130,13 @@ export function SignalCard({ signal, onApprove }: SignalCardProps) {
           )}
         </div>
       </CardContent>
+
+      <ExecuteTradeDialog
+        signal={signal}
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        onExecuted={() => onApprove(signal)}
+      />
     </Card>
   );
 }
