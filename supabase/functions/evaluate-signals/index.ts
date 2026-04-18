@@ -8,6 +8,17 @@ const corsHeaders = {
 
 const CRYPTO_PAIRS = ["BTC/USD", "ETH/USD", "POL/USD"];
 
+function isForexMarketOpen(date = new Date()): boolean {
+  const day = date.getUTCDay();
+  const hour = date.getUTCHours();
+
+  if (day === 6) return false;
+  if (day === 0) return hour >= 22;
+  if (day === 5) return hour < 22;
+
+  return true;
+}
+
 async function fetchCurrentPrice(pair: string): Promise<number | null> {
   try {
     if (CRYPTO_PAIRS.includes(pair)) {
@@ -66,6 +77,10 @@ serve(async (req) => {
     const now = Date.now();
 
     for (const sig of signals) {
+      if (sig.market === "FOREX" && !isForexMarketOpen()) {
+        continue;
+      }
+
       const signalData = sig.signal_data as any;
       const entryZone = sig.entry_zone as number[] | null;
       const stopLoss = sig.stop_loss as number | null;
