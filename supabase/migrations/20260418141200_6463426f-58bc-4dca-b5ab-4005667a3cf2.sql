@@ -1,0 +1,2 @@
+-- Reset stale/incorrect PnL on open trades (the calculate_trade_pnl function used forex's *100000 multiplier on crypto, producing absurd values)
+UPDATE public.trades SET pnl = 0 WHERE status = 'open' AND pnl IS NOT NULL AND ABS(pnl) > 100000;
