@@ -105,7 +105,7 @@ export const EnhancedSignalCard: React.FC<EnhancedSignalCardProps> = ({ signal, 
     return 'text-gray-600';
   };
 
-  const handleExecuteTrade = async () => {
+  const handleOpenExecuteDialog = () => {
     if (signal.trade_id) {
       toast({
         title: "Already Executed",
@@ -125,31 +125,7 @@ export const EnhancedSignalCard: React.FC<EnhancedSignalCardProps> = ({ signal, 
       return;
     }
 
-    setIsExecuting(true);
-    try {
-      const { data, error } = await supabase.functions.invoke('execute-trade', {
-        body: { signal_id: signal.id, account_mode: 'demo' },
-      });
-
-      if (error) throw new Error(error.message || 'Execution failed');
-      if (data?.error) throw new Error(data.error);
-
-      toast({
-        title: "Trade Executed",
-        description: `${signal.direction} ${signal.pair} @ ${data.entry_price} — Trade ID: ${data.trade_id?.slice(0, 8)}`,
-        variant: "default",
-      });
-      onApprove(signal);
-    } catch (error: any) {
-      console.error('Trade execution failed:', error);
-      toast({
-        title: "Execution Failed",
-        description: error.message || "Failed to execute trade. Please try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsExecuting(false);
-    }
+    setDialogOpen(true);
   };
 
   const formatPrice = (price: number) => {
