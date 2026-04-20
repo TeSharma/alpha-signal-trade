@@ -116,6 +116,8 @@ const DesktopAccount = ({ accountMode }: { accountMode: 'demo' | 'live' }) => (
         <TronWalletConnect />
       </div>
 
+      <ResetDemoCard />
+
       <Tabs defaultValue="profile" className="space-y-6">
         <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="profile" className="flex items-center gap-2">
