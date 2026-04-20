@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { User, Settings, Shield, Palette, Bell } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { User, Settings, Shield, Palette, Bell, RotateCcw } from "lucide-react";
 import Sidebar from "@/components/layout/Sidebar";
 import TopBar from "@/components/layout/TopBar";
 import MobileHeader from "@/components/layout/MobileHeader";
@@ -10,6 +12,67 @@ import { AppearanceSettings } from "@/components/settings/AppearanceSettings";
 import { NotificationPreferences } from "@/components/notifications/NotificationPreferences";
 import WalletStatus from "@/components/wallet/WalletStatus";
 import { TronWalletConnect } from "@/components/wallet/TronWalletConnect";
+import { useTrades } from "@/hooks/useTrades";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+
+const ResetDemoCard = () => {
+  const { resetDemoBalance, accountBalance } = useTrades();
+  const [resetting, setResetting] = useState(false);
+
+  const handleReset = async () => {
+    setResetting(true);
+    await resetDemoBalance();
+    setResetting(false);
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <RotateCcw className="h-5 w-5" />
+          Demo Account
+        </CardTitle>
+        <CardDescription>
+          Current demo balance:{" "}
+          <span className="font-semibold text-foreground">
+            ${(accountBalance?.demo_balance ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </span>
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <Button variant="destructive" disabled={resetting}>
+              {resetting ? "Resetting..." : "Reset Demo Account"}
+            </Button>
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Reset demo account?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This will cancel all open demo trades, restore your demo balance to $10,000, and zero out total &amp; today PnL. This cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={handleReset}>Reset</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </CardContent>
+    </Card>
+  );
+};
 
 const Account = () => {
   const [accountMode, setAccountMode] = useState<'demo' | 'live'>('demo');
@@ -53,6 +116,8 @@ const DesktopAccount = ({ accountMode }: { accountMode: 'demo' | 'live' }) => (
         <TronWalletConnect />
       </div>
 
+      <ResetDemoCard />
+
       <Tabs defaultValue="profile" className="space-y-6">
         <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="profile" className="flex items-center gap-2">
@@ -95,6 +160,7 @@ const DesktopAccount = ({ accountMode }: { accountMode: 'demo' | 'live' }) => (
 
 const MobileAccount = ({ accountMode }: { accountMode: 'demo' | 'live' }) => (
   <main className="p-4 space-y-4">
+    <ResetDemoCard />
     <Tabs defaultValue="profile" className="space-y-4">
       <TabsList className="grid w-full grid-cols-4">
         <TabsTrigger value="profile" className="text-xs">

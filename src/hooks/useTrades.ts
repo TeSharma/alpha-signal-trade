@@ -225,10 +225,29 @@ export const useTrades = () => {
       const { data: user } = await supabase.auth.getUser();
       if (!user.user) return null;
 
+      // 1. Cancel all open demo trades for this user
+      const { data: openDemoTrades } = await supabase
+        .from('trades')
+        .select('id')
+        .eq('user_id', user.user.id)
+        .eq('account_mode', 'demo')
+        .eq('status', 'open');
+
+      if (openDemoTrades && openDemoTrades.length > 0) {
+        await Promise.all(
+          openDemoTrades.map((t: { id: string }) =>
+            supabase.rpc('cancel_trade', { p_trade_id: t.id })
+          )
+        );
+      }
+
+      // 2. Reset balance + zero out PnL counters
       const { data, error } = await supabase
         .from('account_balances')
         .update({
           demo_balance: 10000,
+          total_pnl: 0,
+          today_pnl: 0,
           updated_at: new Date().toISOString(),
         })
         .eq('user_id', user.user.id)
@@ -238,11 +257,11 @@ export const useTrades = () => {
       if (error) throw error;
 
       toast({
-        title: 'Demo reset',
-        description: 'Demo balance has been reset to $10,000',
+        title: 'Demo account reset',
+        description: 'Balance restored to $10,000 and open demo trades cancelled.',
       });
 
-      await fetchAccountBalance();
+      await Promise.all([fetchAccountBalance(), fetchTrades()]);
       return data;
     } catch (error) {
       console.error('Error resetting demo balance:', error);
