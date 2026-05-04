@@ -20,8 +20,8 @@ export type V1TradingPair = typeof V1_TRADING_MARKETS[number];
 export const V1_AMOY_MARKETS = ['POL/USD'] as const;
 export const V1_MAINNET_MARKETS = ['BTC/USD', 'ETH/USD', 'POL/USD'] as const;
 
-// ─── AI SIGNAL MARKETS (Forex – no oracle needed) ────────────────────────
-export const V1_SIGNAL_MARKETS = ['EUR/USD', 'GBP/USD', 'USD/JPY'] as const;
+// ─── AI SIGNAL MARKETS (Forex + Metals – no oracle needed) ───────────────
+export const V1_SIGNAL_MARKETS = ['EUR/USD', 'GBP/USD', 'USD/JPY', 'XAU/USD'] as const;
 export type V1SignalPair = typeof V1_SIGNAL_MARKETS[number];
 
 // Combined metadata for all v1 markets
