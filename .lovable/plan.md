@@ -1,92 +1,182 @@
-## Part 1 — Expand demo trading to all available pairs
+# Liquidator Keeper Bot — Detailed Plan
 
-### Current state
+## What it is
 
-- `src/config/markets.ts` → `getMarketsForMode('demo')` returns only `['POL/USD']` (because Amoy oracle only has a POL feed).
-- `TradingForm.tsx` reads from `getMarketsForMode(accountMode)`, so the Place Trade card only shows POL/USD in demo.
-- BUT demo trades are entirely off-chain (Supabase `trades` table + `calculate_trade_pnl` RPC). They never touch the oracle or any smart contract — see `useTrades.createTrade` and `handleSubmitTrade` in `TradingForm` (the on-chain branch only runs when `accountMode === 'live'`).
-- Prices for all 6 pairs are already streaming: crypto via Binance WS / `crypto-prices` edge function, forex via the `forex-prices` edge function (Twelve Data). `useMarketData` already merges them.
-- PnL math is asset-aware: `calculate_trade_pnl` already branches on crypto vs JPY vs standard forex, so any pair will compute correctly.
+A standalone Node.js worker (separate repo, **not** part of this Vite app) that:
 
-### Conclusion
+1. Watches every open position in `TradingPlatformV2`.
+2. Polls the Chainlink-backed `PriceOracleV2` for current prices.
+3. Computes each position's equity = `margin + unrealizedPnL` against the contract's `maintenanceMarginBps` (currently 1000 bps = 10%).
+4. When equity falls below maintenance margin, sends a `liquidate(positionId)` tx and earns the `liquidatorRewardBps` (currently 30%) of the remaining margin.
 
-The POL/USD restriction is a leftover guardrail from when demo was tied to the Amoy oracle. Since demo execution is purely off-chain and prices for all 6 pairs are already live, we can safely open demo trading to the full pair list with a tiny config change.
-
-### Changes
-
-1. `**src/config/markets.ts**` — change `getMarketsForMode`:
-  ```ts
-   export const getMarketsForMode = (mode: 'demo' | 'live'): string[] =>
-     mode === 'demo'
-       ? [...V1_TRADING_MARKETS, ...V1_SIGNAL_MARKETS]   // BTC, ETH, POL, EUR, GBP, JPY
-       : getMainnetTradingMarkets();                      // unchanged
-  ```
-   Live mode stays restricted to Chainlink-backed crypto pairs (correct — forex live execution needs a forex oracle).
-2. `**src/components/trading/TradingForm.tsx**` — small UX touches now that the grid has 6 pairs:
-  - Keep `grid-cols-3` (already fits a 2×3 layout).
-  - For demo + forex pair selected, gate trade button when `isForexMarketOpen()` returns false (use existing `src/lib/marketHours.ts`) and show a small "Forex market closed (weekend)" notice. Crypto trades 24/7 so no gate.
-  - Update the helper line under the grid (currently says forex execution is v2-only) to: "Demo: trade any pair off-chain. Live: crypto only (Chainlink-backed)."
-3. `**src/pages/Trade.tsx**` — update the demo subtitle:
-  - From: "Demo trading on Polygon Amoy — POL/USD powered by Chainlink oracle"
-  - To: "Demo trading — all 6 markets available, prices streamed from Binance & Twelve Data. PnL settled off-chain."
-4. `**src/components/trading/MobileTradingInterface.tsx**` — verify it also uses `getMarketsForMode` (most likely yes); if it has its own hardcoded list, mirror the same change.
-
-No DB migration, no edge function changes, no contract changes. PnL formula already handles all 3 asset classes correctly.
-
-### Edge cases handled
-
-- Forex weekend closure: gate the submit button (forex spot has no price Sat ~22:00 UTC → Sun ~22:00 UTC).
-- JPY pair PnL: already correct (`multiplier = 1000` in `calculate_trade_pnl`).
-- Crypto PnL: already `multiplier = 1`, lot_size = units of base asset (matches the `ExecuteTradeDialog` semantics).
+This is the same role MEV searchers play on Aave / GMX / Hyperliquid. Without one, the **protocol is the loser of last resort** — underwater positions bleed past their maintenance buffer and the contract becomes insolvent (treasury covers the gap).
 
 ---
 
-## Part 2 — Answers to your two questions
+## Why we need it
 
-### Q1: When the oracle goes live (mainnet), does every user pay gas?
+### Current state (no keeper)
 
-**Yes — every user pays gas for their own trade transactions.** That's how on-chain trading works on Polygon.
+- `TradingPlatformV2.liquidate(positionId)` exists and is `external` — **anyone** can call it.
+- In production we have **zero callers**. Positions that should liquidate at 10% margin can decay to 0% and beyond.
+- The contract has `maxProfitBps = 30000` (300% cap) but no symmetric floor on losses below maintenance — once equity goes negative, the close path returns 0 and the user keeps their (negative) PnL on the protocol's books.
+- This is fine on Amoy testnet (play money). On mainnet it is an **existential risk**.
 
-Concretely, on live mode the user's wallet signs and pays gas for:
+### After keeper
 
-- `approve(tUSD)` once per allowance change (~50k gas)
-- `openPosition(...)` per trade (~200–350k gas)
-- `closePosition(...)` per close (~150–250k gas)
-- `modifyPosition(...)` if they edit SL/TP
+- Positions are closed at exactly maintenance margin (or as close as block-time allows).
+- The 30% liquidator reward funds the bot's gas + a small profit margin.
+- Protocol solvency is preserved; treasury never has to cover bad debt.
+- Users get a deterministic liquidation experience instead of "I logged in and my position vanished mysteriously."
 
-On Polygon mainnet at typical 30–50 gwei this is roughly **$0.01–$0.05 per action in POL**. The oracle itself (`PriceOracleV2.getPrice`) is a `view` call from the contract's perspective — it costs nothing extra; the cost is the trade tx that reads it.
+### How it improves our **proposed goals**
 
-What the **project** pays for separately:
-
-- Chainlink feed subscription: nothing — Chainlink Data Feeds on Polygon are free to read on-chain.
-- Contract deployment: one-time, paid by the deployer wallet (already done for Amoy; mainnet deployment will be a one-time cost for you).
-- Optional keeper bot for liquidations: if you run one, it pays gas to call `liquidate(...)` and earns the `liquidatorRewardBps` (currently 30%) as compensation.
-
-If you ever want to abstract gas away from end users, the options are: (a) gas sponsorship via Biconomy/Pimlico/Alchemy account abstraction, (b) meta-transactions via a relayer you fund, (c) Polygon's native gas-tank programs. None of these are wired up today — current architecture is "user wallet pays."
-
-### Q2: How long until forex pairs have on-chain live prices via the oracle?
-
-**Short answer: Chainlink does not currently publish EUR/USD, GBP/USD, or USD/JPY price feeds on Polygon mainnet.** Their forex coverage on Polygon is essentially limited to gold (XAU/USD) and a couple of legacy pairs; the major FX pairs you want aren't there.
-
-Practical paths and rough timelines:
-
-1. **Wait for Chainlink to add them on Polygon** — no committed ETA. Chainlink launches new feeds based on demand and partner sponsorship. Could be months, could be never on Polygon specifically. They do have these feeds on other chains (Arbitrum, BSC) — so a multi-chain expansion later would be the cleanest path.
-2. **Use a different oracle now** — Pyth Network has FX feeds (EUR/USD, GBP/USD, USD/JPY) on Polygon today via their pull-oracle model. Integration effort: ~1–2 weeks (new `IPriceOracleV2` adapter that wraps Pyth's `updatePriceFeeds` + `getPriceUnsafe`). User pays a tiny extra fee per trade to post the latest Pyth price update on-chain (cents on Polygon).
-3. **Run your own signed-price oracle** — your backend signs prices off-chain (using Twelve Data as source), the smart contract verifies the signature on-chain. Trust model: users trust your signer key. Effort: ~3–5 days. This is what some perp DEXs (e.g., GMX v1) used before migrating to Chainlink Streams / Pyth.
-
-**Recommendation if forex execution is a near-term priority:** integrate Pyth on Polygon mainnet. You keep the same TradingPlatformV2 contract; only the `PriceOracleV2` is swapped for a `PyrhPriceOracleV2` adapter. Forex AI signals stay off-chain in the meantime (current state).
+| Goal | Without keeper | With keeper |
+|---|---|---|
+| Mainnet launch | Cannot launch safely | Required precondition ✅ |
+| Higher leverage tiers (50x) | Too risky | Safe — fast liquidation enforces margin |
+| Onboarding non-crypto users | Bad debt erodes treasury silently | Predictable risk model |
+| Listing more crypto pairs | Each new pair multiplies insolvency risk | Risk scales linearly, not exponentially |
+| Future Pyth/forex execution | Blocked — forex moves fast on news, manual liquidation impossible | Bot handles 24/5 forex liquidations automatically |
 
 ---
 
-## Files to change (Part 1 only — Part 2 is informational)
+## Architecture
 
-- `src/config/markets.ts` — expand `getMarketsForMode('demo')`
-- `src/components/trading/TradingForm.tsx` — forex weekend gate + helper text
-- `src/components/trading/MobileTradingInterface.tsx` — mirror if it hardcodes pairs
-- `src/pages/Trade.tsx` — update demo subtitle copy
+```
+┌────────────────────────────────────────────────────────────┐
+│  Keeper Bot (separate repo: alpha-signal-keeper)           │
+│  ──────────────────────────────────────────────────────    │
+│  • Node 20 + ethers v6 + pino (structured logs)            │
+│  • Hosted on Fly.io / Railway / a small VPS (~$5/mo)       │
+│  • Funded hot wallet (0.5 POL float, auto-refill alert)    │
+└──────────┬─────────────────────────────────────────────────┘
+           │
+           │ 1. eth_getLogs every block (or WS subscription)
+           │    → track PositionOpened / PositionClosed / PositionModified
+           │
+           ▼
+┌────────────────────────────────────────────────────────────┐
+│  In-memory position cache (Map<positionId, Position>)      │
+│  • Persisted to Redis (optional) for restart resilience    │
+└──────────┬─────────────────────────────────────────────────┘
+           │
+           │ 2. Every block (~2s on Polygon):
+           │    a. Multicall PriceOracleV2.getPrice(pairId) for active pairs
+           │    b. For each cached position, compute equity off-chain
+           │    c. If equity ≤ maintenance threshold → enqueue liquidation
+           │
+           ▼
+┌────────────────────────────────────────────────────────────┐
+│  Liquidation queue (priority = how-underwater)             │
+│  • Sends `liquidate(positionId)` with EIP-1559 fees        │
+│  • Bumps gas if pending > 30s (private mempool optional)   │
+│  • Confirms → emits structured log + Discord/Slack alert   │
+└────────────────────────────────────────────────────────────┘
+```
 
-No DB migrations, no edge function deploys, no contract changes.  
-  
-Answer 1: I want to know more about the keepers bot for liquidation and how it can improve our current state and our proposed goal and also run one  
-Answer 2: I think it will be wise to abstract gass from users end so i think we should go with (meta-transactions via a relayer) this option except there is a better one you can propose and i also want to know what it entails   
-Answer 3: I think we should integrate pyth on polygon mainnet and i also want XAUUSD to be included in the pairs available  
+### Why off-chain equity calc
+
+The contract's `getPositionEquity(positionId)` view exists but costs an RPC call per position. With 1k+ positions on mainnet this would burn rate limits in seconds. We replicate the formula off-chain (pure math, deterministic) and only spend RPC budget on the **prices** (~1 multicall per block). Final on-chain `liquidate(...)` re-checks atomically — no race condition.
+
+---
+
+## File / module breakdown (keeper repo)
+
+```
+alpha-signal-keeper/
+├── src/
+│   ├── index.ts              # entrypoint, graceful shutdown
+│   ├── config.ts             # RPC URLs, contract addrs, wallet PK from env
+│   ├── chain/
+│   │   ├── provider.ts       # ethers provider with WS + HTTP fallback
+│   │   ├── contracts.ts      # typed TradingPlatformV2 + PriceOracleV2
+│   │   └── multicall.ts      # batched price reads
+│   ├── state/
+│   │   ├── positions.ts      # cache + log indexer (rebuild from chain on cold start)
+│   │   └── prices.ts         # latest price per pairId
+│   ├── engine/
+│   │   ├── equity.ts         # off-chain PnL/equity formula (mirrors contract)
+│   │   ├── scanner.ts        # per-block sweep → liquidation candidates
+│   │   └── executor.ts       # sends + monitors liquidate() txs
+│   ├── ops/
+│   │   ├── alerts.ts         # Discord webhook on liquidations / errors / low gas
+│   │   └── metrics.ts        # Prometheus /metrics endpoint
+│   └── utils/logger.ts
+├── test/
+│   ├── equity.test.ts        # property tests vs contract math
+│   └── scanner.test.ts       # mocked-chain end-to-end
+├── Dockerfile
+├── fly.toml                  # or railway.json
+├── .env.example
+└── README.md
+```
+
+**~800–1200 LOC.** Boring on purpose.
+
+---
+
+## Build phases
+
+| Phase | Effort | Deliverable |
+|---|---|---|
+| **1. Skeleton + chain reads** | 0.5 day | Connect to Amoy, subscribe to events, log every PositionOpened |
+| **2. Position cache + cold-start rebuild** | 0.5 day | Restart-safe; rebuilds from chain history in < 30s |
+| **3. Off-chain equity engine + tests** | 1 day | Property tests vs Solidity math (run forge fuzz against same inputs) |
+| **4. Scanner + dry-run mode** | 0.5 day | Logs "would liquidate position X" without sending tx |
+| **5. Executor (real txs on Amoy)** | 1 day | End-to-end liquidation on testnet with bumping/retry |
+| **6. Ops: alerts, metrics, Docker** | 0.5 day | Discord pings, Prometheus, deployable image |
+| **7. Mainnet shadow run (1 week)** | passive | Run in dry-run on mainnet, compare to manual checks |
+| **8. Mainnet go-live** | flip flag | Switch dry-run off, announce in Discord |
+
+**Total active engineering: 4–4.5 days.** Plus 1 week passive shadow before flipping the switch.
+
+---
+
+## Operational considerations
+
+### Hot wallet funding
+
+- Bot holds **only enough POL for ~1 week of gas** (~5 POL initially). Never the protocol treasury.
+- Liquidation rewards (the 30% bps) are sent to a **separate cold collection address**, not the hot wallet — only the gas float stays hot.
+- Alert fires when hot wallet < 1 POL.
+
+### Failure modes & mitigations
+
+| Failure | Mitigation |
+|---|---|
+| RPC down | Multi-provider fallback (Alchemy primary, public Polygon RPC secondary) |
+| Bot crashes mid-tx | On restart, replays mempool — idempotent because contract state determines outcome |
+| Price oracle stalls | Bot does NOT liquidate if `oracle.updatedAt` > 60s old — prevents wrongful liquidations on stale data (matches contract's own staleness check) |
+| Gas spike | EIP-1559 cap on `maxFeePerGas` — bot waits rather than overpays during congestion |
+| Two keepers race for same position | Loser's tx reverts (position already closed) — wasted gas, not a safety issue |
+| Hot wallet key compromised | Cold collection wallet is unaffected; rotate keeper key, keeper has no admin role on contract |
+
+### Permissions
+
+- The keeper wallet has **zero special privileges** on `TradingPlatformV2`. `liquidate(...)` is permissionless by design. This is critical — if the keeper bot disappears, anyone in the world can step in and earn the 30% reward. The protocol survives without us.
+
+### Cost model (mainnet, 100 active positions, normal volatility)
+
+- ~5 liquidations/week average
+- Gas per liquidation: ~150k @ 50 gwei = ~0.0075 POL ≈ $0.005
+- Reward per liquidation (avg position margin $50, 30% of remaining): ~$3
+- Net: bot is **profit-positive** at scale. We can later open-source it and let third-party keepers run too.
+
+---
+
+## How the keeper interacts with the rest of the roadmap
+
+- **ERC-4337 gasless trading (next phase):** Independent. Users get gasless trades; keeper still uses normal txs (it's a bot, not a UX surface).
+- **Pyth forex oracle:** Keeper picks up forex pairs automatically once the new `IPriceOracleV2` adapter is live. Forex-aware staleness check (Pyth updates on demand) added in keeper config.
+- **XAU/USD live trading:** Same as above — keeper is oracle-agnostic, it just reads `PriceOracleV2.getPrice(pairId)`.
+
+---
+
+## Decision needed
+
+1. **Hosting:** Fly.io (recommended — free tier covers it, easy deploy) vs Railway vs your own VPS.
+2. **Repo location:** New separate GitHub repo (recommended — different lifecycle, different secrets) vs subdirectory of this project.
+3. **Reward collection wallet:** Use existing treasury (`0x09C2B58F6004176bD83cc000d804eD3c1041754E`) or generate a fresh one for liquidation rewards only?
+
+Once you confirm those three, we can scaffold the keeper repo and start phase 1.
