@@ -517,7 +517,7 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
           className="w-full" 
           size="lg"
           onClick={handleSubmitTrade}
-          disabled={isLoadingSignal || isSubmitting || onChainLoading || approvalPending || (accountMode === 'live' && (!isCorrectNetwork || !oracleHealthy))}
+          disabled={isLoadingSignal || isSubmitting || onChainLoading || approvalPending || (accountMode === 'live' && (!isCorrectNetwork || !oracleHealthy)) || (accountMode === 'demo' && isSignalMarket(selectedPair) && !isForexMarketOpen())}
         >
           {approvalPending ? (
             <span className="flex items-center">
