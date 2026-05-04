@@ -13,7 +13,8 @@ import { useOnChainTradingV2 } from '@/hooks/useOnChainTradingV2'
 import { useToast } from '@/components/ui/use-toast'
 import { useNetworkEnforcement } from '@/hooks/useNetworkEnforcement'
 import { getMinimums, isMainnet, FEE_CONFIG, calculateOpenFee, getNetworkName } from '@/config/contracts'
-import { getMarketsForMode, MARKET_METADATA, formatPrice } from '@/config/markets'
+import { getMarketsForMode, MARKET_METADATA, formatPrice, isSignalMarket } from '@/config/markets'
+import { isForexMarketOpen } from '@/lib/marketHours'
 import { useLocation } from 'react-router-dom'
 import type { SignalObject } from '@/types/signal'
 
@@ -275,8 +276,16 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
             })}
           </div>
           <p className="text-xs text-muted-foreground">
-            Forex markets (EUR/USD, GBP/USD, USD/JPY) — signals live, execution coming in v2
+            {accountMode === 'demo'
+              ? 'Demo: trade any pair off-chain. Live: crypto only (Chainlink-backed).'
+              : 'Live execution: crypto pairs settled on-chain via Chainlink oracle.'}
           </p>
+          {accountMode === 'demo' && isSignalMarket(selectedPair) && !isForexMarketOpen() && (
+            <div className="flex items-center gap-2 text-xs text-amber-600 bg-amber-50 dark:bg-amber-950/30 p-2 rounded">
+              <AlertTriangle className="h-3 w-3" />
+              Forex market is closed (weekend). Trade resumes Sunday ~22:00 UTC.
+            </div>
+          )}
           
           {/* Current Price Display */}
           {selectedPairData && (
@@ -508,7 +517,7 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
           className="w-full" 
           size="lg"
           onClick={handleSubmitTrade}
-          disabled={isLoadingSignal || isSubmitting || onChainLoading || approvalPending || (accountMode === 'live' && (!isCorrectNetwork || !oracleHealthy))}
+          disabled={isLoadingSignal || isSubmitting || onChainLoading || approvalPending || (accountMode === 'live' && (!isCorrectNetwork || !oracleHealthy)) || (accountMode === 'demo' && isSignalMarket(selectedPair) && !isForexMarketOpen())}
         >
           {approvalPending ? (
             <span className="flex items-center">
