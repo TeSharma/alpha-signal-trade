@@ -173,10 +173,15 @@ alpha-signal-keeper/
 
 ---
 
-## Decision needed
+## Decisions locked in
 
-1. **Hosting:** Fly.io (recommended — free tier covers it, easy deploy) vs Railway vs your own VPS.
-2. **Repo location:** New separate GitHub repo (recommended — different lifecycle, different secrets) vs subdirectory of this project.
-3. **Reward collection wallet:** Use existing treasury (`0x09C2B58F6004176bD83cc000d804eD3c1041754E`) or generate a fresh one for liquidation rewards only?
+1. **Hosting:** Fly.io (`fly.toml` shipped in the starter).
+2. **Repo location:** Separate GitHub repo — `alpha-signal-keeper` (scaffold delivered as a downloadable zip).
+3. **Reward collection wallet:** Reuse existing project treasury `0x09C2B58F6004176bD83cc000d804eD3c1041754E` so liquidation rewards consolidate into the unified treasury.
 
-Once you confirm those three, we can scaffold the keeper repo and start phase 1.
+## Status
+
+Phases 1–6 scaffolded in `alpha-signal-keeper/` (delivered as zip artifact). Next steps:
+- User pushes the zip to a new GitHub repo.
+- Run `npm install && npm run dev` against Amoy with `DRY_RUN=true` for phase 5 E2E.
+- After mainnet contract deploy: run shadow mode for 1 week (phase 7), then flip `DRY_RUN=false` (phase 8).
