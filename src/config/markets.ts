@@ -20,8 +20,8 @@ export type V1TradingPair = typeof V1_TRADING_MARKETS[number];
 export const V1_AMOY_MARKETS = ['POL/USD'] as const;
 export const V1_MAINNET_MARKETS = ['BTC/USD', 'ETH/USD', 'POL/USD'] as const;
 
-// ─── AI SIGNAL MARKETS (Forex – no oracle needed) ────────────────────────
-export const V1_SIGNAL_MARKETS = ['EUR/USD', 'GBP/USD', 'USD/JPY'] as const;
+// ─── AI SIGNAL MARKETS (Forex + Metals – no oracle needed) ───────────────
+export const V1_SIGNAL_MARKETS = ['EUR/USD', 'GBP/USD', 'USD/JPY', 'XAU/USD'] as const;
 export type V1SignalPair = typeof V1_SIGNAL_MARKETS[number];
 
 // Combined metadata for all v1 markets
@@ -34,6 +34,7 @@ export const MARKET_METADATA: Record<string, MarketMeta> = {
   'EUR/USD':   { symbol: 'EUR',   icon: '€', decimals: 5, layer: 'signal', network: 'all', description: 'AI Signals Only' },
   'GBP/USD':   { symbol: 'GBP',   icon: '£', decimals: 5, layer: 'signal', network: 'all', description: 'AI Signals Only' },
   'USD/JPY':   { symbol: 'JPY',   icon: '¥', decimals: 3, layer: 'signal', network: 'all', description: 'AI Signals Only' },
+  'XAU/USD':   { symbol: 'XAU',   icon: '🥇', decimals: 2, layer: 'signal', network: 'all', description: 'Gold (AI Signals Only)' },
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
@@ -51,7 +52,11 @@ export const getAmoyTradingMarkets = (): string[] => [...V1_AMOY_MARKETS];
 export const getMainnetTradingMarkets = (): string[] => [...V1_MAINNET_MARKETS];
 
 export const getMarketsForMode = (mode: 'demo' | 'live'): string[] =>
-  mode === 'demo' ? getAmoyTradingMarkets() : getMainnetTradingMarkets();
+  mode === 'demo'
+    // Demo: all pairs available (off-chain settlement, prices from Binance + Twelve Data)
+    ? [...V1_TRADING_MARKETS, ...V1_SIGNAL_MARKETS]
+    // Live: only Chainlink-backed crypto on mainnet
+    : getMainnetTradingMarkets();
 
 export const isMainnetOnly = (pair: string): boolean =>
   MARKET_METADATA[pair]?.network === 'mainnet-only';

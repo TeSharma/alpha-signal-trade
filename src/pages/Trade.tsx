@@ -41,7 +41,7 @@ const Trade = () => {
                 <h1 className="text-3xl font-bold text-gray-900">Trade</h1>
                 <p className="text-gray-600">
                   {accountMode === 'demo' 
-                    ? 'Demo trading on Polygon Amoy — POL/USD powered by Chainlink oracle'
+                    ? 'Demo trading — all 6 markets available (BTC, ETH, POL, EUR/USD, GBP/USD, USD/JPY). Prices from Binance & Twelve Data, PnL settled off-chain.'
                     : `Live trading on ${getNetworkName('live')} — BTC, ETH, POL powered by Chainlink oracles`
                   }
                 </p>
