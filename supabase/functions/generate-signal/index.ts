@@ -271,9 +271,17 @@ IMPORTANT: Only generate HIGH QUALITY signals. Confidence must be >= 0.75 and ri
     const args = JSON.parse(toolCall.function.arguments);
     console.log(`[generate-signal] AI returned: ${args.direction} ${pair} @ confidence=${args.confidence} rr=${args.rr_ratio}`);
 
-    // ===== Normalize SL/TP geometry to enforce correct sides + tight SL =====
-    normalizeSignalGeometry(args, pair, market);
-    console.log(`[generate-signal] Normalized: ${args.direction} entry=[${args.entry_low}, ${args.entry_high}] SL=${args.stop_loss} TP=[${args.tp1}, ${args.tp2}, ${args.tp3}]`);
+    // ===== Normalize SL/TP geometry: tighten entry to live price + structure-aware SL =====
+    const structure = await fetchStructure(pair, market);
+    normalizeSignalGeometry(args, pair, market, currentPrice, structure);
+    console.log(`[generate-signal] Normalized: ${args.direction} entry=[${args.entry_low}, ${args.entry_high}] SL=${args.stop_loss} TP=[${args.tp1}, ${args.tp2}, ${args.tp3}] swing=[${structure.swingLow}, ${structure.swingHigh}]`);
+
+    // Defense-in-depth: reject malformed geometry before insert
+    const geo = validateGeometry(args);
+    if (!geo.ok) {
+      console.error(`[generate-signal] FILTERED — geometry invalid: ${geo.reason}`);
+      return { ok: false, filtered: true, confidence: args.confidence, rr: args.rr_ratio };
+    }
 
     // Filter: confidence >= 0.75
     if (args.confidence < 0.75) {
@@ -353,13 +361,34 @@ function respond(body: any, status = 200) {
   });
 }
 
-// Force SL/TP to correct sides relative to direction with a tight pip buffer
-function normalizeSignalGeometry(args: any, pair: string, market: string) {
+// Force SL/TP to correct sides relative to direction with a tight pip buffer.
+// Also clamps entry zone to a tight band around the live price so signals are
+// immediately actionable, and uses recent swing high/low (when provided) as a
+// floor for SL placement.
+function normalizeSignalGeometry(
+  args: any,
+  pair: string,
+  market: string,
+  livePrice: number | null,
+  structure: { swingHigh: number | null; swingLow: number | null } = { swingHigh: null, swingLow: null },
+) {
   // Ensure entry_low <= entry_high
   if (args.entry_low > args.entry_high) {
     const tmp = args.entry_low;
     args.entry_low = args.entry_high;
     args.entry_high = tmp;
+  }
+
+  // ---- Tighten entry zone to live price ± small band ----
+  if (livePrice && livePrice > 0) {
+    let band: number;
+    if (market === "CRYPTO") {
+      band = livePrice * 0.001; // ±0.10%
+    } else {
+      band = pair.includes("JPY") ? 0.05 : 0.0005; // ±5 pips
+    }
+    args.entry_low = livePrice - band;
+    args.entry_high = livePrice + band;
   }
 
   const entryMid = (args.entry_low + args.entry_high) / 2;
@@ -371,22 +400,31 @@ function normalizeSignalGeometry(args: any, pair: string, market: string) {
     else if (pair === "ETH/USD") buffer = entryMid * 0.0015;  // 0.15%
     else buffer = entryMid * 0.0025;                          // 0.25% (POL etc.)
   } else {
-    // FOREX: 15 pips
-    buffer = pair.includes("JPY") ? 0.15 : 0.0015;
+    buffer = pair.includes("JPY") ? 0.15 : 0.0015;            // 15 pips
   }
 
-  // RR ladder for TP1/TP2/TP3
-  const rrLadder = [1.0, 1.5, Math.max(2.2, args.rr_ratio || 2.2)];
+  // Stricter RR ladder: TP1=1.5R, TP2=2.5R, TP3=max(3.5R, AI rr)
+  const rrLadder = [1.5, 2.5, Math.max(3.5, args.rr_ratio || 3.5)];
 
   if (args.direction === "LONG") {
-    args.stop_loss = args.entry_low - buffer;
+    let sl = args.entry_low - buffer;
+    // Use recent swing low as a floor (place SL just below it if available)
+    if (structure.swingLow && structure.swingLow < args.entry_low) {
+      const structureSL = structure.swingLow - buffer * 0.5;
+      sl = Math.min(sl, structureSL);
+    }
+    args.stop_loss = sl;
     const risk = entryMid - args.stop_loss;
     args.tp1 = entryMid + risk * rrLadder[0];
     args.tp2 = entryMid + risk * rrLadder[1];
     args.tp3 = entryMid + risk * rrLadder[2];
   } else {
-    // SHORT
-    args.stop_loss = args.entry_high + buffer;
+    let sl = args.entry_high + buffer;
+    if (structure.swingHigh && structure.swingHigh > args.entry_high) {
+      const structureSL = structure.swingHigh + buffer * 0.5;
+      sl = Math.max(sl, structureSL);
+    }
+    args.stop_loss = sl;
     const risk = args.stop_loss - entryMid;
     args.tp1 = entryMid - risk * rrLadder[0];
     args.tp2 = entryMid - risk * rrLadder[1];
@@ -406,6 +444,43 @@ function normalizeSignalGeometry(args: any, pair: string, market: string) {
   const finalRisk = Math.abs(entryMid - args.stop_loss);
   const finalReward = Math.abs(args.tp3 - entryMid);
   args.rr_ratio = finalRisk > 0 ? round(finalReward / finalRisk, 2) : args.rr_ratio;
+}
+
+/** Strict server-side check: SL/TP must be on correct sides of entry. */
+function validateGeometry(args: any): { ok: boolean; reason?: string } {
+  if (args.direction === "LONG") {
+    if (!(args.stop_loss < args.entry_low)) return { ok: false, reason: "LONG SL must be below entry_low" };
+    if (!(args.tp1 > args.entry_high)) return { ok: false, reason: "LONG TP1 must be above entry_high" };
+    if (!(args.tp1 < args.tp2 && args.tp2 < args.tp3)) return { ok: false, reason: "TP ladder out of order" };
+  } else {
+    if (!(args.stop_loss > args.entry_high)) return { ok: false, reason: "SHORT SL must be above entry_high" };
+    if (!(args.tp1 < args.entry_low)) return { ok: false, reason: "SHORT TP1 must be below entry_low" };
+    if (!(args.tp1 > args.tp2 && args.tp2 > args.tp3)) return { ok: false, reason: "TP ladder out of order" };
+  }
+  return { ok: true };
+}
+
+/** Fetch recent klines and compute basic swing high/low for SL placement. */
+async function fetchStructure(pair: string, market: string): Promise<{ swingHigh: number | null; swingLow: number | null }> {
+  try {
+    if (market === "CRYPTO") {
+      const symbolMap: Record<string, string> = {
+        "BTC/USD": "BTCUSDT", "ETH/USD": "ETHUSDT", "POL/USD": "POLUSDT",
+      };
+      const symbol = symbolMap[pair];
+      if (!symbol) return { swingHigh: null, swingLow: null };
+      const res = await fetch(`https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=30m&limit=20`);
+      if (!res.ok) return { swingHigh: null, swingLow: null };
+      const candles = await res.json();
+      const highs = candles.map((c: any) => parseFloat(c[2]));
+      const lows = candles.map((c: any) => parseFloat(c[3]));
+      return { swingHigh: Math.max(...highs), swingLow: Math.min(...lows) };
+    }
+    return { swingHigh: null, swingLow: null };
+  } catch (e) {
+    console.warn(`[generate-signal] structure fetch failed for ${pair}:`, e);
+    return { swingHigh: null, swingLow: null };
+  }
 }
 
 function getPairPrecision(pair: string): number {

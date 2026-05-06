@@ -40,6 +40,14 @@ export interface SignalObject {
   signal_strategy?: string;
 }
 
+/** Normalize any DB / API direction value to the canonical 'LONG' | 'SHORT' label.
+ *  DB stores 'buy'/'sell' (lowercase). UI expects 'LONG'/'SHORT'. */
+export function normalizeDirection(raw: unknown): 'LONG' | 'SHORT' {
+  const s = String(raw ?? '').toLowerCase();
+  if (s === 'long' || s === 'buy') return 'LONG';
+  return 'SHORT';
+}
+
 /** Check if a signal has expired */
 export function isExpired(signal: SignalObject): boolean {
   if (!signal.expires_at || signal.expires_at <= 0) return false;

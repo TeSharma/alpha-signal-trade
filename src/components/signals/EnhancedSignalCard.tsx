@@ -16,6 +16,7 @@ import {
 import { SignalObject } from '@/types/signal';
 import { useToast } from '@/components/ui/use-toast';
 import { ExecuteTradeDialog } from './ExecuteTradeDialog';
+import { useLivePrice } from '@/hooks/useLivePrice';
 
 interface EnhancedSignalCardProps {
   signal: SignalObject;
@@ -25,6 +26,22 @@ interface EnhancedSignalCardProps {
 export const EnhancedSignalCard: React.FC<EnhancedSignalCardProps> = ({ signal, onApprove }) => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const { toast } = useToast();
+  const livePrice = useLivePrice(signal.pair);
+
+  // Color the live price pill based on which side of entry/SL/TP the price sits.
+  const livePriceTone = (() => {
+    if (livePrice == null) return 'bg-muted text-muted-foreground';
+    const sl = signal.stop_loss;
+    const tp1 = Array.isArray(signal.take_profit) ? signal.take_profit[0] : signal.take_profit;
+    if (signal.direction === 'LONG') {
+      if (sl && livePrice <= sl) return 'bg-red-100 text-red-700';
+      if (tp1 && livePrice >= tp1) return 'bg-green-100 text-green-700';
+    } else {
+      if (sl && livePrice >= sl) return 'bg-red-100 text-red-700';
+      if (tp1 && livePrice <= tp1) return 'bg-green-100 text-green-700';
+    }
+    return 'bg-blue-100 text-blue-700';
+  })();
 
   const getDirectionIcon = (direction: string) => {
     return direction === 'LONG' ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />;
@@ -159,7 +176,12 @@ export const EnhancedSignalCard: React.FC<EnhancedSignalCardProps> = ({ signal, 
               {signal.market} • {signal.timeframe} • {signal.strategy}
             </CardDescription>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 items-center">
+            {livePrice != null && (
+              <span className={`text-xs font-medium px-2 py-1 rounded ${livePriceTone}`}>
+                Live: {formatPrice(livePrice)}
+              </span>
+            )}
             {getSignalStatusBadge(signal)}
             {getTradeStatusBadge(signal)}
           </div>
