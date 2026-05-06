@@ -218,7 +218,7 @@ serve(async (req) => {
 
     if (expireErr) console.warn("Expire cleanup error:", expireErr);
 
-    return new Response(JSON.stringify({ evaluated: signals.length, resolved: results.length, cleaned: deleted?.length || 0, results }), {
+    return new Response(JSON.stringify({ evaluated: signals.length, resolved: results.length, cleaned: deleted?.length || 0, tradesClosed, results }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
