@@ -271,9 +271,17 @@ IMPORTANT: Only generate HIGH QUALITY signals. Confidence must be >= 0.75 and ri
     const args = JSON.parse(toolCall.function.arguments);
     console.log(`[generate-signal] AI returned: ${args.direction} ${pair} @ confidence=${args.confidence} rr=${args.rr_ratio}`);
 
-    // ===== Normalize SL/TP geometry to enforce correct sides + tight SL =====
-    normalizeSignalGeometry(args, pair, market);
-    console.log(`[generate-signal] Normalized: ${args.direction} entry=[${args.entry_low}, ${args.entry_high}] SL=${args.stop_loss} TP=[${args.tp1}, ${args.tp2}, ${args.tp3}]`);
+    // ===== Normalize SL/TP geometry: tighten entry to live price + structure-aware SL =====
+    const structure = await fetchStructure(pair, market);
+    normalizeSignalGeometry(args, pair, market, currentPrice, structure);
+    console.log(`[generate-signal] Normalized: ${args.direction} entry=[${args.entry_low}, ${args.entry_high}] SL=${args.stop_loss} TP=[${args.tp1}, ${args.tp2}, ${args.tp3}] swing=[${structure.swingLow}, ${structure.swingHigh}]`);
+
+    // Defense-in-depth: reject malformed geometry before insert
+    const geo = validateGeometry(args);
+    if (!geo.ok) {
+      console.error(`[generate-signal] FILTERED — geometry invalid: ${geo.reason}`);
+      return { ok: false, filtered: true, confidence: args.confidence, rr: args.rr_ratio };
+    }
 
     // Filter: confidence >= 0.75
     if (args.confidence < 0.75) {
