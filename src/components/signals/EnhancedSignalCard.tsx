@@ -16,6 +16,7 @@ import {
 import { SignalObject } from '@/types/signal';
 import { useToast } from '@/components/ui/use-toast';
 import { ExecuteTradeDialog } from './ExecuteTradeDialog';
+import { useLivePrice } from '@/hooks/useLivePrice';
 
 interface EnhancedSignalCardProps {
   signal: SignalObject;
