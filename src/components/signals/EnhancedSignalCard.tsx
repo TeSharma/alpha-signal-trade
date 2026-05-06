@@ -176,7 +176,12 @@ export const EnhancedSignalCard: React.FC<EnhancedSignalCardProps> = ({ signal, 
               {signal.market} • {signal.timeframe} • {signal.strategy}
             </CardDescription>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 items-center">
+            {livePrice != null && (
+              <span className={`text-xs font-medium px-2 py-1 rounded ${livePriceTone}`}>
+                Live: {formatPrice(livePrice)}
+              </span>
+            )}
             {getSignalStatusBadge(signal)}
             {getTradeStatusBadge(signal)}
           </div>
