@@ -17,6 +17,7 @@ import { SignalObject } from '@/types/signal';
 import { useToast } from '@/components/ui/use-toast';
 import { ExecuteTradeDialog } from './ExecuteTradeDialog';
 import { useLivePrice } from '@/hooks/useLivePrice';
+import { computePnL } from '@/lib/pnl';
 
 interface EnhancedSignalCardProps {
   signal: SignalObject;
@@ -271,7 +272,7 @@ export const EnhancedSignalCard: React.FC<EnhancedSignalCardProps> = ({ signal, 
                   {signal.trade_exit_price ? formatPrice(signal.trade_exit_price) : 'N/A'}
                 </div>
               </div>
-              {signal.trade_pnl !== undefined && (
+              {signal.trade_pnl !== undefined && signal.trade_status !== 'OPEN' && (
                 <div className="col-span-2">
                   <span className="text-gray-600">P&L</span>
                   <div className={`font-medium ${getPNLColor(signal.trade_pnl)}`}>
@@ -279,6 +280,24 @@ export const EnhancedSignalCard: React.FC<EnhancedSignalCardProps> = ({ signal, 
                   </div>
                 </div>
               )}
+              {signal.trade_status === 'OPEN' && signal.trade_entry_price && livePrice != null && (() => {
+                const livePnl = computePnL(
+                  signal.pair,
+                  signal.direction,
+                  signal.trade_entry_price,
+                  livePrice,
+                  // lot size isn't exposed on the overview view; fall back to 1 unit if unknown
+                  (signal as any).trade_lot_size ?? 1,
+                );
+                return (
+                  <div className="col-span-2">
+                    <span className="text-gray-600">Unrealized P&L (live)</span>
+                    <div className={`font-medium ${getPNLColor(livePnl)}`}>
+                      {formatPNL(livePnl)}
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           </div>
         )}
