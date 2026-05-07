@@ -184,7 +184,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    // 8. Calculate position size
+    // 8. Calculate position size (multiplier-aware, mirrors DB calculate_trade_pnl)
     const entryPrice = Array.isArray(signal.entry_zone) && signal.entry_zone.length >= 2 
       ? (signal.entry_zone[0] + signal.entry_zone[1]) / 2 
       : signal.entry_zone?.[0] || 0;
@@ -199,16 +199,20 @@ Deno.serve(async (req) => {
       );
     }
 
+    // Asset-class multiplier — must match public.calculate_trade_pnl
+    const CRYPTO = new Set(['BTC/USD','ETH/USD','POL/USD','SOL/USD','BNB/USD','XRP/USD','ADA/USD','DOGE/USD','AVAX/USD','MATIC/USD','LINK/USD','DOT/USD']);
+    const multiplier = CRYPTO.has(signal.pair) ? 1 : (signal.pair.includes('JPY') ? 1000 : 100000);
+
     const riskAmount = accountBalance * 0.01; // 1% risk
-    let positionSize = riskAmount / stopDistance;
+    let positionSize = riskAmount / (stopDistance * multiplier);
 
     // Apply override if provided
     if (position_size_override && position_size_override > 0) {
       positionSize = position_size_override;
     }
 
-    // Cap position size by available balance (don't risk more notional than account holds)
-    const maxPositionByBalance = accountBalance / entryPrice;
+    // Cap position size by available balance (notional ≤ balance)
+    const maxPositionByBalance = accountBalance / (entryPrice * multiplier);
     if (positionSize > maxPositionByBalance) {
       positionSize = maxPositionByBalance;
     }
