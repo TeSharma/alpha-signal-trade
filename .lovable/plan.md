@@ -1,101 +1,57 @@
-## Goals
+# Fix PnL accounting, signal calculators & live price card
 
-1. Repoint the keeper bot to the existing **Amoy V2** deployment (no mainnet contracts yet) with a clean network switch for later.
-2. Fix the **SL/TP "interchanging"** bug on signal cards (root cause: direction label mismatch, not geometry).
-3. Make signals materially better: tighter entries, stricter RR ladder, server-side geometry validation, live price marker on the card, and a real **SL/TP auto-close watcher** so signals actually finish when price hits SL or TP.
-4. Improve signal logic with **market-structure** features (swing highs/lows, BoS, support/resistance) so SL/TP sit on real levels rather than fixed % buffers.
+I traced your three complaints into the data and found the root causes. They are all related: the **asset-class multiplier** (1 for crypto, 1 000 for JPY pairs, 100 000 for the rest of forex) is applied correctly in the database close function, but the **frontend and the `execute-trade` edge function ignore it**. That single mismatch produces every symptom you described.
 
----
-
-## Part A — Keeper bot on Amoy
-
-- Add `NETWORK` env var (`amoy` | `polygon`), default `amoy`.
-- `src/config/network.ts` in keeper repo maps:
-  - `amoy` → `TradingPlatformV2 0x133DC29e4D6f366E8Ad05454eba452c7BC56573D`, `PriceOracleV2 0x5D58135A49C5035C5836E682B7A68B0d3d8816fF`, chainId `80002`, RPC = `VITE_ALCHEMY_AMOY_RPC`.
-  - `polygon` → placeholders (left empty until mainnet deploy).
-- Update `fly.toml` env to `NETWORK=amoy`, `DRY_RUN=true` for first run.
-- Block startup if addresses for the selected network are missing (fail fast).
-- Log selected network + addresses at boot for confirmation.
-- Lower scanner backfill window from 300k blocks to 50k (Amoy has fast blocks; smaller history is enough for active positions).
-
-## Part B — Fix SL/TP label bug (root cause)
-
-The DB stores `direction` as `'buy'`/`'sell'` (lowercase), but `EnhancedSignalCard` and friends only check `=== 'LONG'`. `useSignalList` passes `row.direction` through unchanged, so every loaded signal renders as SHORT and the SL/TP look "inverted" relative to the (correct) underlying numbers.
-
-Fix:
-- In `src/hooks/useSignalList.ts` (line 178), normalize: `direction: row.direction === 'buy' || row.direction === 'long' ? 'LONG' : 'SHORT'` (mirror what `useSignals.ts:30` already does).
-- Audit `SignalCard`, `EnhancedSignalCard`, `ExecuteTradeDialog`, `SignalAnalytics`, `SignalFilters` for any other raw `'LONG'`/`'SHORT'` comparisons and centralize via a small `normalizeDirection()` helper in `src/types/signal.ts`.
-
-## Part C — Signal generation upgrades (`generate-signal`)
-
-1. **Tighten entries** — clamp entry zone to current price ± a small band:
-   - Crypto: ±0.10% around current price (so entry is immediately actionable).
-   - Forex: ±5 pips (±0.0005, JPY ±0.05).
-   - Override AI's entry_low/entry_high if outside the band; preserve direction.
-2. **Re-balance RR ladder** — TP1 = 1.5R, TP2 = 2.5R, TP3 = max(3.5R, AI rr).
-3. **Server-side geometry validator** — after `normalizeSignalGeometry`, assert:
-   - LONG: `stop_loss < entry_low` and `tp1 > entry_high`.
-   - SHORT: `stop_loss > entry_high` and `tp1 < entry_low`.
-   - Reject (don't insert) on violation; log + return `{ filtered: true, reason: 'geometry' }`.
-4. **Market-structure inputs (lightweight)** — fetch last 60 candles (Binance for crypto, Twelve Data for forex), compute:
-   - Recent swing high / swing low (last 20 candles).
-   - Nearest support/resistance cluster.
-   - Pass these into the AI prompt as context, and use swing high/low as a **floor** for SL placement (e.g. LONG SL = min(entry − buffer, swing_low − small_buffer)).
-5. Keep `confidence ≥ 0.75` and `RR ≥ 2.2` filters.
-
-## Part D — Auto-close on SL/TP hit (the "actually implemented" piece)
-
-Today `evaluate-signals` exists but only marks signals expired/wins for stats. We need a real watcher that closes user **trades** opened from signals when the live price crosses SL or TP.
-
-- New cron (every minute) calling existing `evaluate-signals` — extend it to:
-  - For every `trades` row where `status='open'` AND `account_mode='demo'` AND `signal_id` is set (or SL/TP columns are set):
-    - Fetch current price (Binance / Twelve Data) for `pair`.
-    - If `direction='buy'` and `price ≥ take_profit` → call `close_trade(trade_id, take_profit)`.
-    - If `direction='buy'` and `price ≤ stop_loss` → call `close_trade(trade_id, stop_loss)`.
-    - Inverse for `direction='sell'`.
-  - For `trading_signals` itself, also mark as `tp_hit`/`sl_hit` to feed the performance loop.
-- Live trades on Amoy continue to be liquidated by the keeper bot (Part A); this watcher is **demo-only** off-chain settlement.
-
-## Part E — Live price marker on signal card
-
-- Add a small `useLivePrice(pair, market)` hook (reuse existing `useMarketData`/Binance WS).
-- In `EnhancedSignalCard`, render a "Live: $X.XX" pill colored:
-  - Green if price between entry and TP1 (in trade direction).
-  - Red if price beyond SL.
-  - Neutral if outside entry zone but pre-trigger.
-- Visually shows the user that SL/TP are on the right side of price.
-
----
-
-## Technical notes
+## What's actually broken (evidence from your trades)
 
 ```text
-Files touched (build-mode):
-  alpha-signal-keeper/  (separate repo)
-    src/config/network.ts          NEW   — NETWORK switch + address map
-    src/index.ts                   EDIT  — fail-fast on missing addrs
-    fly.toml                       EDIT  — NETWORK=amoy
-    .env.example                   EDIT
-    README.md                      EDIT  — Amoy-first instructions
-
-  This repo:
-    src/types/signal.ts            EDIT  — normalizeDirection() helper
-    src/hooks/useSignalList.ts     EDIT  — normalize direction on map
-    src/components/signals/EnhancedSignalCard.tsx  EDIT  — live price pill
-    src/hooks/useLivePrice.ts      NEW   — thin wrapper over market data
-    supabase/functions/generate-signal/index.ts    EDIT
-        - tightenEntryZone(), structure features, geometry validator,
-          new RR ladder
-    supabase/functions/evaluate-signals/index.ts   EDIT
-        - SL/TP auto-close for open demo trades
-    DB cron (insert tool, not migration): keep evaluate-signals at 1-min cadence
+Trade                      lot   entry      exit      DB PnL    UI showed
+POL/USD sell  (signal)     10    0.10000    0.10330   -$0.03    ~ -$3 300  (×100 000 too high)
+USD/JPY sell  (signal)     17.3  156.185    156.400   -$3 716   ~ -$3 716  (× wrong base — JPY needs 1 000)
+GBP/USD sell  (signal)    100    1.35535    1.35608   -$7 300   correct in DB but suggested lot was 100× too big
+BTC/USD sell  (manual)     10    81 701     81 400    +$3 011   ~ +$301 mil while open (×100 000)
 ```
 
-No schema changes. No new tables. RLS unchanged. `close_trade` RPC already exists and handles balance/portfolio snapshot updates.
+The "PnL changes wildly when the trade closes" is the live-PnL ticker in `TradeHistory` always multiplying by `100 000`, then the DB recomputing with the correct multiplier on close. Same formula bug makes the **suggested lot size** in the Execute-Signal dialog wildly wrong for crypto (way too small) and JPY (1 000× too big), which is why the GBP and JPY signal trades blew up.
 
-## Out of scope (future)
+## Fixes
 
-- Mainnet contract deploy + keeper switch to `polygon`.
-- ERC-4337 paymaster / gasless trading.
-- Pyth forex oracle for live forex execution.
-- Full ICT/SMC market-structure engine — this round adds only swing high/low + S/R clusters.
+### 1. Single source of truth for the asset multiplier
+- New file `src/lib/pnl.ts` exporting `getAssetMultiplier(pair)` and `computePnL(pair, direction, entry, current, lot)` that mirrors the DB function exactly (crypto=1, JPY=1 000, FX=100 000).
+- Replace the inline `* 100000` math in:
+  - `src/components/trading/TradeHistory.tsx` (`calculateCurrentPnL`)
+  - any other component doing the same naive math (`MobileTradingInterface`, `TradePanel` if they recompute PnL).
+
+### 2. Correct lot-size & risk calculator in `ExecuteTradeDialog.tsx`
+- Suggested size becomes `riskAmount / (stopDistance * multiplier)`.
+- "Risk if SL hit" displayed = `lot * stopDistance * multiplier`.
+- "Notional" stays `lot * entry * multiplier` (so the balance check is meaningful for forex).
+- Cap by balance using the same multiplier-aware notional.
+
+### 3. Same fix server-side in `supabase/functions/execute-trade/index.ts`
+- Compute `multiplier` from pair, then `positionSize = riskAmount / (stopDistance * multiplier)`.
+- Cap `positionSize` by `accountBalance / (entryPrice * multiplier)`.
+- This stops the engine from auto-suggesting 100 lots of GBP/USD on a $10k demo.
+
+### 4. Live-price card on `EnhancedSignalCard` (the "price card not fixed")
+The card already renders a live pill but every card mounts its **own** copy of `useMarketData`, which spins up its own crypto+forex polling loop. With 5 cards visible that's 5 redundant edge-function calls every 10 s and the pill often shows nothing.
+- Promote market data to a shared context: new `MarketDataProvider` in `src/contexts/MarketDataContext.tsx` that runs `useMarketData` once and exposes `pricesMap`.
+- Wrap the app in `App.tsx`.
+- Rewrite `useLivePrice` to read from this context — instant updates, one network loop.
+- Also show a tiny **live unrealised PnL** under the Trade Context block when `signal.trade_id && trade_status === 'OPEN'`, computed with the shared `computePnL` helper, so the executed-trade panel actually moves.
+
+### 5. Small cleanups discovered along the way
+- Remove the duplicate "Trade Closed" toast in `TradeHistory.handleCloseTrade` (the `useTrades.closeTrade` hook already toasts).
+- Clamp `getCurrentPrice` polling in `TradeHistory` to skip pairs whose live price is `0` (avoids a bogus PnL flash to `-entry*lot*mult`).
+
+## Files touched
+- new: `src/lib/pnl.ts`, `src/contexts/MarketDataContext.tsx`
+- edit: `src/hooks/useLivePrice.ts`, `src/components/signals/EnhancedSignalCard.tsx`, `src/components/signals/ExecuteTradeDialog.tsx`, `src/components/trading/TradeHistory.tsx`, `src/App.tsx`
+- edit edge fn: `supabase/functions/execute-trade/index.ts`
+
+## Out of scope for this round
+- Re-tuning AI signal quality (entry zone width, RR ladder, market-structure SL placement) — already shipped last round; we can iterate after the math is trustworthy again.
+- Auto-close on SL/TP for **manual** (non-signal) trades — currently `evaluate-signals` only watches trades with a `signal_id`. Tell me if you want that extended.
+- Mainnet keeper bot work.
+
+After approval I'll implement and you can re-open a demo signal trade to verify the PnL stays consistent from open → close.
