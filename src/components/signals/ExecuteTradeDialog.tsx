@@ -15,6 +15,7 @@ import { Loader2, TrendingUp, TrendingDown } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import type { SignalObject } from '@/types/signal';
+import { getAssetMultiplier } from '@/lib/pnl';
 
 interface ExecuteTradeDialogProps {
   signal: SignalObject | null;
@@ -41,16 +42,18 @@ export function ExecuteTradeDialog({ signal, open, onOpenChange, onExecuted }: E
     return Math.abs(entryMid - signal.stop_loss);
   }, [signal, entryMid]);
 
-  // Suggested 1%-risk position size
+  const multiplier = useMemo(() => (signal ? getAssetMultiplier(signal.pair) : 1), [signal]);
+
+  // Suggested 1%-risk position size (units of base asset / standard lots)
   const suggestedSize = useMemo(() => {
-    if (!signal || stopDistance <= 0) return 0;
+    if (!signal || stopDistance <= 0 || multiplier <= 0) return 0;
     const riskAmount = balance * RISK_PERCENT;
-    const size = riskAmount / stopDistance;
-    // cap by 1x notional and DB constraint
-    const maxByBalance = balance / Math.max(entryMid, 0.0001);
+    const size = riskAmount / (stopDistance * multiplier);
+    // Cap so notional ≤ balance
+    const maxByBalance = balance / Math.max(entryMid * multiplier, 0.0001);
     const capped = Math.min(size, maxByBalance, 999999.9999);
-    return Math.floor(capped * 10000) / 10000;
-  }, [signal, stopDistance, balance, entryMid]);
+    return Math.max(0, Math.floor(capped * 10000) / 10000);
+  }, [signal, stopDistance, balance, entryMid, multiplier]);
 
   // Load balance + reset lot size when opening
   useEffect(() => {
@@ -76,8 +79,8 @@ export function ExecuteTradeDialog({ signal, open, onOpenChange, onExecuted }: E
   if (!signal) return null;
 
   const lotNum = parseFloat(lotSize) || 0;
-  const riskIfHit = lotNum * stopDistance;
-  const notional = lotNum * entryMid;
+  const riskIfHit = lotNum * stopDistance * multiplier;
+  const notional = lotNum * entryMid * multiplier;
   const isLong = signal.direction === 'LONG';
   const invalid = lotNum <= 0 || lotNum > 999999.9999 || notional > balance;
 
