@@ -197,6 +197,165 @@ export type Database = {
         }
         Relationships: []
       }
+      gsc_alerts: {
+        Row: {
+          alert_type: string
+          created_at: string
+          fingerprint: string
+          id: string
+          message: string
+          payload: Json | null
+          resolved_at: string | null
+          severity: string
+          site_url: string
+          title: string
+        }
+        Insert: {
+          alert_type: string
+          created_at?: string
+          fingerprint: string
+          id?: string
+          message: string
+          payload?: Json | null
+          resolved_at?: string | null
+          severity?: string
+          site_url: string
+          title: string
+        }
+        Update: {
+          alert_type?: string
+          created_at?: string
+          fingerprint?: string
+          id?: string
+          message?: string
+          payload?: Json | null
+          resolved_at?: string | null
+          severity?: string
+          site_url?: string
+          title?: string
+        }
+        Relationships: []
+      }
+      gsc_query_history: {
+        Row: {
+          clicks: number
+          ctr: number
+          id: string
+          impressions: number
+          position: number
+          query: string
+          recorded_at: string
+          site_url: string
+        }
+        Insert: {
+          clicks?: number
+          ctr?: number
+          id?: string
+          impressions?: number
+          position: number
+          query: string
+          recorded_at?: string
+          site_url: string
+        }
+        Update: {
+          clicks?: number
+          ctr?: number
+          id?: string
+          impressions?: number
+          position?: number
+          query?: string
+          recorded_at?: string
+          site_url?: string
+        }
+        Relationships: []
+      }
+      gsc_settings: {
+        Row: {
+          alert_coverage: boolean
+          alert_rank_drop: boolean
+          alert_sitemap: boolean
+          alert_traffic_drop: boolean
+          created_at: string
+          id: string
+          min_impressions: number
+          rank_drop_threshold: number
+          recipient_email: string | null
+          site_url: string
+          traffic_drop_pct: number
+          updated_at: string
+        }
+        Insert: {
+          alert_coverage?: boolean
+          alert_rank_drop?: boolean
+          alert_sitemap?: boolean
+          alert_traffic_drop?: boolean
+          created_at?: string
+          id?: string
+          min_impressions?: number
+          rank_drop_threshold?: number
+          recipient_email?: string | null
+          site_url: string
+          traffic_drop_pct?: number
+          updated_at?: string
+        }
+        Update: {
+          alert_coverage?: boolean
+          alert_rank_drop?: boolean
+          alert_sitemap?: boolean
+          alert_traffic_drop?: boolean
+          created_at?: string
+          id?: string
+          min_impressions?: number
+          rank_drop_threshold?: number
+          recipient_email?: string | null
+          site_url?: string
+          traffic_drop_pct?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      gsc_snapshots: {
+        Row: {
+          avg_ctr: number | null
+          avg_position: number | null
+          coverage_errors: number | null
+          created_at: string
+          id: string
+          queries: Json | null
+          raw: Json | null
+          site_url: string
+          sitemap_status: Json | null
+          total_clicks: number | null
+          total_impressions: number | null
+        }
+        Insert: {
+          avg_ctr?: number | null
+          avg_position?: number | null
+          coverage_errors?: number | null
+          created_at?: string
+          id?: string
+          queries?: Json | null
+          raw?: Json | null
+          site_url: string
+          sitemap_status?: Json | null
+          total_clicks?: number | null
+          total_impressions?: number | null
+        }
+        Update: {
+          avg_ctr?: number | null
+          avg_position?: number | null
+          coverage_errors?: number | null
+          created_at?: string
+          id?: string
+          queries?: Json | null
+          raw?: Json | null
+          site_url?: string
+          sitemap_status?: Json | null
+          total_clicks?: number | null
+          total_impressions?: number | null
+        }
+        Relationships: []
+      }
       messages: {
         Row: {
           content: string
@@ -701,6 +860,27 @@ export type Database = {
         }
         Relationships: []
       }
+      user_roles: {
+        Row: {
+          created_at: string
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
       withdrawals: {
         Row: {
           amount: number
@@ -808,9 +988,16 @@ export type Database = {
         }
         Returns: string
       }
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "admin" | "user"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -937,6 +1124,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["admin", "user"],
+    },
   },
 } as const
