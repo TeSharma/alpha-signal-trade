@@ -20,6 +20,7 @@ import ForgotPassword from "./pages/ForgotPassword";
 import UpdatePassword from "./pages/UpdatePassword";
 import VerifyEmail from "./pages/VerifyEmail";
 import NotFound from "./pages/NotFound";
+import SeoMonitor from "./pages/SeoMonitor";
 import NetworkGuard from "./components/layout/NetworkGuard";
 
 const queryClient = new QueryClient();
