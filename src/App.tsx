@@ -76,6 +76,11 @@ const App = () => (
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/update-password" element={<UpdatePassword />} />
           <Route path="/verify-email" element={<VerifyEmail />} />
+          <Route path="/seo" element={
+            <AuthGuard>
+              <SeoMonitor />
+            </AuthGuard>
+          } />
           <Route path="*" element={<NotFound />} />
         </Routes>
         </BrowserRouter>
