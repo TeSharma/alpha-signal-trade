@@ -11,3 +11,6 @@ verify_jwt = false
 
 [functions.execute-trade]
 verify_jwt = false
+
+[functions.gsc-monitor]
+verify_jwt = false
