@@ -46,6 +46,7 @@ type Alert = {
 };
 
 export default function SeoMonitor() {
+  const navigate = useNavigate();
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
   const [settings, setSettings] = useState<Settings | null>(null);
   const [snap, setSnap] = useState<Snapshot | null>(null);
