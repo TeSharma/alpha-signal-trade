@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -7,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
-import { Loader2, RefreshCw, AlertTriangle, TrendingDown, FileWarning, CheckCircle2 } from "lucide-react";
+import { Loader2, RefreshCw, AlertTriangle, TrendingDown, FileWarning, CheckCircle2, ShieldOff } from "lucide-react";
 
 type Settings = {
   id: string;
