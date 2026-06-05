@@ -1,7 +1,8 @@
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Button } from "@/components/ui/button";
+import { supabase } from "@/integrations/supabase/client";
 import { 
   LayoutDashboard, 
   TrendingUp, 
@@ -9,12 +10,30 @@ import {
   BookOpen, 
   User,
   MessageCircle,
-  Wallet
+  Wallet,
+  ShieldCheck,
 } from "lucide-react";
 
 const ResponsiveNav = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      const { data: userRes } = await supabase.auth.getUser();
+      const uid = userRes.user?.id;
+      if (!uid) return;
+      const { data: roleRows } = await supabase
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", uid);
+      if (!active) return;
+      setIsAdmin((roleRows ?? []).some((r: any) => r.role === "admin"));
+    })();
+    return () => { active = false; };
+  }, []);
 
   const menuItems = [
     { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -24,6 +43,7 @@ const ResponsiveNav = () => {
     { path: '/community', label: 'Community', icon: MessageCircle },
     { path: '/education', label: 'Education', icon: BookOpen },
     { path: '/account', label: 'Account', icon: User },
+    ...(isAdmin ? [{ path: '/seo', label: 'SEO Monitor', icon: ShieldCheck }] : []),
   ];
 
   return (
