@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -7,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
-import { Loader2, RefreshCw, AlertTriangle, TrendingDown, FileWarning, CheckCircle2 } from "lucide-react";
+import { Loader2, RefreshCw, AlertTriangle, TrendingDown, FileWarning, CheckCircle2, ShieldOff } from "lucide-react";
 
 type Settings = {
   id: string;
@@ -45,6 +46,7 @@ type Alert = {
 };
 
 export default function SeoMonitor() {
+  const navigate = useNavigate();
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
   const [settings, setSettings] = useState<Settings | null>(null);
   const [snap, setSnap] = useState<Snapshot | null>(null);
@@ -116,11 +118,31 @@ export default function SeoMonitor() {
   }
   if (!isAdmin) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-6">
-        <Card className="max-w-md">
-          <CardHeader><CardTitle>Admin access required</CardTitle></CardHeader>
-          <CardContent className="text-muted-foreground text-sm">
-            This page is restricted to administrators. Ask an admin to grant your account the <code>admin</code> role.
+      <div className="min-h-screen flex items-center justify-center p-6 bg-background">
+        <Card className="max-w-md w-full border-destructive/30">
+          <CardHeader>
+            <div className="flex items-center gap-3">
+              <div className="rounded-full bg-destructive/10 p-2">
+                <ShieldOff className="w-5 h-5 text-destructive" />
+              </div>
+              <CardTitle>Access denied</CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              The SEO Monitor is restricted to administrators. Your account doesn't have the <code className="px-1 py-0.5 rounded bg-muted">admin</code> role.
+            </p>
+            <p className="text-sm text-muted-foreground">
+              If you believe this is a mistake, ask an admin to grant you access.
+            </p>
+            <div className="flex gap-2 pt-2">
+              <Button onClick={() => navigate("/dashboard")} className="flex-1">
+                Go to Dashboard
+              </Button>
+              <Button variant="outline" onClick={() => navigate(-1)}>
+                Go back
+              </Button>
+            </div>
           </CardContent>
         </Card>
       </div>
