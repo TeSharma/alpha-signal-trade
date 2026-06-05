@@ -79,7 +79,9 @@ const App = () => (
           <Route path="/verify-email" element={<VerifyEmail />} />
           <Route path="/seo" element={
             <AuthGuard>
-              <SeoMonitor />
+              <AdminRoute>
+                <SeoMonitor />
+              </AdminRoute>
             </AuthGuard>
           } />
           <Route path="*" element={<NotFound />} />
