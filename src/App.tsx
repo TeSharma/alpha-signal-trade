@@ -22,6 +22,7 @@ import VerifyEmail from "./pages/VerifyEmail";
 import NotFound from "./pages/NotFound";
 import SeoMonitor from "./pages/SeoMonitor";
 import NetworkGuard from "./components/layout/NetworkGuard";
+import { AdminRoute } from "./components/auth/AdminRoute";
 
 const queryClient = new QueryClient();
 
@@ -78,7 +79,9 @@ const App = () => (
           <Route path="/verify-email" element={<VerifyEmail />} />
           <Route path="/seo" element={
             <AuthGuard>
-              <SeoMonitor />
+              <AdminRoute>
+                <SeoMonitor />
+              </AdminRoute>
             </AuthGuard>
           } />
           <Route path="*" element={<NotFound />} />
