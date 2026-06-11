@@ -67,89 +67,76 @@ async function fetchFromTwelveData(): Promise<Record<string, number>> {
   return prices;
 }
 
-async function fetchFromExchangerateHost(): Promise<Record<string, number>> {
-  // Free, no API key. Rates are quoted against `base` (USD here).
-  const res = await fetch(
-    "https://api.exchangerate.host/latest?base=USD&symbols=EUR,GBP,JPY,XAU"
-  );
-  if (!res.ok) {
-    throw new Error(`exchangerate.host error [${res.status}]`);
-  }
+async function fetchFromFrankfurter(): Promise<Record<string, number>> {
+  const res = await fetch("https://api.frankfurter.app/latest?from=USD&to=EUR,GBP,JPY");
+  if (!res.ok) throw new Error(`frankfurter error [${res.status}]`);
   const data = await res.json();
   const rates = data?.rates ?? {};
   const prices: Record<string, number> = {};
-
-  // EUR/USD = 1 / (USD->EUR)
   if (rates.EUR) prices["EUR/USD"] = 1 / rates.EUR;
   if (rates.GBP) prices["GBP/USD"] = 1 / rates.GBP;
-  // USD/JPY = USD->JPY (already in correct direction)
   if (rates.JPY) prices["USD/JPY"] = rates.JPY;
-  // XAU is troy ounces per USD; XAU/USD price = 1 / rate
-  if (rates.XAU) prices["XAU/USD"] = 1 / rates.XAU;
+  return prices;
+}
+
+async function fetchFromOpenErApi(): Promise<Record<string, number>> {
+  const res = await fetch("https://open.er-api.com/v6/latest/USD");
+  if (!res.ok) throw new Error(`open.er-api error [${res.status}]`);
+  const data = await res.json();
+  const rates = data?.rates ?? {};
+  const prices: Record<string, number> = {};
+  if (rates.EUR) prices["EUR/USD"] = 1 / rates.EUR;
+  if (rates.GBP) prices["GBP/USD"] = 1 / rates.GBP;
+  if (rates.JPY) prices["USD/JPY"] = rates.JPY;
+  return prices;
+}
+
+async function fetchXauFromStooq(): Promise<number | null> {
+  try {
+    const res = await fetch("https://stooq.com/q/l/?s=xauusd&f=sd2t2c&h&e=csv");
+    if (!res.ok) return null;
+    const text = await res.text();
+    const lines = text.trim().split("\n");
+    if (lines.length < 2) return null;
+    const cols = lines[1].split(",");
+    const close = parseFloat(cols[cols.length - 1]);
+    return Number.isFinite(close) && close > 0 ? close : null;
+  } catch {
+    return null;
+  }
+}
+
+async function fetchFallbackChain(): Promise<Record<string, number>> {
+  const prices: Record<string, number> = {};
+
+  try {
+    const fr = await fetchFromFrankfurter();
+    Object.assign(prices, fr);
+    if (Object.keys(fr).length) console.info("[forex-prices] frankfurter ok");
+  } catch (e) {
+    console.warn("[forex-prices] frankfurter failed:", (e as Error).message);
+  }
+
+  const stillMissing = ["EUR/USD", "GBP/USD", "USD/JPY"].filter((p) => !(p in prices));
+  if (stillMissing.length) {
+    try {
+      const er = await fetchFromOpenErApi();
+      for (const p of stillMissing) if (er[p]) prices[p] = er[p];
+      console.info("[forex-prices] open.er-api ok");
+    } catch (e) {
+      console.warn("[forex-prices] open.er-api failed:", (e as Error).message);
+    }
+  }
+
+  const xau = await fetchXauFromStooq();
+  if (xau) prices["XAU/USD"] = xau;
 
   if (Object.keys(prices).length === 0) {
-    throw new Error("exchangerate.host returned no usable rates");
+    throw new Error("all fallback providers returned no prices");
   }
   return prices;
 }
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
-  }
-
-  try {
-    if (!isForexMarketOpen()) {
-      return jsonResponse({ prices: {}, timestamp: Date.now(), marketOpen: false });
-    }
-
-    const now = Date.now();
-
-    // Fresh cache
-    if (cache && now - cache.timestamp < CACHE_TTL_MS) {
-      return jsonResponse({
-        prices: cache.prices,
-        timestamp: cache.timestamp,
-        marketOpen: true,
-        source: cache.source,
-        cached: true,
-      });
-    }
-
-    // Try Twelve Data unless we're in backoff
-    if (now >= rateLimitedUntil) {
-      try {
-        const prices = await fetchFromTwelveData();
-        cache = { prices, timestamp: now, source: "twelvedata" };
-        return jsonResponse({
-          prices,
-          timestamp: now,
-          marketOpen: true,
-          source: "twelvedata",
-        });
-      } catch (e) {
-        if (e instanceof RateLimitError) {
-          rateLimitedUntil = now + RATE_LIMIT_BACKOFF_MS;
-          console.warn("[forex-prices] Twelve Data rate-limited; falling back.");
-        } else {
-          console.error("[forex-prices] Twelve Data failed:", e);
-        }
-      }
-    }
-
-    // Fallback provider
-    try {
-      const prices = await fetchFromExchangerateHost();
-      cache = { prices, timestamp: now, source: "exchangerate.host" };
-      return jsonResponse({
-        prices,
-        timestamp: now,
-        marketOpen: true,
-        source: "exchangerate.host",
-      });
-    } catch (e) {
-      console.error("[forex-prices] Fallback failed:", e);
-    }
 
     // Stale cache as last resort
     if (cache) {
