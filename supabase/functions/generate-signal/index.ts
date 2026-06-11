@@ -132,32 +132,35 @@ async function checkDuplicate(supabase: any, pair: string): Promise<boolean> {
 }
 
 async function fetchCurrentPrice(pair: string, market: string): Promise<number | null> {
+  // Unified source: route through our own edge functions so the AI signal,
+  // the trade page, and execution all read from the same cached feed.
   try {
-    if (market === "CRYPTO") {
-      const symbolMap: Record<string, string> = {
-        "BTC/USD": "BTCUSDT",
-        "ETH/USD": "ETHUSDT",
-        "POL/USD": "POLUSDT",
-      };
-      const symbol = symbolMap[pair];
-      if (!symbol) return null;
-      const res = await fetch(`https://api.binance.com/api/v3/ticker/price?symbol=${symbol}`);
-      if (!res.ok) return null;
-      const data = await res.json();
-      return parseFloat(data.price);
-    } else {
-      const apiKey = Deno.env.get("TWELVE_DATA_API_KEY");
-      if (!apiKey) return null;
-      const res = await fetch(`https://api.twelvedata.com/price?symbol=${pair}&apikey=${apiKey}`);
-      if (!res.ok) return null;
-      const data = await res.json();
-      return data.price ? parseFloat(data.price) : null;
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
+    if (!supabaseUrl || !anonKey) return null;
+
+    const fn = market === "CRYPTO" ? "crypto-prices" : "forex-prices";
+    const res = await fetch(`${supabaseUrl}/functions/v1/${fn}`, {
+      headers: { Authorization: `Bearer ${anonKey}`, apikey: anonKey },
+    });
+    if (!res.ok) {
+      console.warn(`[generate-signal] ${fn} returned ${res.status}`);
+      return null;
     }
+    const data = await res.json();
+    const entry = data?.prices?.[pair];
+    if (entry == null) return null;
+
+    // crypto-prices returns { lastPrice: "..." }; forex-prices returns a plain number.
+    const raw = typeof entry === "object" ? entry.lastPrice : entry;
+    const price = typeof raw === "string" ? parseFloat(raw) : Number(raw);
+    return Number.isFinite(price) && price > 0 ? price : null;
   } catch (e) {
-    console.error(`[generate-signal] Price fetch failed for ${pair}:`, e);
+    console.error(`[generate-signal] unified price fetch failed for ${pair}:`, e);
     return null;
   }
 }
+
 
 async function generateForPair(
   supabase: any,
