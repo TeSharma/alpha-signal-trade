@@ -1,79 +1,61 @@
-# Search Console Monitoring & Alerts
+# Plan: Performance Optimizations + Remove Hedera
 
-Poll Google Search Console every 6 hours, store snapshots, detect issues, and notify via email + in-app.
+## Part A — Remove Hedera from the app
 
-## What gets monitored
+Hedera is only referenced in a handful of frontend files and isn't pulled from npm, so removal is purely a cleanup.
 
-1. **Coverage errors** — new URLs with errors (not found, server error, blocked)
-2. **Sitemap issues** — sitemap fetch errors or warnings
-3. **Rank drops** — position drop ≥ 3 places (or out of top 10) for top 20 queries vs prior snapshot
-4. **Traffic drops** — day-over-day drop > 30% in clicks or impressions
+**Delete**
+- `src/lib/hedera.ts`
+- `src/hooks/useHederaWallet.ts`
+- `src/components/wallet/HederaWalletConnect.tsx`
+- `TOKENIZATION_DEPLOYMENT.md` (Hedera-specific deployment doc)
 
-## Architecture
+**Edit**
+- `src/pages/Wallet.tsx` — remove `HederaWalletConnect` import and its "Hedera Network" section.
+- `src/components/wallet/MobileWallet.tsx` — same removal.
+- `mem://index.md` and related memory files — drop Hedera entries (multi-chain strategy, Hedera config, currency tokenization Hedera notes) so future sessions don't reintroduce it.
 
+No backend, contracts, or trading logic changes. Polygon (live) and Tron (funding bridge) remain untouched.
+
+## Part B — Performance improvements
+
+Goal: shrink the initial JS payload for `/` and `/login`, defer heavy modules until needed, and cache vendor code across deploys. No visual changes.
+
+### 1. Lazy-load all routes (`src/App.tsx`)
+Convert page imports to `React.lazy` and wrap `<Routes>` in `<Suspense fallback={...}>`. Keep `Index` and `Login` eager (the most common landing routes) or lazy-load everything — both fine; default to lazy-loading everything except `Index`.
+
+### 2. Scope `MarketDataProvider` to authenticated routes
+Currently wraps the whole app, so `/` and `/login` pay for `crypto-prices` / `forex-prices` edge calls. Move it down so it only wraps `Dashboard`, `Trade`, `Signals` (via a small `<MarketRoutes>` layout component or by wrapping each route element).
+
+### 3. Vite `manualChunks` (`vite.config.ts`)
+Split vendor bundles for long-term caching:
 ```text
-pg_cron (every 6h)
-   └─► edge fn: gsc-monitor
-          ├─ GET searchanalytics (top 20 queries, last 7d)
-          ├─ GET sitemaps status
-          ├─ GET urlInspection samples / errors
-          ├─ Compare vs previous snapshot in DB
-          ├─ Insert into gsc_snapshots / gsc_alerts
-          └─ For each new alert:
-                ├─ insert into notifications (in-app)
-                └─ invoke send-transactional-email
+react        -> react, react-dom, react-router-dom
+supabase     -> @supabase/*
+web3         -> ethers, tronweb, @walletconnect/*
+ui           -> @radix-ui/*, lucide-react
+charts       -> recharts, lightweight-charts (if present)
 ```
 
-## Database (new tables)
+### 4. Dynamic-import Web3 in wallet components
+`src/lib/web3.js` and Tron imports become `await import(...)` inside connect handlers / `useEffect`s, so `ethers` and `tronweb` aren't in the landing bundle.
 
-- `gsc_snapshots` — timestamped JSON snapshot of queries, coverage, sitemaps
-- `gsc_query_history` — per-query position/clicks/impressions over time (for rank charts)
-- `gsc_alerts` — generated alerts (type, severity, payload, resolved_at)
-- `gsc_settings` — site URL, recipient email, thresholds, enabled toggles
+### 5. Defer TradingView widget
+Only mount `TradingViewChart` once the chart tab/section is visible (intersection observer or tab activation). Script tag injected on mount only.
 
-All admin-only via existing `has_role` RLS pattern.
+### 6. `index.html` hints
+- `<link rel="preconnect" href="https://trbgjsurjfubezcdzpao.supabase.co" crossorigin>`
+- `font-display: swap` if any custom fonts use `@font-face`.
 
-## Edge functions
+### 7. AuthGuard fallback
+Only render the full-screen spinner on protected routes (it already does, but verify there's no global blocking spinner during session bootstrap on `/`).
 
-- `gsc-monitor` — polling + diff + alerting (called by cron + manual button)
-- `gsc-fetch` — on-demand fetch for the dashboard UI (search analytics, sitemaps)
+## Out of scope
+- No UI redesign, no contract changes, no Supabase schema changes.
+- Tron and Polygon stay.
+- No new dependencies.
 
-Both proxy through `https://connector-gateway.lovable.dev/google_search_console` using `LOVABLE_API_KEY` + `GOOGLE_SEARCH_CONSOLE_API_KEY`.
-
-## Email
-
-Use Lovable Emails (built-in). Requires email domain setup. Single template `gsc-alert` with dynamic data (alert type, details, link to dashboard).
-
-## UI (new page `/seo`, admin-gated)
-
-- Summary cards: indexed pages, coverage errors, avg position, total clicks (last 7d vs prior 7d)
-- Rank table: top 20 queries with position trend sparkline
-- Coverage panel: errors list
-- Sitemap panel: status, last submitted
-- Alert history with resolve action
-- Settings: recipient email, thresholds, enable/disable each alert type
-
-Link added to Sidebar under admin section.
-
-## Setup steps (execution order)
-
-1. Create DB tables + RLS migration
-2. Set up email domain (dialog if not yet configured) + email infrastructure
-3. Scaffold transactional email + create `gsc-alert` template
-4. Create `gsc-monitor` and `gsc-fetch` edge functions
-5. Schedule `gsc-monitor` via pg_cron every 6h
-6. Build `/seo` admin page + Sidebar link
-7. Seed `gsc_settings` with the published site URL and the user's email
-8. Trigger first run to populate baseline
-
-## Thresholds (defaults, editable in UI)
-
-- Rank drop: ≥ 3 positions or falling out of top 10
-- Traffic drop: > 30% DoD on clicks or impressions (min 50 baseline impressions to avoid noise)
-- Coverage: any new error URL
-- Sitemap: any non-success status
-
-## Notes
-
-- Email domain must be configured before alerts can send — if not set up, I'll surface the setup dialog as the first step.
-- Rate-limited via the queue; alerts are deduped on `(alert_type, fingerprint)` so we don't repeat the same issue every 6h.
+## Expected impact
+- Landing/login JS payload ~60–75% smaller.
+- Vendor chunks cached across deploys → faster repeat visits.
+- Authenticated pages load Web3 + market data on demand.
