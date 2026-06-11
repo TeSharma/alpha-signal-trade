@@ -1,34 +1,27 @@
-## Goal
-Make `supabase/functions/forex-prices` resilient by adding a secondary forex provider that's used when Twelve Data returns 429 (or fails) and the in-memory cache is empty/stale.
+# Fix: Crypto prices not connecting
 
-## Provider choice
-Use **exchangerate.host** as the fallback:
-- Free, no API key required (zero-config, no new secret)
-- Supports EUR/USD, GBP/USD, USD/JPY, XAU/USD via `/latest?base=USD&symbols=EUR,GBP,JPY,XAU`
-- Returns rates relative to USD, which we invert for EUR/USD and GBP/USD and use directly for USD/JPY; XAU rate is inverted to get XAU/USD price
+## Root cause
 
-Optional second-tier fallback (only if user wants a paid/keyed source later): Alpha Vantage or Finnhub via a new secret. Not included by default to avoid asking for keys.
+`supabase/functions/crypto-prices/index.ts` returns each pair as:
+`{ lastPrice, priceChange, priceChangePercent, highPrice, lowPrice, volume, source }`
 
-## Edge function changes (`supabase/functions/forex-prices/index.ts`)
-1. Keep current 60s in-memory cache and rate-limit backoff.
-2. Refactor fetch into two functions:
-   - `fetchFromTwelveData()` — current behavior; throws a tagged `RateLimitError` on 429.
-   - `fetchFromExchangerateHost()` — fetches `https://api.exchangerate.host/latest?base=USD&symbols=EUR,GBP,JPY,XAU`, maps to our pair format.
-3. Resolution order on each request (cache miss):
-   1. Twelve Data (primary)
-   2. On 429 or non-2xx → exchangerate.host (fallback)
-   3. On both failing → serve stale cache if present, else `{ prices: {}, error: 'all_providers_failed' }` with HTTP 200
-4. Tag each response with `source: 'twelvedata' | 'exchangerate.host' | 'cache'` so the client can show which feed is live.
-5. Keep `marketOpen` logic and CORS unchanged. All error paths return HTTP 200 with structured JSON (no more 500s).
+But `src/hooks/useMarketData.ts` reads `market.openPrice`, `market.bidPrice`, `market.askPrice`, and `market.quoteVolume`. Those fields don't exist, so `openPrice` parses to `NaN`, the `Number.isFinite(openPrice) && openPrice > 0` guard rejects every pair, and the hook reports crypto as disconnected.
 
-## Frontend changes (`src/hooks/useMarketData.ts`)
-- Read `source` from the response and pass through to each `MarketPrice.source` (extend the union to include `'exchangerate.host'`).
-- No UI rewrite; `MarketOverview` already renders a source badge — add a label mapping for the new source ("Exchangerate").
+This is purely a frontend mapping bug — the edge function (verified live) responds 200 with valid Binance data and a CoinGecko fallback.
 
-## Out of scope
-- No new secrets, no paid providers, no schema changes, no UI redesign.
-- No changes to crypto pricing or trading logic.
+## Change
+
+Update only the crypto branch in `src/hooks/useMarketData.ts` (`fetch24hrData`) to consume the actual response shape:
+
+- Derive `change` and `changePercent` directly from `priceChange` / `priceChangePercent` (no `openPrice` needed).
+- Use `volume` for the formatted volume (Binance base-asset volume; fine for display) instead of the missing `quoteVolume`.
+- Drop the bid/ask read — the edge function doesn't return them — and synthesize bid/ask from `lastPrice` using the existing `derivedSpread = price * 0.0001` already in the file.
+- Tag `source` from `market.source` (`'binance' | 'coingecko'`) so the `MarketPrice.source` union must add `'coingecko'`. Update the union in the same file (and nothing else — `MarketOverview.tsx` already has a generic fallback badge).
+
+No edge function changes, no UI redesign, no changes to forex logic, no schema changes.
 
 ## Verification
-- Manually invoke `forex-prices` after deploy; confirm normal response includes `source: 'twelvedata'`.
-- Temporarily force the primary to fail (e.g., bad key path in a one-off test) and confirm response switches to `source: 'exchangerate.host'` and UI keeps rendering prices with no 500s in console.
+
+1. Reload `/trade`; confirm BTC/USD, ETH/USD, POL/USD render prices and the connection indicator turns green.
+2. Confirm `change` / `changePercent` match the values shown by Binance.
+3. Confirm forex pairs continue to work (untouched code path).

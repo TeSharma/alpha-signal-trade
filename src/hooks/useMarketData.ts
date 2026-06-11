@@ -15,7 +15,7 @@ export interface MarketPrice {
   low24h: number;
   lastUpdate: Date;
   isOraclePrice: boolean;
-  source: 'binance' | 'twelvedata' | 'exchangerate.host' | 'oracle';
+  source: 'binance' | 'coingecko' | 'twelvedata' | 'exchangerate.host' | 'oracle';
   updatedAt?: number;
 }
 
