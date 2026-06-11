@@ -10,7 +10,7 @@ const FOREX_PAIRS = ["EUR/USD", "GBP/USD", "USD/JPY", "XAU/USD"];
 const CACHE_TTL_MS = 60_000;
 const RATE_LIMIT_BACKOFF_MS = 60_000;
 
-type Source = "twelvedata" | "exchangerate.host" | "cache";
+type Source = "twelvedata" | "exchangerate.host" | "cache"; // "exchangerate.host" kept as generic fallback label for UI compatibility
 type CacheEntry = { prices: Record<string, number>; timestamp: number; source: Source };
 
 let cache: CacheEntry | null = null;
