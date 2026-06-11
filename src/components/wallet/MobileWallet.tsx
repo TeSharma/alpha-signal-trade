@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Wallet, Plus, ArrowLeft, TrendingUp, TrendingDown, Users } from 'lucide-react';
 import WalletStatus from '@/components/wallet/WalletStatus';
 import { TronWalletConnect } from '@/components/wallet/TronWalletConnect';
-import { HederaWalletConnect } from '@/components/wallet/HederaWalletConnect';
+
 import { TokenBalances } from '@/components/trading/TokenBalances';
 import { DepositInterface } from '@/components/wallet/DepositInterface';
 import { WithdrawalInterface } from '@/components/wallet/WithdrawalInterface';
@@ -59,12 +59,6 @@ const MobileWallet = () => {
             </div>
           </Card>
 
-          <Card>
-            <div className="p-4 space-y-3">
-              <h2 className="text-sm font-semibold text-muted-foreground uppercase">Hedera Network</h2>
-              <HederaWalletConnect />
-            </div>
-          </Card>
         </TabsContent>
 
         <TabsContent value="tokens" className="space-y-4">

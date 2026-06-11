@@ -5,7 +5,7 @@ import WalletStatus from '@/components/wallet/WalletStatus';
 import { DepositInterface } from '@/components/wallet/DepositInterface';
 import { WithdrawalInterface } from '@/components/wallet/WithdrawalInterface';
 import { TransactionHistory } from '@/components/wallet/TransactionHistory';
-import { HederaWalletConnect } from '@/components/wallet/HederaWalletConnect';
+
 import { TokenBalances } from '@/components/trading/TokenBalances';
 import TUSDFaucet from '@/components/wallet/TUSDFaucet';
 import MobileWallet from '@/components/wallet/MobileWallet';
@@ -49,7 +49,7 @@ export default function Wallet() {
                 </TabsList>
 
                 <TabsContent value="wallets" className="space-y-6">
-                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     <div>
                       <h2 className="text-xl font-semibold mb-4">Ethereum L2 (Polygon)</h2>
                       <WalletStatus />
@@ -57,10 +57,6 @@ export default function Wallet() {
                     <div>
                       <h2 className="text-xl font-semibold mb-4">Tron Network</h2>
                       <TronWalletConnect />
-                    </div>
-                    <div>
-                      <h2 className="text-xl font-semibold mb-4">Hedera Network</h2>
-                      <HederaWalletConnect />
                     </div>
                   </div>
                 </TabsContent>
