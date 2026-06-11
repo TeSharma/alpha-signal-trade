@@ -46,6 +46,18 @@ export default defineConfig(({ mode }) => {
       rollupOptions: {
         // Exclude Solidity files from the build
         external: (id) => id.endsWith('.sol'),
+        output: {
+          manualChunks(id) {
+            if (!id.includes('node_modules')) return;
+            if (id.includes('react-router')) return 'react';
+            if (/[\\/]node_modules[\\/](react|react-dom|scheduler)[\\/]/.test(id)) return 'react';
+            if (id.includes('@supabase')) return 'supabase';
+            if (id.includes('@tanstack')) return 'query';
+            if (id.includes('ethers') || id.includes('web3') || id.includes('tronweb') || id.includes('@walletconnect')) return 'web3';
+            if (id.includes('@radix-ui') || id.includes('lucide-react')) return 'ui';
+            if (id.includes('recharts') || id.includes('lightweight-charts') || id.includes('d3-')) return 'charts';
+          },
+        },
       },
     },
     define: {
