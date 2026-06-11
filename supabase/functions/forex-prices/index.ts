@@ -137,6 +137,60 @@ async function fetchFallbackChain(): Promise<Record<string, number>> {
   return prices;
 }
 
+serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
+  }
+
+  try {
+    if (!isForexMarketOpen()) {
+      return jsonResponse({ prices: {}, timestamp: Date.now(), marketOpen: false });
+    }
+
+    const now = Date.now();
+
+    if (cache && now - cache.timestamp < CACHE_TTL_MS) {
+      return jsonResponse({
+        prices: cache.prices,
+        timestamp: cache.timestamp,
+        marketOpen: true,
+        source: cache.source,
+        cached: true,
+      });
+    }
+
+    if (now >= rateLimitedUntil) {
+      try {
+        const prices = await fetchFromTwelveData();
+        cache = { prices, timestamp: now, source: "twelvedata" };
+        return jsonResponse({
+          prices,
+          timestamp: now,
+          marketOpen: true,
+          source: "twelvedata",
+        });
+      } catch (e) {
+        if (e instanceof RateLimitError) {
+          rateLimitedUntil = now + RATE_LIMIT_BACKOFF_MS;
+          console.warn("[forex-prices] Twelve Data rate-limited; falling back.");
+        } else {
+          console.error("[forex-prices] Twelve Data failed:", e);
+        }
+      }
+    }
+
+    try {
+      const prices = await fetchFallbackChain();
+      cache = { prices, timestamp: now, source: "exchangerate.host" };
+      return jsonResponse({
+        prices,
+        timestamp: now,
+        marketOpen: true,
+        source: "exchangerate.host",
+      });
+    } catch (e) {
+      console.error("[forex-prices] Fallback chain failed:", e);
+    }
 
     // Stale cache as last resort
     if (cache) {
