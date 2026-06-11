@@ -69,7 +69,7 @@ const MarketOverview = ({ accountMode = 'demo' }: MarketOverviewProps) => {
                 )
               }
 
-              const sourceBadge = item.source === 'binance' ? 'Binance' : item.source === 'twelvedata' ? 'Twelve Data' : 'Oracle';
+              const sourceBadge = item.source === 'binance' ? 'Binance' : item.source === 'twelvedata' ? 'Twelve Data' : item.source === 'exchangerate.host' ? 'Exchangerate' : 'Oracle';
 
               return (
                 <div key={pairName} className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 transition-colors cursor-pointer">
