@@ -15,7 +15,7 @@ export interface MarketPrice {
   low24h: number;
   lastUpdate: Date;
   isOraclePrice: boolean;
-  source: 'binance' | 'twelvedata' | 'exchangerate.host' | 'oracle';
+  source: 'binance' | 'coingecko' | 'twelvedata' | 'exchangerate.host' | 'oracle';
   updatedAt?: number;
 }
 
@@ -62,36 +62,34 @@ export const useMarketData = (_accountMode: 'demo' | 'live' = 'demo') => {
         if (!market) continue;
 
         const price = parseFloat(market.lastPrice);
-        const openPrice = parseFloat(market.openPrice);
-        const bid = parseFloat(market.bidPrice);
-        const ask = parseFloat(market.askPrice);
+        const change = parseFloat(market.priceChange);
+        const changePercent = parseFloat(market.priceChangePercent);
 
-        if (!Number.isFinite(price) || !Number.isFinite(openPrice) || openPrice <= 0) {
+        if (!Number.isFinite(price) || price <= 0) {
           continue;
         }
 
+        const openPrice = price - (Number.isFinite(change) ? change : 0);
         openPricesRef.current[pair] = openPrice;
-        const change = price - openPrice;
-        const changePercent = openPrice > 0 ? (change / openPrice) * 100 : 0;
         const meta = MARKET_METADATA[pair];
         const dec = meta?.decimals ?? 2;
-        const derivedSpread = price * 0.0001;
-        const spread = Number.isFinite(ask - bid) && ask >= bid ? ask - bid : derivedSpread;
+        const spread = price * 0.0001;
+        const src: 'binance' | 'coingecko' = market.source === 'coingecko' ? 'coingecko' : 'binance';
 
         newPrices[pair] = {
           pair,
           price: Number(price.toFixed(dec)),
-          change: Number(change.toFixed(dec)),
-          changePercent: Number(changePercent.toFixed(2)),
-          volume: formatVolume(parseFloat(market.quoteVolume)),
-          bid: Number((Number.isFinite(bid) ? bid : price - spread / 2).toFixed(dec)),
-          ask: Number((Number.isFinite(ask) ? ask : price + spread / 2).toFixed(dec)),
+          change: Number((Number.isFinite(change) ? change : 0).toFixed(dec)),
+          changePercent: Number((Number.isFinite(changePercent) ? changePercent : 0).toFixed(2)),
+          volume: formatVolume(parseFloat(market.volume)),
+          bid: Number((price - spread / 2).toFixed(dec)),
+          ask: Number((price + spread / 2).toFixed(dec)),
           spread: Number(spread.toFixed(dec)),
           high24h: Number(parseFloat(market.highPrice).toFixed(dec)),
           low24h: Number(parseFloat(market.lowPrice).toFixed(dec)),
           lastUpdate: new Date(),
           isOraclePrice: false,
-          source: 'binance',
+          source: src,
         };
       }
 
