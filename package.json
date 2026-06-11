@@ -12,7 +12,6 @@
   },
   "dependencies": {
     "@chainlink/contracts": "^1.5.0",
-    "@hashgraph/sdk": "^2.72.0",
     "@hookform/resolvers": "^3.9.0",
     "@nomicfoundation/hardhat-toolbox": "^3.0.0",
     "@openzeppelin/contracts": "^5.4.0",
