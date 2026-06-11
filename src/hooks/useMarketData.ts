@@ -15,7 +15,7 @@ export interface MarketPrice {
   low24h: number;
   lastUpdate: Date;
   isOraclePrice: boolean;
-  source: 'binance' | 'twelvedata' | 'oracle';
+  source: 'binance' | 'twelvedata' | 'exchangerate.host' | 'oracle';
   updatedAt?: number;
 }
 
@@ -129,12 +129,13 @@ export const useMarketData = (_accountMode: 'demo' | 'live' = 'demo') => {
       }
 
       if (data?.prices) {
+        const responseSource: 'twelvedata' | 'exchangerate.host' =
+          data.source === 'exchangerate.host' ? 'exchangerate.host' : 'twelvedata';
         const forexPrices: Record<string, MarketPrice> = {};
         for (const pair of FOREX_PAIRS) {
           const price = data.prices[pair];
           if (!price || price <= 0) continue;
 
-          // Store base price for change calculation
           if (!forexBasePricesRef.current[pair]) {
             forexBasePricesRef.current[pair] = price;
           }
@@ -159,7 +160,7 @@ export const useMarketData = (_accountMode: 'demo' | 'live' = 'demo') => {
             low24h: Number((price * 0.995).toFixed(dec)),
             lastUpdate: new Date(),
             isOraclePrice: false,
-            source: 'twelvedata',
+            source: responseSource,
           };
         }
         setPrices(prev => ({ ...prev, ...forexPrices }));

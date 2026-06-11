@@ -1,61 +1,34 @@
-# Plan: Performance Optimizations + Remove Hedera
+## Goal
+Make `supabase/functions/forex-prices` resilient by adding a secondary forex provider that's used when Twelve Data returns 429 (or fails) and the in-memory cache is empty/stale.
 
-## Part A — Remove Hedera from the app
+## Provider choice
+Use **exchangerate.host** as the fallback:
+- Free, no API key required (zero-config, no new secret)
+- Supports EUR/USD, GBP/USD, USD/JPY, XAU/USD via `/latest?base=USD&symbols=EUR,GBP,JPY,XAU`
+- Returns rates relative to USD, which we invert for EUR/USD and GBP/USD and use directly for USD/JPY; XAU rate is inverted to get XAU/USD price
 
-Hedera is only referenced in a handful of frontend files and isn't pulled from npm, so removal is purely a cleanup.
+Optional second-tier fallback (only if user wants a paid/keyed source later): Alpha Vantage or Finnhub via a new secret. Not included by default to avoid asking for keys.
 
-**Delete**
-- `src/lib/hedera.ts`
-- `src/hooks/useHederaWallet.ts`
-- `src/components/wallet/HederaWalletConnect.tsx`
-- `TOKENIZATION_DEPLOYMENT.md` (Hedera-specific deployment doc)
+## Edge function changes (`supabase/functions/forex-prices/index.ts`)
+1. Keep current 60s in-memory cache and rate-limit backoff.
+2. Refactor fetch into two functions:
+   - `fetchFromTwelveData()` — current behavior; throws a tagged `RateLimitError` on 429.
+   - `fetchFromExchangerateHost()` — fetches `https://api.exchangerate.host/latest?base=USD&symbols=EUR,GBP,JPY,XAU`, maps to our pair format.
+3. Resolution order on each request (cache miss):
+   1. Twelve Data (primary)
+   2. On 429 or non-2xx → exchangerate.host (fallback)
+   3. On both failing → serve stale cache if present, else `{ prices: {}, error: 'all_providers_failed' }` with HTTP 200
+4. Tag each response with `source: 'twelvedata' | 'exchangerate.host' | 'cache'` so the client can show which feed is live.
+5. Keep `marketOpen` logic and CORS unchanged. All error paths return HTTP 200 with structured JSON (no more 500s).
 
-**Edit**
-- `src/pages/Wallet.tsx` — remove `HederaWalletConnect` import and its "Hedera Network" section.
-- `src/components/wallet/MobileWallet.tsx` — same removal.
-- `mem://index.md` and related memory files — drop Hedera entries (multi-chain strategy, Hedera config, currency tokenization Hedera notes) so future sessions don't reintroduce it.
-
-No backend, contracts, or trading logic changes. Polygon (live) and Tron (funding bridge) remain untouched.
-
-## Part B — Performance improvements
-
-Goal: shrink the initial JS payload for `/` and `/login`, defer heavy modules until needed, and cache vendor code across deploys. No visual changes.
-
-### 1. Lazy-load all routes (`src/App.tsx`)
-Convert page imports to `React.lazy` and wrap `<Routes>` in `<Suspense fallback={...}>`. Keep `Index` and `Login` eager (the most common landing routes) or lazy-load everything — both fine; default to lazy-loading everything except `Index`.
-
-### 2. Scope `MarketDataProvider` to authenticated routes
-Currently wraps the whole app, so `/` and `/login` pay for `crypto-prices` / `forex-prices` edge calls. Move it down so it only wraps `Dashboard`, `Trade`, `Signals` (via a small `<MarketRoutes>` layout component or by wrapping each route element).
-
-### 3. Vite `manualChunks` (`vite.config.ts`)
-Split vendor bundles for long-term caching:
-```text
-react        -> react, react-dom, react-router-dom
-supabase     -> @supabase/*
-web3         -> ethers, tronweb, @walletconnect/*
-ui           -> @radix-ui/*, lucide-react
-charts       -> recharts, lightweight-charts (if present)
-```
-
-### 4. Dynamic-import Web3 in wallet components
-`src/lib/web3.js` and Tron imports become `await import(...)` inside connect handlers / `useEffect`s, so `ethers` and `tronweb` aren't in the landing bundle.
-
-### 5. Defer TradingView widget
-Only mount `TradingViewChart` once the chart tab/section is visible (intersection observer or tab activation). Script tag injected on mount only.
-
-### 6. `index.html` hints
-- `<link rel="preconnect" href="https://trbgjsurjfubezcdzpao.supabase.co" crossorigin>`
-- `font-display: swap` if any custom fonts use `@font-face`.
-
-### 7. AuthGuard fallback
-Only render the full-screen spinner on protected routes (it already does, but verify there's no global blocking spinner during session bootstrap on `/`).
+## Frontend changes (`src/hooks/useMarketData.ts`)
+- Read `source` from the response and pass through to each `MarketPrice.source` (extend the union to include `'exchangerate.host'`).
+- No UI rewrite; `MarketOverview` already renders a source badge — add a label mapping for the new source ("Exchangerate").
 
 ## Out of scope
-- No UI redesign, no contract changes, no Supabase schema changes.
-- Tron and Polygon stay.
-- No new dependencies.
+- No new secrets, no paid providers, no schema changes, no UI redesign.
+- No changes to crypto pricing or trading logic.
 
-## Expected impact
-- Landing/login JS payload ~60–75% smaller.
-- Vendor chunks cached across deploys → faster repeat visits.
-- Authenticated pages load Web3 + market data on demand.
+## Verification
+- Manually invoke `forex-prices` after deploy; confirm normal response includes `source: 'twelvedata'`.
+- Temporarily force the primary to fail (e.g., bad key path in a one-off test) and confirm response switches to `source: 'exchangerate.host'` and UI keeps rendering prices with no 500s in console.
