@@ -150,7 +150,7 @@ async function fetchFallbackChain(): Promise<Record<string, number>> {
     }
   }
 
-  const xau = await fetchXauFromStooq();
+  const xau = await fetchXauPrice();
   if (xau) prices["XAU/USD"] = xau;
 
   if (Object.keys(prices).length === 0) {
