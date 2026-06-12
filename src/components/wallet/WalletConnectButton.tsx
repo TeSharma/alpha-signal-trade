@@ -1,36 +1,35 @@
 import React from 'react';
 import { Button } from "@/components/ui/button";
-import { Wallet, RefreshCw } from "lucide-react";
+import { Wallet, RefreshCw, ExternalLink } from "lucide-react";
 import { useWallet } from "@/hooks/useWallet";
 import { useTronWallet } from "@/hooks/useTronWallet";
 
+const PUBLISHED_URL = "https://alpha-signal-trade.lovable.app";
+
 export const WalletConnectButton = () => {
-  const { 
-    isConnected: ethConnected, 
-    isConnecting: ethConnecting, 
+  const {
+    isConnected: ethConnected,
+    isConnecting: ethConnecting,
     connectWallet: connectEth,
-    error: ethError
   } = useWallet();
-  
-  const { 
-    isConnected: tronConnected, 
-    isConnecting: tronConnecting, 
+
+  const {
+    isConnected: tronConnected,
+    isConnecting: tronConnecting,
     connectWallet: connectTron,
-    error: tronError
   } = useTronWallet();
 
   const isAnyConnected = ethConnected || tronConnected;
   const isAnyConnecting = ethConnecting || tronConnecting;
-  const hasError = ethError || tronError;
+
+  const inIframe = typeof window !== 'undefined' && window.self !== window.top;
 
   const handleConnect = () => {
-    // Try Ethereum first, then Tron
     if (window.ethereum) {
       connectEth();
     } else if (window.tronWeb) {
       connectTron();
     } else {
-      // Show message about installing wallets
       alert('Please install MetaMask or TronLink to connect your wallet');
     }
   };
@@ -45,24 +44,40 @@ export const WalletConnectButton = () => {
   }
 
   return (
-    <Button 
-      variant="outline" 
-      className="w-full" 
-      size="sm"
-      onClick={handleConnect}
-      disabled={isAnyConnecting}
-    >
-      {isAnyConnecting ? (
-        <>
-          <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-          Connecting...
-        </>
-      ) : (
-        <>
-          <Wallet className="h-4 w-4 mr-2" />
-          Connect Wallet
-        </>
+    <div className="space-y-2">
+      <Button
+        variant="outline"
+        className="w-full"
+        size="sm"
+        onClick={handleConnect}
+        disabled={isAnyConnecting}
+      >
+        {isAnyConnecting ? (
+          <>
+            <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+            Connecting...
+          </>
+        ) : (
+          <>
+            <Wallet className="h-4 w-4 mr-2" />
+            Connect Wallet
+          </>
+        )}
+      </Button>
+      {inIframe && (
+        <p className="text-[11px] text-muted-foreground leading-snug">
+          Wallets work best on the{' '}
+          <a
+            href={PUBLISHED_URL}
+            target="_top"
+            rel="noopener noreferrer"
+            className="underline inline-flex items-center gap-0.5"
+          >
+            published site <ExternalLink className="h-3 w-3" />
+          </a>
+          . Inside the preview, MetaMask may fail to respond.
+        </p>
       )}
-    </Button>
+    </div>
   );
 };
