@@ -61,12 +61,14 @@
           if (isWalletExtensionError(event.reason)) {
             console.warn('[wallet-extension] suppressed rejection:', event.reason);
             event.preventDefault();
+            event.stopImmediatePropagation();
           }
-        });
+        }, true);
         window.addEventListener('error', function (event) {
           if (isWalletExtensionError(event.error) || (event.filename || '').indexOf('extension://') !== -1) {
             console.warn('[wallet-extension] suppressed error:', event.error || event.message);
             event.preventDefault();
+            event.stopImmediatePropagation();
           }
         }, true);
       })();
