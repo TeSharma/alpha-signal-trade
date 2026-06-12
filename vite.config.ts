@@ -55,7 +55,9 @@ export default defineConfig(({ mode }) => {
             if (id.includes('@tanstack')) return 'query';
             if (id.includes('ethers') || id.includes('web3') || id.includes('tronweb') || id.includes('@walletconnect')) return 'web3';
             if (id.includes('@radix-ui') || id.includes('lucide-react')) return 'ui';
-            if (id.includes('recharts') || id.includes('lightweight-charts') || id.includes('d3-')) return 'charts';
+            // NOTE: do not split recharts/d3 into a separate chunk — it creates a
+            // circular import between chunks and a TDZ crash ("Cannot access 'T'
+            // before initialization") that blanks the published site.
           },
         },
       },
