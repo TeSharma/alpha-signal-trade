@@ -24,4 +24,32 @@ window.addEventListener('unhandledrejection', (event) => {
   }
 });
 
+// Recover from transient dynamic-import (chunk load) failures by reloading once.
+// These happen when Vite/HMR aborts a module fetch mid-flight (often during the
+// wallet-extension error storm) and would otherwise leave a blank screen.
+const handleChunkLoadFailure = (msg: string) => {
+  if (!msg) return;
+  if (
+    msg.includes('Failed to fetch dynamically imported module') ||
+    msg.includes('Importing a module script failed') ||
+    msg.includes('error loading dynamically imported module')
+  ) {
+    const key = '__chunk_reload_attempted__';
+    if (!sessionStorage.getItem(key)) {
+      sessionStorage.setItem(key, '1');
+      window.location.reload();
+    }
+  }
+};
+window.addEventListener('error', (e) => {
+  handleChunkLoadFailure(e?.message || String(e?.error || ''));
+});
+window.addEventListener('unhandledrejection', (e) => {
+  handleChunkLoadFailure((e?.reason?.message || String(e?.reason || '')));
+});
+// Clear the guard once the app has successfully mounted.
+window.addEventListener('load', () => {
+  setTimeout(() => sessionStorage.removeItem('__chunk_reload_attempted__'), 2000);
+});
+
 createRoot(document.getElementById("root")!).render(<App />);
