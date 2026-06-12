@@ -91,19 +91,41 @@ async function fetchFromOpenErApi(): Promise<Record<string, number>> {
   return prices;
 }
 
-async function fetchXauFromStooq(): Promise<number | null> {
+async function fetchXauPrice(): Promise<number | null> {
+  // Primary: gold-api.com (free, no key, JSON)
   try {
-    const res = await fetch("https://stooq.com/q/l/?s=xauusd&f=sd2t2c&h&e=csv");
-    if (!res.ok) return null;
-    const text = await res.text();
-    const lines = text.trim().split("\n");
-    if (lines.length < 2) return null;
-    const cols = lines[1].split(",");
-    const close = parseFloat(cols[cols.length - 1]);
-    return Number.isFinite(close) && close > 0 ? close : null;
-  } catch {
-    return null;
+    const res = await fetch("https://api.gold-api.com/price/XAU");
+    if (res.ok) {
+      const data = await res.json();
+      const price = parseFloat(data?.price);
+      if (Number.isFinite(price) && price > 0) {
+        console.info("[forex-prices] gold-api ok");
+        return price;
+      }
+    }
+  } catch (e) {
+    console.warn("[forex-prices] gold-api failed:", (e as Error).message);
   }
+
+  // Fallback: Yahoo Finance spot gold
+  try {
+    const res = await fetch(
+      "https://query1.finance.yahoo.com/v8/finance/chart/XAUUSD=X?interval=1m&range=1d",
+      { headers: { "User-Agent": "Mozilla/5.0" } }
+    );
+    if (res.ok) {
+      const data = await res.json();
+      const price = data?.chart?.result?.[0]?.meta?.regularMarketPrice;
+      if (Number.isFinite(price) && price > 0) {
+        console.info("[forex-prices] yahoo XAU ok");
+        return price;
+      }
+    }
+  } catch (e) {
+    console.warn("[forex-prices] yahoo XAU failed:", (e as Error).message);
+  }
+
+  return null;
 }
 
 async function fetchFallbackChain(): Promise<Record<string, number>> {
@@ -128,7 +150,7 @@ async function fetchFallbackChain(): Promise<Record<string, number>> {
     }
   }
 
-  const xau = await fetchXauFromStooq();
+  const xau = await fetchXauPrice();
   if (xau) prices["XAU/USD"] = xau;
 
   if (Object.keys(prices).length === 0) {
