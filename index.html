@@ -40,6 +40,37 @@
   </head>
 
   <body>
+    <script>
+      // Suppress unhandled rejections/errors from injected wallet extensions (MetaMask, Phantom).
+      // Must run before any extension or app code so early auto-connect failures don't blank the screen.
+      (function () {
+        function isWalletExtensionError(reason) {
+          var message = ((reason && reason.message) || String(reason || '')).toLowerCase();
+          var stack = ((reason && reason.stack) || '').toLowerCase();
+          return (
+            stack.indexOf('chrome-extension://') !== -1 ||
+            stack.indexOf('moz-extension://') !== -1 ||
+            stack.indexOf('inpage.js') !== -1 ||
+            message.indexOf('failed to connect to metamask') !== -1 ||
+            message.indexOf('user rejected') !== -1 ||
+            message.indexOf('metamask') !== -1 ||
+            message.indexOf('phantom') !== -1
+          );
+        }
+        window.addEventListener('unhandledrejection', function (event) {
+          if (isWalletExtensionError(event.reason)) {
+            console.warn('[wallet-extension] suppressed rejection:', event.reason);
+            event.preventDefault();
+          }
+        });
+        window.addEventListener('error', function (event) {
+          if (isWalletExtensionError(event.error) || (event.filename || '').indexOf('extension://') !== -1) {
+            console.warn('[wallet-extension] suppressed error:', event.error || event.message);
+            event.preventDefault();
+          }
+        }, true);
+      })();
+    </script>
     <div id="root"></div>
     <!-- IMPORTANT: DO NOT REMOVE THIS SCRIPT TAG OR THIS VERY COMMENT! -->
     <script src="https://cdn.gpteng.co/gptengineer.js" type="module"></script>
