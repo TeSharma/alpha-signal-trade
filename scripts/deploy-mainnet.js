@@ -85,7 +85,7 @@ async function main() {
       const pairId = computePairId(pair);
       const [price, updatedAt] = await oracle.getPrice(pairId);
       const age = Math.floor(Date.now() / 1000) - Number(updatedAt);
-      console.log(`  ✅ ${pair}: $${(Number(price) / 1e8).toFixed(pair === "POL/USD" ? 4 : 2)} (${age}s ago)`);
+      console.log(`  ✅ ${pair}: $${(Number(price) / 1e8).toFixed(PRICE_DECIMALS[pair] ?? 2)} (${age}s ago)`);
     } catch (e) {
       console.log(`  ❌ ${pair}: ${e.message}`);
     }
