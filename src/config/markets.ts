@@ -20,9 +20,15 @@ export type V1TradingPair = typeof V1_TRADING_MARKETS[number];
 export const V1_AMOY_MARKETS = ['POL/USD'] as const;
 export const V1_MAINNET_MARKETS = ['BTC/USD', 'ETH/USD', 'POL/USD'] as const;
 
-// ─── AI SIGNAL MARKETS (Forex + Metals – no oracle needed) ───────────────
-export const V1_SIGNAL_MARKETS = ['EUR/USD', 'GBP/USD', 'USD/JPY', 'XAU/USD'] as const;
+// ─── AI SIGNAL MARKETS (Forex + Metals) ──────────────────────────────────
+export const V1_SIGNAL_MARKETS = ['EUR/USD', 'GBP/USD', 'USD/JPY', 'XAU/USD', 'AUD/USD'] as const;
 export type V1SignalPair = typeof V1_SIGNAL_MARKETS[number];
+
+// ─── LIVE ON-CHAIN FOREX/METAL MARKETS ───────────────────────────────────
+// Only pairs with a verified, correctly-oriented Chainlink feed on Polygon
+// mainnet. JPY/CHF/NZD/CAD feeds are quoted inverted vs. our naming, so they
+// stay signal-only until an inversion path exists in the oracle.
+export const V1_MAINNET_FOREX_MARKETS = ['EUR/USD', 'GBP/USD', 'AUD/USD', 'XAU/USD'] as const;
 
 // Combined metadata for all v1 markets
 export const MARKET_METADATA: Record<string, MarketMeta> = {
@@ -30,11 +36,12 @@ export const MARKET_METADATA: Record<string, MarketMeta> = {
   'BTC/USD':   { symbol: 'BTC',   icon: '₿', decimals: 2, layer: 'on-chain', network: 'mainnet-only', binanceSymbol: 'btcusdt' },
   'ETH/USD':   { symbol: 'ETH',   icon: 'Ξ', decimals: 2, layer: 'on-chain', network: 'mainnet-only', binanceSymbol: 'ethusdt' },
   'POL/USD':   { symbol: 'POL',   icon: '⬡', decimals: 4, layer: 'on-chain', network: 'all', binanceSymbol: 'polusdt' },
-  // Forex (signals only)
-  'EUR/USD':   { symbol: 'EUR',   icon: '€', decimals: 5, layer: 'signal', network: 'all', description: 'AI Signals Only' },
-  'GBP/USD':   { symbol: 'GBP',   icon: '£', decimals: 5, layer: 'signal', network: 'all', description: 'AI Signals Only' },
+  // Forex / metals — on-chain on mainnet where a Chainlink feed is verified
+  'EUR/USD':   { symbol: 'EUR',   icon: '€', decimals: 5, layer: 'on-chain', network: 'all' },
+  'GBP/USD':   { symbol: 'GBP',   icon: '£', decimals: 5, layer: 'on-chain', network: 'all' },
+  'AUD/USD':   { symbol: 'AUD',   icon: 'A$', decimals: 5, layer: 'on-chain', network: 'all' },
+  'XAU/USD':   { symbol: 'XAU',   icon: '🥇', decimals: 2, layer: 'on-chain', network: 'all', description: 'Gold' },
   'USD/JPY':   { symbol: 'JPY',   icon: '¥', decimals: 3, layer: 'signal', network: 'all', description: 'AI Signals Only' },
-  'XAU/USD':   { symbol: 'XAU',   icon: '🥇', decimals: 2, layer: 'signal', network: 'all', description: 'Gold (AI Signals Only)' },
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
