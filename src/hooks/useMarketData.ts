@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { V1_SIGNAL_MARKETS, V1_TRADING_MARKETS, MARKET_METADATA } from '@/config/markets';
+import { V1_SIGNAL_MARKETS, V1_TRADING_MARKETS, MARKET_METADATA, getMarketsForMode } from '@/config/markets';
+import { useOraclePrice } from '@/hooks/useOraclePrice';
 
 export interface MarketPrice {
   pair: string;
