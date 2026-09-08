@@ -36,6 +36,9 @@ export const useMarketData = (_accountMode: 'demo' | 'live' = 'demo') => {
   const forexBasePricesRef = useRef<Record<string, number>>({});
   const cryptoConnectedRef = useRef(false);
   const forexConnectedRef = useRef(false);
+  const [oracleAvailable, setOracleAvailable] = useState(false);
+  const { fetchMultiplePrices, prices: oraclePrices } = useOraclePrice(_accountMode);
+
 
   const setConnectionState = useCallback((source: 'crypto' | 'forex', connected: boolean) => {
     if (source === 'crypto') {
