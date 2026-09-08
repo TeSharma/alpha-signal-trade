@@ -68,7 +68,7 @@ async function fetchFromTwelveData(): Promise<Record<string, number>> {
 }
 
 async function fetchFromFrankfurter(): Promise<Record<string, number>> {
-  const res = await fetch("https://api.frankfurter.app/latest?from=USD&to=EUR,GBP,JPY");
+  const res = await fetch("https://api.frankfurter.app/latest?from=USD&to=EUR,GBP,JPY,AUD");
   if (!res.ok) throw new Error(`frankfurter error [${res.status}]`);
   const data = await res.json();
   const rates = data?.rates ?? {};
@@ -76,6 +76,7 @@ async function fetchFromFrankfurter(): Promise<Record<string, number>> {
   if (rates.EUR) prices["EUR/USD"] = 1 / rates.EUR;
   if (rates.GBP) prices["GBP/USD"] = 1 / rates.GBP;
   if (rates.JPY) prices["USD/JPY"] = rates.JPY;
+  if (rates.AUD) prices["AUD/USD"] = 1 / rates.AUD;
   return prices;
 }
 
@@ -88,6 +89,7 @@ async function fetchFromOpenErApi(): Promise<Record<string, number>> {
   if (rates.EUR) prices["EUR/USD"] = 1 / rates.EUR;
   if (rates.GBP) prices["GBP/USD"] = 1 / rates.GBP;
   if (rates.JPY) prices["USD/JPY"] = rates.JPY;
+  if (rates.AUD) prices["AUD/USD"] = 1 / rates.AUD;
   return prices;
 }
 
