@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import Web3 from 'web3';
-import { CONTRACT_ADDRESSES, AMOY_RPC_URL } from '@/config/contracts';
+import { getContractAddresses, getRpcUrl, type AccountMode } from '@/config/contracts';
 
 // PriceOracleV2 ABI (uses bytes32 pairId)
 const PRICE_ORACLE_V2_ABI = [
