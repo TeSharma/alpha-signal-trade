@@ -41,35 +41,31 @@ interface OraclePrices {
   [pair: string]: OraclePriceData;
 }
 
-export const useOraclePrice = () => {
+export const useOraclePrice = (accountMode: AccountMode = 'demo') => {
   const [web3, setWeb3] = useState<Web3 | null>(null);
   const [prices, setPrices] = useState<OraclePrices>({});
   const [isConnected, setIsConnected] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
-    initializeWeb3();
-  }, []);
-
-  const initializeWeb3 = async () => {
     // Use public RPC for read operations to avoid MetaMask provider overload
-    const web3Instance = new Web3(AMOY_RPC_URL);
-    setWeb3(web3Instance);
+    setWeb3(new Web3(getRpcUrl(accountMode)));
+    setPrices({});
     setIsConnected(true);
-  };
+  }, [accountMode]);
 
   const getOracleContract = useCallback(() => {
     if (!web3) return null;
 
-    const oracleAddress = CONTRACT_ADDRESSES.amoy.PriceOracleV2;
+    const oracleAddress = getContractAddresses(accountMode).PriceOracleV2;
     const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
 
-    if (oracleAddress.toLowerCase() === ZERO_ADDRESS.toLowerCase()) {
+    if (!oracleAddress || oracleAddress.toLowerCase() === ZERO_ADDRESS.toLowerCase()) {
       return null;
     }
 
     return new web3.eth.Contract(PRICE_ORACLE_V2_ABI as any, oracleAddress);
-  }, [web3]);
+  }, [web3, accountMode]);
 
   const fetchPrice = async (pair: string): Promise<OraclePriceData | null> => {
     const contract = getOracleContract();
