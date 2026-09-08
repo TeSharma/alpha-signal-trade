@@ -67,7 +67,7 @@ export const useOraclePrice = (accountMode: AccountMode = 'demo') => {
     return new web3.eth.Contract(PRICE_ORACLE_V2_ABI as any, oracleAddress);
   }, [web3, accountMode]);
 
-  const fetchPrice = async (pair: string): Promise<OraclePriceData | null> => {
+  const fetchPrice = useCallback(async (pair: string): Promise<OraclePriceData | null> => {
     const contract = getOracleContract();
     if (!contract || !web3) {
       console.warn('Oracle contract not available');
