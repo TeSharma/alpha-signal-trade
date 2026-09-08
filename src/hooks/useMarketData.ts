@@ -194,22 +194,67 @@ export const useMarketData = (_accountMode: 'demo' | 'live' = 'demo') => {
     };
   }, [fetch24hrData, fetchForexPrices]);
 
+  // --- Live mode: overlay on-chain Chainlink oracle prices ---
+  useEffect(() => {
+    if (_accountMode !== 'live') {
+      setOracleAvailable(false);
+      return;
+    }
+    const livePairs = getMarketsForMode('live');
+    const poll = () => { void fetchMultiplePrices(livePairs); };
+    poll();
+    const id = setInterval(poll, ORACLE_REFRESH_INTERVAL);
+    return () => clearInterval(id);
+  }, [_accountMode, fetchMultiplePrices]);
+
+  // Merge oracle readings over the off-chain feed in live mode
+  const effectivePrices = (() => {
+    if (_accountMode !== 'live') return prices;
+    const now = Math.floor(Date.now() / 1000);
+    const merged: Record<string, MarketPrice> = { ...prices };
+    for (const [pair, data] of Object.entries(oraclePrices)) {
+      const base = merged[pair];
+      if (!base || !data?.isValid) continue;
+      const fresh = now - data.timestamp <= ORACLE_MAX_AGE_SECONDS;
+      if (!fresh) continue;
+      const dec = MARKET_METADATA[pair]?.decimals ?? 2;
+      const price = Number(Number(data.price).toFixed(dec));
+      if (!Number.isFinite(price) || price <= 0) continue;
+      const spread = base.spread || price * 0.0001;
+      merged[pair] = {
+        ...base,
+        price,
+        bid: Number((price - spread / 2).toFixed(dec)),
+        ask: Number((price + spread / 2).toFixed(dec)),
+        isOraclePrice: true,
+        source: 'oracle',
+        updatedAt: data.timestamp,
+      };
+    }
+    return merged;
+  })();
+
+  useEffect(() => {
+    if (_accountMode !== 'live') return;
+    setOracleAvailable(Object.values(effectivePrices).some(p => p.isOraclePrice));
+  }, [_accountMode, effectivePrices]);
+
   const updatePrices = useCallback(async () => {
     await fetch24hrData();
     await fetchForexPrices();
   }, [fetch24hrData, fetchForexPrices]);
 
-  const getPrice = (pair: string): MarketPrice | null => prices[pair] || null;
-  const getCurrentPrice = (pair: string): number => prices[pair]?.price || 0;
-  const getBidPrice = (pair: string): number => prices[pair]?.bid || getCurrentPrice(pair);
-  const getAskPrice = (pair: string): number => prices[pair]?.ask || getCurrentPrice(pair);
+  const getPrice = (pair: string): MarketPrice | null => effectivePrices[pair] || null;
+  const getCurrentPrice = (pair: string): number => effectivePrices[pair]?.price || 0;
+  const getBidPrice = (pair: string): number => effectivePrices[pair]?.bid || getCurrentPrice(pair);
+  const getAskPrice = (pair: string): number => effectivePrices[pair]?.ask || getCurrentPrice(pair);
 
   return {
-    prices: Object.values(prices),
-    pricesMap: prices,
+    prices: Object.values(effectivePrices),
+    pricesMap: effectivePrices,
     isConnected,
     isLoading,
-    oracleAvailable: false, // Reserved for future oracle overlay
+    oracleAvailable,
     getPrice,
     getCurrentPrice,
     getBidPrice,
