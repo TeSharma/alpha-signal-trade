@@ -62,8 +62,8 @@ export const getMarketsForMode = (mode: 'demo' | 'live'): string[] =>
   mode === 'demo'
     // Demo: all pairs available (off-chain settlement, prices from Binance + Twelve Data)
     ? [...V1_TRADING_MARKETS, ...V1_SIGNAL_MARKETS]
-    // Live: only Chainlink-backed crypto on mainnet
-    : getMainnetTradingMarkets();
+    // Live: Chainlink-backed crypto + verified forex/metal feeds on mainnet
+    : [...getMainnetTradingMarkets(), ...V1_MAINNET_FOREX_MARKETS];
 
 export const isMainnetOnly = (pair: string): boolean =>
   MARKET_METADATA[pair]?.network === 'mainnet-only';
