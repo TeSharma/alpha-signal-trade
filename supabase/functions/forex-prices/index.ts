@@ -6,7 +6,7 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const FOREX_PAIRS = ["EUR/USD", "GBP/USD", "USD/JPY", "XAU/USD"];
+const FOREX_PAIRS = ["EUR/USD", "GBP/USD", "USD/JPY", "XAU/USD", "AUD/USD"];
 const CACHE_TTL_MS = 60_000;
 const RATE_LIMIT_BACKOFF_MS = 60_000;
 
@@ -68,7 +68,7 @@ async function fetchFromTwelveData(): Promise<Record<string, number>> {
 }
 
 async function fetchFromFrankfurter(): Promise<Record<string, number>> {
-  const res = await fetch("https://api.frankfurter.app/latest?from=USD&to=EUR,GBP,JPY");
+  const res = await fetch("https://api.frankfurter.app/latest?from=USD&to=EUR,GBP,JPY,AUD");
   if (!res.ok) throw new Error(`frankfurter error [${res.status}]`);
   const data = await res.json();
   const rates = data?.rates ?? {};
@@ -76,6 +76,7 @@ async function fetchFromFrankfurter(): Promise<Record<string, number>> {
   if (rates.EUR) prices["EUR/USD"] = 1 / rates.EUR;
   if (rates.GBP) prices["GBP/USD"] = 1 / rates.GBP;
   if (rates.JPY) prices["USD/JPY"] = rates.JPY;
+  if (rates.AUD) prices["AUD/USD"] = 1 / rates.AUD;
   return prices;
 }
 
@@ -88,6 +89,7 @@ async function fetchFromOpenErApi(): Promise<Record<string, number>> {
   if (rates.EUR) prices["EUR/USD"] = 1 / rates.EUR;
   if (rates.GBP) prices["GBP/USD"] = 1 / rates.GBP;
   if (rates.JPY) prices["USD/JPY"] = rates.JPY;
+  if (rates.AUD) prices["AUD/USD"] = 1 / rates.AUD;
   return prices;
 }
 
@@ -139,7 +141,7 @@ async function fetchFallbackChain(): Promise<Record<string, number>> {
     console.warn("[forex-prices] frankfurter failed:", (e as Error).message);
   }
 
-  const stillMissing = ["EUR/USD", "GBP/USD", "USD/JPY"].filter((p) => !(p in prices));
+  const stillMissing = ["EUR/USD", "GBP/USD", "USD/JPY", "AUD/USD"].filter((p) => !(p in prices));
   if (stillMissing.length) {
     try {
       const er = await fetchFromOpenErApi();
