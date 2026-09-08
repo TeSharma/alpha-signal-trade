@@ -141,7 +141,7 @@ async function fetchFallbackChain(): Promise<Record<string, number>> {
     console.warn("[forex-prices] frankfurter failed:", (e as Error).message);
   }
 
-  const stillMissing = ["EUR/USD", "GBP/USD", "USD/JPY"].filter((p) => !(p in prices));
+  const stillMissing = ["EUR/USD", "GBP/USD", "USD/JPY", "AUD/USD"].filter((p) => !(p in prices));
   if (stillMissing.length) {
     try {
       const er = await fetchFromOpenErApi();
