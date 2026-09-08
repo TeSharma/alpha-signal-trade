@@ -121,7 +121,8 @@ export const useOraclePrice = (accountMode: AccountMode = 'demo') => {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [fetchPrice]);
+
 
   const getPrice = (pair: string): OraclePriceData | null => {
     return prices[pair] || null;
