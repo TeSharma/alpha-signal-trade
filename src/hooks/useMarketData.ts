@@ -25,6 +25,9 @@ const FOREX_PAIRS = [...V1_SIGNAL_MARKETS];
 const CRYPTO_REFRESH_INTERVAL = 10000;
 const FOREX_REFRESH_INTERVAL = 60000;
 
+const ORACLE_REFRESH_INTERVAL = 30000;
+const ORACLE_MAX_AGE_SECONDS = 120; // must match TradingPlatformV2 priceTimeout
+
 export const useMarketData = (_accountMode: 'demo' | 'live' = 'demo') => {
   const [prices, setPrices] = useState<Record<string, MarketPrice>>({});
   const [isConnected, setIsConnected] = useState(false);
