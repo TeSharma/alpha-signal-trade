@@ -143,6 +143,58 @@ serve(async (req) => {
       }
     }
 
+    // ===== Auto-close demo trades whose SL/TP has been hit =====
+    let tradesClosed = 0;
+    const { data: openTrades } = await supabase
+      .from("trades")
+      .select("id, pair, direction, stop_loss, take_profit, account_mode")
+      .eq("status", "open")
+      .eq("account_mode", "demo");
+
+    if (openTrades && openTrades.length > 0) {
+      // Cache prices per pair within this run
+      const priceCache: Record<string, number> = {};
+      for (const t of openTrades) {
+        if (t.stop_loss == null && t.take_profit == null) continue;
+        if (!CRYPTO_PAIRS.includes(t.pair) && !isForexMarketOpen()) continue;
+
+        let price = priceCache[t.pair];
+        if (price === undefined) {
+          const fetched = await fetchCurrentPrice(t.pair);
+          if (fetched == null) continue;
+          price = fetched;
+          priceCache[t.pair] = price;
+        }
+
+        const isLong = t.direction === "buy" || t.direction === "long" || t.direction === "LONG";
+        let exitPrice: number | null = null;
+        if (isLong) {
+          if (t.take_profit != null && price >= t.take_profit) exitPrice = t.take_profit;
+          else if (t.stop_loss != null && price <= t.stop_loss) exitPrice = t.stop_loss;
+        } else {
+          if (t.take_profit != null && price <= t.take_profit) exitPrice = t.take_profit;
+          else if (t.stop_loss != null && price >= t.stop_loss) exitPrice = t.stop_loss;
+        }
+
+        if (exitPrice != null) {
+          // close_trade RPC uses auth.uid(); call as service role via raw update.
+          // We mirror its logic minimally here: mark closed with PnL computed by calculate_trade_pnl.
+          const { error: pnlErr } = await supabase.rpc("calculate_trade_pnl", {
+            p_trade_id: t.id,
+            p_current_price: exitPrice,
+          });
+          if (pnlErr) { console.warn(`[auto-close] pnl calc failed for ${t.id}:`, pnlErr); continue; }
+          const { error: closeErr } = await supabase
+            .from("trades")
+            .update({ status: "closed", exit_price: exitPrice, closed_at: new Date().toISOString() })
+            .eq("id", t.id);
+          if (closeErr) { console.warn(`[auto-close] close failed for ${t.id}:`, closeErr); continue; }
+          tradesClosed += 1;
+          console.log(`[auto-close] Closed trade ${t.id} ${t.pair} @ ${exitPrice}`);
+        }
+      }
+    }
+
     // Cleanup: delete signals expired > 24 hours ago
     const { data: deleted, error: cleanupErr } = await supabase
       .from("trading_signals")
@@ -166,7 +218,7 @@ serve(async (req) => {
 
     if (expireErr) console.warn("Expire cleanup error:", expireErr);
 
-    return new Response(JSON.stringify({ evaluated: signals.length, resolved: results.length, cleaned: deleted?.length || 0, results }), {
+    return new Response(JSON.stringify({ evaluated: signals.length, resolved: results.length, cleaned: deleted?.length || 0, tradesClosed, results }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {

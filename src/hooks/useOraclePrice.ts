@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import Web3 from 'web3';
-import { CONTRACT_ADDRESSES, AMOY_RPC_URL } from '@/config/contracts';
+import { getContractAddresses, getRpcUrl, type AccountMode } from '@/config/contracts';
 
 // PriceOracleV2 ABI (uses bytes32 pairId)
 const PRICE_ORACLE_V2_ABI = [
@@ -41,37 +41,33 @@ interface OraclePrices {
   [pair: string]: OraclePriceData;
 }
 
-export const useOraclePrice = () => {
+export const useOraclePrice = (accountMode: AccountMode = 'demo') => {
   const [web3, setWeb3] = useState<Web3 | null>(null);
   const [prices, setPrices] = useState<OraclePrices>({});
   const [isConnected, setIsConnected] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
-    initializeWeb3();
-  }, []);
-
-  const initializeWeb3 = async () => {
     // Use public RPC for read operations to avoid MetaMask provider overload
-    const web3Instance = new Web3(AMOY_RPC_URL);
-    setWeb3(web3Instance);
+    setWeb3(new Web3(getRpcUrl(accountMode)));
+    setPrices({});
     setIsConnected(true);
-  };
+  }, [accountMode]);
 
   const getOracleContract = useCallback(() => {
     if (!web3) return null;
 
-    const oracleAddress = CONTRACT_ADDRESSES.amoy.PriceOracleV2;
+    const oracleAddress = getContractAddresses(accountMode).PriceOracleV2;
     const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
 
-    if (oracleAddress.toLowerCase() === ZERO_ADDRESS.toLowerCase()) {
+    if (!oracleAddress || oracleAddress.toLowerCase() === ZERO_ADDRESS.toLowerCase()) {
       return null;
     }
 
     return new web3.eth.Contract(PRICE_ORACLE_V2_ABI as any, oracleAddress);
-  }, [web3]);
+  }, [web3, accountMode]);
 
-  const fetchPrice = async (pair: string): Promise<OraclePriceData | null> => {
+  const fetchPrice = useCallback(async (pair: string): Promise<OraclePriceData | null> => {
     const contract = getOracleContract();
     if (!contract || !web3) {
       console.warn('Oracle contract not available');
@@ -104,9 +100,9 @@ export const useOraclePrice = () => {
       console.error(`Error fetching price for ${pair}:`, error);
       return null;
     }
-  };
+  }, [getOracleContract, web3]);
 
-  const fetchMultiplePrices = async (pairs: string[]): Promise<void> => {
+  const fetchMultiplePrices = useCallback(async (pairs: string[]): Promise<void> => {
     setIsLoading(true);
     try {
       const pricePromises = pairs.map(pair => fetchPrice(pair));
@@ -125,7 +121,8 @@ export const useOraclePrice = () => {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [fetchPrice]);
+
 
   const getPrice = (pair: string): OraclePriceData | null => {
     return prices[pair] || null;

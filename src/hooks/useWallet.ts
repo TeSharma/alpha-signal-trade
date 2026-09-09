@@ -179,12 +179,26 @@ export const useWallet = () => {
         toast.error('Failed to connect wallet');
       }
     } catch (error: any) {
-      setWalletState(prev => ({ 
-        ...prev, 
-        isConnecting: false, 
-        error: error.message || 'Connection failed' 
+      const raw = (error?.message || String(error || '')).toLowerCase();
+      const causeMsg = (error?.cause?.message || '').toLowerCase();
+      const isExtensionAsleep =
+        raw.includes('failed to connect to metamask') ||
+        raw.includes('extension not found') ||
+        causeMsg.includes('extension not found');
+      const inIframe = typeof window !== 'undefined' && window.self !== window.top;
+
+      const friendly = isExtensionAsleep
+        ? (inIframe
+            ? "MetaMask isn't responding inside the preview. Open the published site to connect your wallet."
+            : "MetaMask isn't responding. Click the MetaMask icon to unlock it, then try again.")
+        : (error.message || 'Failed to connect wallet');
+
+      setWalletState(prev => ({
+        ...prev,
+        isConnecting: false,
+        error: friendly,
       }));
-      toast.error(error.message || 'Failed to connect wallet');
+      toast.error(friendly);
     }
   }, [setWalletConnected]);
 

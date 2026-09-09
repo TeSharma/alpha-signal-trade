@@ -175,7 +175,7 @@ export function useSignalList() {
         user_id: row.user_id,
         market: row.market,
         pair: row.pair,
-        direction: row.direction,
+        direction: (row.direction === 'buy' || row.direction === 'long' || row.direction === 'LONG') ? 'LONG' : 'SHORT',
         entry_zone: row.entry_zone,
         stop_loss: row.stop_loss,
         take_profit: row.take_profit,

@@ -6,10 +6,32 @@ const path = require("path");
 const USDC_ADDRESS = "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359";
 
 // Chainlink Price Feeds on Polygon Mainnet (all 8 decimals)
+// Addresses verified against the official Chainlink reference-data directory
+// (feeds-matic-mainnet.json) AND live-checked with latestRoundData() before commit.
+//
+// Excluded on purpose:
+//   JPY/USD, CHF/USD, NZD/USD -> feed direction is inverted vs. our UI pair naming
+//                                and/or last update exceeds the 120s priceTimeout.
+//   CAD/USD                   -> inverted direction vs. "USD/CAD" naming.
+// Those stay AI-signal-only until an inversion path is added to the oracle.
 const MAINNET_PRICE_FEEDS = {
   "BTC/USD": "0xc907E116054Ad103354f2D350FD2514433D57F6f",
   "ETH/USD": "0xF9680D99D6C9589e2a93a78A04A279e509205945",
-  "POL/USD": "0xAB594600376Ec9fD91F8e8dC3ef219F1735Db534",
+  "POL/USD": "0xAB594600376Ec9fD91F8e885dADF0CE036862dE0",
+  "EUR/USD": "0x73366Fe0AA0Ded304479862808e02506FE556a98",
+  "GBP/USD": "0x099a2540848573e94fb1Ca0Fa420b00acbBc845a",
+  "AUD/USD": "0x062Df9C4efd2030e243ffCc398b652e8b8F95C6f",
+  "XAU/USD": "0x0C466540B2ee1a31b441671eac0ca886e051E410",
+};
+
+const PRICE_DECIMALS = {
+  "BTC/USD": 2,
+  "ETH/USD": 2,
+  "POL/USD": 4,
+  "EUR/USD": 5,
+  "GBP/USD": 5,
+  "AUD/USD": 5,
+  "XAU/USD": 2,
 };
 
 function computePairId(pair) {
@@ -63,7 +85,7 @@ async function main() {
       const pairId = computePairId(pair);
       const [price, updatedAt] = await oracle.getPrice(pairId);
       const age = Math.floor(Date.now() / 1000) - Number(updatedAt);
-      console.log(`  ✅ ${pair}: $${(Number(price) / 1e8).toFixed(pair === "POL/USD" ? 4 : 2)} (${age}s ago)`);
+      console.log(`  ✅ ${pair}: $${(Number(price) / 1e8).toFixed(PRICE_DECIMALS[pair] ?? 2)} (${age}s ago)`);
     } catch (e) {
       console.log(`  ❌ ${pair}: ${e.message}`);
     }

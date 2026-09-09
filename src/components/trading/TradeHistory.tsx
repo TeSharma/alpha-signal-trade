@@ -10,6 +10,7 @@ import { TrendingUp, TrendingDown, X, DollarSign, Clock, Activity } from "lucide
 import { useTrades, Trade } from '@/hooks/useTrades'
 import { useMarketData } from '@/hooks/useMarketData'
 import { useToast } from '@/components/ui/use-toast'
+import { computePnL } from '@/lib/pnl'
 
 interface TradeHistoryProps {
   accountMode: 'demo' | 'live'
@@ -47,10 +48,6 @@ const TradeHistory = ({ accountMode }: TradeHistoryProps) => {
     const currentPrice = getCurrentPrice(trade.pair)
     if (currentPrice > 0) {
       await closeTrade(trade.id, currentPrice)
-      toast({
-        title: 'Trade Closed',
-        description: `${trade.pair} ${trade.direction} position closed`,
-      })
     }
   }
 
@@ -60,15 +57,8 @@ const TradeHistory = ({ accountMode }: TradeHistoryProps) => {
 
   const calculateCurrentPnL = (trade: Trade) => {
     const currentPrice = getCurrentPrice(trade.pair)
-    if (currentPrice === 0) return trade.pnl || 0
-
-    let pnl = 0
-    if (trade.direction === 'buy') {
-      pnl = (currentPrice - trade.entry_price) * trade.lot_size * 100000
-    } else {
-      pnl = (trade.entry_price - currentPrice) * trade.lot_size * 100000
-    }
-    return pnl
+    if (!currentPrice || currentPrice <= 0) return trade.pnl || 0
+    return computePnL(trade.pair, trade.direction, trade.entry_price, currentPrice, trade.lot_size)
   }
 
   const formatPnL = (pnl: number) => {

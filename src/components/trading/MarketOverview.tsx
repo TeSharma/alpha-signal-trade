@@ -69,7 +69,7 @@ const MarketOverview = ({ accountMode = 'demo' }: MarketOverviewProps) => {
                 )
               }
 
-              const sourceBadge = item.source === 'binance' ? 'Binance' : item.source === 'twelvedata' ? 'Twelve Data' : 'Oracle';
+              const sourceBadge = item.source === 'binance' ? 'Binance' : item.source === 'twelvedata' ? 'Twelve Data' : item.source === 'exchangerate.host' ? 'Exchangerate' : 'Oracle';
 
               return (
                 <div key={pairName} className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 transition-colors cursor-pointer">
@@ -112,7 +112,7 @@ const MarketOverview = ({ accountMode = 'demo' }: MarketOverviewProps) => {
           {/* Forex notice */}
           <div className="mt-4 flex items-center gap-2 text-sm text-muted-foreground bg-muted rounded-lg p-3">
             <Info className="h-4 w-4 shrink-0" />
-            <span>Forex markets (EUR/USD, GBP/USD, USD/JPY) — AI signals live, on-chain execution coming in v2</span>
+            <span>EUR/USD, GBP/USD, AUD/USD and Gold trade on-chain in Live mode via Chainlink feeds. USD/JPY stays AI-signals only.</span>
           </div>
         </CardContent>
       </Card>
