@@ -1,0 +1,21 @@
+=== RUN START 09/09/2026 23:02:58.69 === 
+21:02:59 Deployer: 0x09C2B58F6004176bD83cc000d804eD3c1041754E
+21:02:59 Chain 137 (Polygon Mainnet) OK
+21:03:07 Balance: 74.323755167260985432 POL
+21:03:07 Oracle attached at 0xf61e4881f363b30384dfbcf1c72845cce94d4f9f (2914 bytes)
+21:03:07 Sending setPriceFeeds for BTC/USD, ETH/USD, POL/USD ...
+21:03:12 setPriceFeeds tx: 0xf241f2e18d7fb89473c88b31bdb8eec7188eac8c05a4954d9e7ed740ef57d546
+21:03:20 Feeds registered
+21:03:20 BTC/USD: $78280.88 (-4s ago)
+21:03:20 ETH/USD: $2469.58 (16s ago)
+21:03:21 POL/USD: $0.0962 (15s ago)
+21:03:21 Deploying TradingPlatformV2 (collateral USDC) ...
+21:03:23 platform deploy tx: 0x1a689ea19aebd60adc4235e9107ba4d2400b2adae1bf0430fc3216f6ca4f07a4
+21:03:30 TradingPlatformV2: 0x0465161D9aeD6e1C2F9E986Be97F5628E46421D3
+21:03:31 Treasury: 0x09C2B58F6004176bD83cc000d804eD3c1041754E | open fee 0.08% | close fee 0.08%
+21:03:31 Saved: C:\Users\USER\sharma\alpha-signal-trade\deployments\polygon-deployment.json
+21:03:31 Updated: src/config/contracts.ts (polygon addresses)
+21:03:31 🎉 MAINNET DEPLOYMENT COMPLETE
+21:03:31 PriceOracleV2:     0xf61e4881f363b30384dfbcf1c72845cce94d4f9f
+21:03:31 TradingPlatformV2: 0x0465161D9aeD6e1C2F9E986Be97F5628E46421D3
+=== NODE EXITCODE 0 === 

@@ -20,6 +20,8 @@ import UpdatePassword from "./pages/UpdatePassword";
 import VerifyEmail from "./pages/VerifyEmail";
 import NotFound from "./pages/NotFound";
 import NetworkGuard from "./components/layout/NetworkGuard";
+import ZendeskWidget from "./components/support/ZendeskWidget";
+
 
 const queryClient = new QueryClient();
 
@@ -31,6 +33,7 @@ const App = () => (
         <Sonner />
         <BrowserRouter>
         <NetworkGuard />
+        <ZendeskWidget />
         <Routes>
           <Route path="/" element={<Index />} />
           <Route path="/login" element={<Login />} />

@@ -1,0 +1,23 @@
+{
+  "network": "polygon",
+  "chainId": 137,
+  "deployedAt": "2026-09-09T21:03:31.808Z",
+  "deployer": "0x09C2B58F6004176bD83cc000d804eD3c1041754E",
+  "resumed": true,
+  "contracts": {
+    "PriceOracleV2": "0xf61e4881f363b30384dfbcf1c72845cce94d4f9f",
+    "TradingPlatformV2": "0x0465161D9aeD6e1C2F9E986Be97F5628E46421D3",
+    "CollateralToken": "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359"
+  },
+  "oracleDeploymentTx": "0xe0585c935473efaec742700db6891a49836baafe06c690d2ac4d6814bf6d7cc1",
+  "chainlinkFeeds": {
+    "BTC/USD": "0xc907E116054Ad103354f2D350FD2514433D57F6f",
+    "ETH/USD": "0xF9680D99D6C9589e2a93a78A04A279e509205945",
+    "POL/USD": "0xAB594600376Ec9fD91F8e885dADF0CE036862dE0"
+  },
+  "pairIds": {
+    "BTC/USD": "0xee62665949c883f9e0f6f002eac32e00bd59dfe6c34e92a91c37d6a8322d6489",
+    "ETH/USD": "0x0b43555ace6b39aae1b894097d0a9fc17f504c62fea598fa206cc6f5088e6e45",
+    "POL/USD": "0xcb8dbbb9911235d8d5968c18405ef8643315119ab67822390eb58ad6c23261e3"
+  }
+}

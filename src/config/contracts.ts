@@ -21,8 +21,8 @@ export const CONTRACT_ADDRESSES = {
   polygon: {
     TokenizedCurrency: POLYGON_USDC,  // USDC is the collateral token in live mode
     TUSDFaucet: "",                   // No faucet on mainnet
-    PriceOracleV2: "",                // Set after running deploy-mainnet.js
-    TradingPlatformV2: "",            // Set after running deploy-mainnet.js
+    PriceOracleV2: "0xf61e4881f363b30384dfbcf1c72845cce94d4f9f",                // Set after running deploy-mainnet.js
+    TradingPlatformV2: "0x0465161D9aeD6e1C2F9E986Be97F5628E46421D3",            // Set after running deploy-mainnet.js
     Treasury: "",
   },
 } as const;
