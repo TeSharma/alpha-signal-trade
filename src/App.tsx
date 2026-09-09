@@ -49,6 +49,7 @@ const App = () => (
         <Sonner />
         <BrowserRouter>
           <NetworkGuard />
+          <ZendeskWidget />
           <Suspense fallback={<RouteFallback />}>
             <Routes>
               <Route path="/" element={<Index />} />
@@ -89,52 +90,6 @@ const App = () => (
               <Route path="*" element={<NotFound />} />
             </Routes>
           </Suspense>
-        <NetworkGuard />
-        <ZendeskWidget />
-        <Routes>
-          <Route path="/" element={<Index />} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/dashboard" element={
-            <AuthGuard>
-              <Dashboard />
-            </AuthGuard>
-          } />
-          <Route path="/trade" element={
-            <AuthGuard>
-              <Trade />
-            </AuthGuard>
-          } />
-          <Route path="/signals" element={
-            <AuthGuard>
-              <Signals />
-            </AuthGuard>
-          } />
-          <Route path="/community" element={
-            <AuthGuard>
-              <Community />
-            </AuthGuard>
-          } />
-          <Route path="/education" element={
-            <AuthGuard>
-              <Education />
-            </AuthGuard>
-          } />
-          <Route path="/account" element={
-            <AuthGuard>
-              <Account />
-            </AuthGuard>
-          } />
-          <Route path="/wallet" element={
-            <AuthGuard>
-              <Wallet />
-            </AuthGuard>
-          } />
-          <Route path="/signup" element={<Signup />} />
-          <Route path="/forgot-password" element={<ForgotPassword />} />
-          <Route path="/update-password" element={<UpdatePassword />} />
-          <Route path="/verify-email" element={<VerifyEmail />} />
-          <Route path="*" element={<NotFound />} />
-        </Routes>
         </BrowserRouter>
       </AppProvider>
     </TooltipProvider>
