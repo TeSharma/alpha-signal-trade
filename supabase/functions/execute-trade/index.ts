@@ -132,10 +132,7 @@ Deno.serve(async (req) => {
     }
 
     if ((openPositions || 0) >= 5) {
-      return new Response(
-        JSON.stringify({ error: 'Maximum 5 open positions reached. Close some positions first.' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return reject('Maximum 5 open positions reached. Close some positions first.', 400);
     }
 
     // 6. Risk Engine - Daily Loss Limit
