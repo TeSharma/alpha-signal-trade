@@ -218,10 +218,7 @@ Deno.serve(async (req) => {
     positionSize = Math.floor(positionSize * 10000) / 10000;
 
     if (positionSize <= 0) {
-      return new Response(
-        JSON.stringify({ error: 'Calculated position size is too small to execute' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return reject('Calculated position size is too small to execute', 400);
     }
 
     // 9. Create trade record
@@ -231,13 +228,18 @@ Deno.serve(async (req) => {
 
     const executionLatency = Date.now() - executionStart;
 
+    // Signals may store direction as LONG/SHORT (AI) or buy/sell (DB) — normalize both.
+    const rawDirection = String(signal.direction ?? '').toLowerCase();
+    const isLong = rawDirection === 'long' || rawDirection === 'buy';
+    const tradeDirection = isLong ? 'buy' : 'sell';
+
     const { data: trade, error: tradeError } = await supabase
       .from('trades')
       .insert({
         user_id: userId,
         signal_id: signal_id,
         pair: signal.pair,
-        direction: signal.direction === 'LONG' ? 'buy' : 'sell',
+        direction: tradeDirection,
         entry_price: entryPrice,
         execution_price: entryPrice, // In real system, would be actual execution price
         lot_size: positionSize,
@@ -252,33 +254,29 @@ Deno.serve(async (req) => {
       .single();
 
     if (tradeError) {
-      console.error('Error creating trade:', tradeError);
-      return new Response(
-        JSON.stringify({ error: 'Failed to create trade', details: tradeError.message }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return reject(`Failed to create trade: ${tradeError.message}`, 500);
     }
 
-    // 10. Update signal status to 'executed'
-    const { error: updateError } = await supabase
+    // 10. Update signal status to 'executed' (elevated: public AI signals have no owner)
+    const { error: updateError } = await admin
       .from('trading_signals')
       .update({ status: 'executed' })
       .eq('id', signal_id);
 
     if (updateError) {
-      console.error('Error updating signal status:', updateError);
+      console.error('[execute-trade] Error updating signal status:', updateError.message);
     }
 
     // 11. Create performance tracking record
     const entryZoneLow = Array.isArray(signal.entry_zone) && signal.entry_zone.length >= 2 ? signal.entry_zone[0] : entryPrice;
     const entryZoneHigh = Array.isArray(signal.entry_zone) && signal.entry_zone.length >= 2 ? signal.entry_zone[1] : entryPrice;
 
-    const { error: perfError } = await supabase
+    const { error: perfError } = await admin
       .from('signal_performance')
       .insert({
         signal_id: signal_id,
         pair: signal.pair,
-        direction: signal.direction,
+        direction: tradeDirection,
         entry_price: entryPrice,
         entry_zone_low: entryZoneLow,
         entry_zone_high: entryZoneHigh,
