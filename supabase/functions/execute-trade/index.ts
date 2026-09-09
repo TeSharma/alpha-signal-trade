@@ -41,11 +41,29 @@ Deno.serve(async (req) => {
       );
     }
 
+    // Elevated client for writes the user is not allowed to perform directly:
+    // marking an owner-less AI signal as executed, and inserting the performance row.
+    const admin = createClient(
+      Deno.env.get('SUPABASE_URL')!,
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+      { auth: { persistSession: false } }
+    );
+
     const userId = claimsData.claims.sub;
     const executionStart = Date.now();
 
     const body: ExecuteTradeRequest = await req.json();
     const { signal_id, account_mode, position_size_override } = body;
+
+    console.log(`[execute-trade] REQUEST user=${userId} signal=${signal_id} mode=${account_mode} override=${position_size_override ?? 'none'}`);
+
+    const reject = (message: string, status: number) => {
+      console.error(`[execute-trade] REJECTED (${status}): ${message}`);
+      return new Response(
+        JSON.stringify({ error: message }),
+        { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    };
 
     // Validate input
     if (!signal_id || !account_mode) {
