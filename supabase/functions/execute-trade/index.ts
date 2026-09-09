@@ -340,9 +340,10 @@ Deno.serve(async (req) => {
     );
 
   } catch (error) {
-    console.error('Execute trade error:', error);
+    const message = error instanceof Error ? error.message : String(error);
+    console.error('[execute-trade] UNCAUGHT:', message);
     return new Response(
-      JSON.stringify({ error: error.message || 'Internal server error' }),
+      JSON.stringify({ error: message || 'Internal server error' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
