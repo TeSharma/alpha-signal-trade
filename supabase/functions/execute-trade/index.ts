@@ -67,10 +67,7 @@ Deno.serve(async (req) => {
 
     // Validate input
     if (!signal_id || !account_mode) {
-      return new Response(
-        JSON.stringify({ error: 'Missing required fields: signal_id, account_mode' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return reject('Missing required fields: signal_id, account_mode', 400);
     }
 
     // 1. Fetch signal
@@ -78,37 +75,28 @@ Deno.serve(async (req) => {
       .from('trading_signals')
       .select('*')
       .eq('id', signal_id)
-      .single();
+      .maybeSingle();
 
-    if (signalError || !signal) {
-      return new Response(
-        JSON.stringify({ error: 'Signal not found' }),
-        { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+    if (signalError) {
+      return reject(`Could not read signal: ${signalError.message}`, 404);
+    }
+    if (!signal) {
+      return reject('Signal not found or no longer visible to your account', 404);
     }
 
     // 2. Validate signal status
     if (signal.status !== 'active') {
-      return new Response(
-        JSON.stringify({ error: `Signal is ${signal.status}, not active` }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return reject(`Signal is ${signal.status}, not active`, 400);
     }
 
     // Check if expired
     if (signal.expires_at && new Date(signal.expires_at) < new Date()) {
-      return new Response(
-        JSON.stringify({ error: 'Signal has expired' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return reject('Signal has expired — generate a fresh one', 400);
     }
 
     // 3. Check confidence threshold
     if (signal.confidence < 0.60) {
-      return new Response(
-        JSON.stringify({ error: `Signal confidence too low: ${(signal.confidence * 100).toFixed(0)}% (minimum 60%)` }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return reject(`Signal confidence too low: ${(signal.confidence * 100).toFixed(0)}% (minimum 60%)`, 400);
     }
 
     // 4. Get account balance
@@ -116,22 +104,19 @@ Deno.serve(async (req) => {
       .from('account_balances')
       .select('demo_balance, live_balance')
       .eq('user_id', userId)
-      .single();
+      .maybeSingle();
 
-    if (balanceError || !balanceData) {
-      return new Response(
-        JSON.stringify({ error: 'Account balance not found' }),
-        { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+    if (balanceError) {
+      return reject(`Could not read account balance: ${balanceError.message}`, 500);
+    }
+    if (!balanceData) {
+      return reject('Account balance not found for this user', 404);
     }
 
-    const accountBalance = account_mode === 'demo' ? balanceData.demo_balance : balanceData.live_balance;
+    const accountBalance = Number(account_mode === 'demo' ? balanceData.demo_balance : balanceData.live_balance);
 
-    if (accountBalance <= 0) {
-      return new Response(
-        JSON.stringify({ error: `Insufficient ${account_mode} balance: $${accountBalance}` }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+    if (!Number.isFinite(accountBalance) || accountBalance <= 0) {
+      return reject(`Insufficient ${account_mode} balance: $${accountBalance}`, 400);
     }
 
     // 5. Risk Engine - Max Open Positions
