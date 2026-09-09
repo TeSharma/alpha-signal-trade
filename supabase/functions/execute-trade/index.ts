@@ -287,7 +287,7 @@ Deno.serve(async (req) => {
       });
 
     if (perfError) {
-      console.error('Error creating performance record:', perfError);
+      console.error('[execute-trade] Error creating performance record:', perfError.message);
     }
 
     console.log(`[execute-trade] Trade created: ${trade.id} for signal ${signal_id} — ${signal.direction} ${signal.pair} @ ${entryPrice}`);
