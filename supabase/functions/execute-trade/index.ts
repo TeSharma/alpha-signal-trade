@@ -175,10 +175,7 @@ Deno.serve(async (req) => {
     const maxAssetExposure = accountBalance * 0.20;
 
     if (assetExposure >= maxAssetExposure) {
-      return new Response(
-        JSON.stringify({ error: `Maximum exposure for ${signal.pair} reached: $${assetExposure.toFixed(2)} (limit: $${maxAssetExposure.toFixed(2)})` }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return reject(`Maximum exposure for ${signal.pair} reached: $${assetExposure.toFixed(2)} (limit: $${maxAssetExposure.toFixed(2)})`, 400);
     }
 
     // 8. Calculate position size (multiplier-aware, mirrors DB calculate_trade_pnl)
@@ -190,10 +187,7 @@ Deno.serve(async (req) => {
     const stopDistance = Math.abs(entryPrice - stopLoss);
 
     if (stopDistance === 0) {
-      return new Response(
-        JSON.stringify({ error: 'Invalid signal: stop loss equals entry price' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return reject('Invalid signal: stop loss equals entry price', 400);
     }
 
     // Asset-class multiplier — must match public.calculate_trade_pnl
