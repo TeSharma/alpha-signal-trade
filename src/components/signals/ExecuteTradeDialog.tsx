@@ -104,7 +104,20 @@ export function ExecuteTradeDialog({ signal, open, onOpenChange, onExecuted }: E
           position_size_override: lotNum,
         },
       });
-      if (error) throw new Error(error.message || 'Execution failed');
+      if (error) {
+        // Surface the server's actual rejection reason instead of a generic message
+        let serverMessage = '';
+        const ctx = (error as any)?.context;
+        if (ctx instanceof Response) {
+          try {
+            const body = await ctx.clone().json();
+            serverMessage = body?.error || body?.message || '';
+          } catch {
+            serverMessage = await ctx.clone().text().catch(() => '');
+          }
+        }
+        throw new Error(serverMessage || error.message || 'Execution failed');
+      }
       if (data?.error) throw new Error(data.error);
 
       toast({

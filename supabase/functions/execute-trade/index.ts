@@ -41,18 +41,33 @@ Deno.serve(async (req) => {
       );
     }
 
+    // Elevated client for writes the user is not allowed to perform directly:
+    // marking an owner-less AI signal as executed, and inserting the performance row.
+    const admin = createClient(
+      Deno.env.get('SUPABASE_URL')!,
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+      { auth: { persistSession: false } }
+    );
+
     const userId = claimsData.claims.sub;
     const executionStart = Date.now();
 
     const body: ExecuteTradeRequest = await req.json();
     const { signal_id, account_mode, position_size_override } = body;
 
+    console.log(`[execute-trade] REQUEST user=${userId} signal=${signal_id} mode=${account_mode} override=${position_size_override ?? 'none'}`);
+
+    const reject = (message: string, status: number) => {
+      console.error(`[execute-trade] REJECTED (${status}): ${message}`);
+      return new Response(
+        JSON.stringify({ error: message }),
+        { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    };
+
     // Validate input
     if (!signal_id || !account_mode) {
-      return new Response(
-        JSON.stringify({ error: 'Missing required fields: signal_id, account_mode' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return reject('Missing required fields: signal_id, account_mode', 400);
     }
 
     // 1. Fetch signal
@@ -60,37 +75,28 @@ Deno.serve(async (req) => {
       .from('trading_signals')
       .select('*')
       .eq('id', signal_id)
-      .single();
+      .maybeSingle();
 
-    if (signalError || !signal) {
-      return new Response(
-        JSON.stringify({ error: 'Signal not found' }),
-        { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+    if (signalError) {
+      return reject(`Could not read signal: ${signalError.message}`, 404);
+    }
+    if (!signal) {
+      return reject('Signal not found or no longer visible to your account', 404);
     }
 
     // 2. Validate signal status
     if (signal.status !== 'active') {
-      return new Response(
-        JSON.stringify({ error: `Signal is ${signal.status}, not active` }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return reject(`Signal is ${signal.status}, not active`, 400);
     }
 
     // Check if expired
     if (signal.expires_at && new Date(signal.expires_at) < new Date()) {
-      return new Response(
-        JSON.stringify({ error: 'Signal has expired' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return reject('Signal has expired — generate a fresh one', 400);
     }
 
     // 3. Check confidence threshold
     if (signal.confidence < 0.60) {
-      return new Response(
-        JSON.stringify({ error: `Signal confidence too low: ${(signal.confidence * 100).toFixed(0)}% (minimum 60%)` }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return reject(`Signal confidence too low: ${(signal.confidence * 100).toFixed(0)}% (minimum 60%)`, 400);
     }
 
     // 4. Get account balance
@@ -98,22 +104,19 @@ Deno.serve(async (req) => {
       .from('account_balances')
       .select('demo_balance, live_balance')
       .eq('user_id', userId)
-      .single();
+      .maybeSingle();
 
-    if (balanceError || !balanceData) {
-      return new Response(
-        JSON.stringify({ error: 'Account balance not found' }),
-        { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+    if (balanceError) {
+      return reject(`Could not read account balance: ${balanceError.message}`, 500);
+    }
+    if (!balanceData) {
+      return reject('Account balance not found for this user', 404);
     }
 
-    const accountBalance = account_mode === 'demo' ? balanceData.demo_balance : balanceData.live_balance;
+    const accountBalance = Number(account_mode === 'demo' ? balanceData.demo_balance : balanceData.live_balance);
 
-    if (accountBalance <= 0) {
-      return new Response(
-        JSON.stringify({ error: `Insufficient ${account_mode} balance: $${accountBalance}` }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+    if (!Number.isFinite(accountBalance) || accountBalance <= 0) {
+      return reject(`Insufficient ${account_mode} balance: $${accountBalance}`, 400);
     }
 
     // 5. Risk Engine - Max Open Positions
@@ -129,10 +132,7 @@ Deno.serve(async (req) => {
     }
 
     if ((openPositions || 0) >= 5) {
-      return new Response(
-        JSON.stringify({ error: 'Maximum 5 open positions reached. Close some positions first.' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return reject('Maximum 5 open positions reached. Close some positions first.', 400);
     }
 
     // 6. Risk Engine - Daily Loss Limit
@@ -155,10 +155,7 @@ Deno.serve(async (req) => {
     const dailyLossLimit = accountBalance * -0.03;
 
     if (todayPnl <= dailyLossLimit) {
-      return new Response(
-        JSON.stringify({ error: `Daily loss limit reached: -$${Math.abs(todayPnl).toFixed(2)} (limit: -$${Math.abs(dailyLossLimit).toFixed(2)})` }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return reject(`Daily loss limit reached: -$${Math.abs(todayPnl).toFixed(2)} (limit: -$${Math.abs(dailyLossLimit).toFixed(2)})`, 400);
     }
 
     // 7. Risk Engine - Asset Exposure
@@ -178,10 +175,7 @@ Deno.serve(async (req) => {
     const maxAssetExposure = accountBalance * 0.20;
 
     if (assetExposure >= maxAssetExposure) {
-      return new Response(
-        JSON.stringify({ error: `Maximum exposure for ${signal.pair} reached: $${assetExposure.toFixed(2)} (limit: $${maxAssetExposure.toFixed(2)})` }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return reject(`Maximum exposure for ${signal.pair} reached: $${assetExposure.toFixed(2)} (limit: $${maxAssetExposure.toFixed(2)})`, 400);
     }
 
     // 8. Calculate position size (multiplier-aware, mirrors DB calculate_trade_pnl)
@@ -193,10 +187,7 @@ Deno.serve(async (req) => {
     const stopDistance = Math.abs(entryPrice - stopLoss);
 
     if (stopDistance === 0) {
-      return new Response(
-        JSON.stringify({ error: 'Invalid signal: stop loss equals entry price' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return reject('Invalid signal: stop loss equals entry price', 400);
     }
 
     // Asset-class multiplier — must match public.calculate_trade_pnl
@@ -227,10 +218,7 @@ Deno.serve(async (req) => {
     positionSize = Math.floor(positionSize * 10000) / 10000;
 
     if (positionSize <= 0) {
-      return new Response(
-        JSON.stringify({ error: 'Calculated position size is too small to execute' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return reject('Calculated position size is too small to execute', 400);
     }
 
     // 9. Create trade record
@@ -240,13 +228,18 @@ Deno.serve(async (req) => {
 
     const executionLatency = Date.now() - executionStart;
 
+    // Signals may store direction as LONG/SHORT (AI) or buy/sell (DB) — normalize both.
+    const rawDirection = String(signal.direction ?? '').toLowerCase();
+    const isLong = rawDirection === 'long' || rawDirection === 'buy';
+    const tradeDirection = isLong ? 'buy' : 'sell';
+
     const { data: trade, error: tradeError } = await supabase
       .from('trades')
       .insert({
         user_id: userId,
         signal_id: signal_id,
         pair: signal.pair,
-        direction: signal.direction === 'LONG' ? 'buy' : 'sell',
+        direction: tradeDirection,
         entry_price: entryPrice,
         execution_price: entryPrice, // In real system, would be actual execution price
         lot_size: positionSize,
@@ -261,33 +254,29 @@ Deno.serve(async (req) => {
       .single();
 
     if (tradeError) {
-      console.error('Error creating trade:', tradeError);
-      return new Response(
-        JSON.stringify({ error: 'Failed to create trade', details: tradeError.message }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return reject(`Failed to create trade: ${tradeError.message}`, 500);
     }
 
-    // 10. Update signal status to 'executed'
-    const { error: updateError } = await supabase
+    // 10. Update signal status to 'executed' (elevated: public AI signals have no owner)
+    const { error: updateError } = await admin
       .from('trading_signals')
       .update({ status: 'executed' })
       .eq('id', signal_id);
 
     if (updateError) {
-      console.error('Error updating signal status:', updateError);
+      console.error('[execute-trade] Error updating signal status:', updateError.message);
     }
 
     // 11. Create performance tracking record
     const entryZoneLow = Array.isArray(signal.entry_zone) && signal.entry_zone.length >= 2 ? signal.entry_zone[0] : entryPrice;
     const entryZoneHigh = Array.isArray(signal.entry_zone) && signal.entry_zone.length >= 2 ? signal.entry_zone[1] : entryPrice;
 
-    const { error: perfError } = await supabase
+    const { error: perfError } = await admin
       .from('signal_performance')
       .insert({
         signal_id: signal_id,
         pair: signal.pair,
-        direction: signal.direction,
+        direction: tradeDirection,
         entry_price: entryPrice,
         entry_zone_low: entryZoneLow,
         entry_zone_high: entryZoneHigh,
@@ -298,7 +287,7 @@ Deno.serve(async (req) => {
       });
 
     if (perfError) {
-      console.error('Error creating performance record:', perfError);
+      console.error('[execute-trade] Error creating performance record:', perfError.message);
     }
 
     console.log(`[execute-trade] Trade created: ${trade.id} for signal ${signal_id} — ${signal.direction} ${signal.pair} @ ${entryPrice}`);
@@ -351,9 +340,10 @@ Deno.serve(async (req) => {
     );
 
   } catch (error) {
-    console.error('Execute trade error:', error);
+    const message = error instanceof Error ? error.message : String(error);
+    console.error('[execute-trade] UNCAUGHT:', message);
     return new Response(
-      JSON.stringify({ error: error.message || 'Internal server error' }),
+      JSON.stringify({ error: message || 'Internal server error' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
