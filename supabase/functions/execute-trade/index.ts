@@ -155,10 +155,7 @@ Deno.serve(async (req) => {
     const dailyLossLimit = accountBalance * -0.03;
 
     if (todayPnl <= dailyLossLimit) {
-      return new Response(
-        JSON.stringify({ error: `Daily loss limit reached: -$${Math.abs(todayPnl).toFixed(2)} (limit: -$${Math.abs(dailyLossLimit).toFixed(2)})` }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return reject(`Daily loss limit reached: -$${Math.abs(todayPnl).toFixed(2)} (limit: -$${Math.abs(dailyLossLimit).toFixed(2)})`, 400);
     }
 
     // 7. Risk Engine - Asset Exposure
