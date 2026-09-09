@@ -157,6 +157,29 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
       const response = await checkAISignal(selectedPair, tradeDirection)
       setSignalResponse(response)
 
+      let txHash: string | null = null
+
+      if (accountMode === 'live') {
+        // Execute on-chain FIRST — never record a live trade that has no confirmed transaction
+        txHash = await openOnChainPositionV2({
+          pair: selectedPair,
+          direction: tradeDirection,
+          margin: lotSize,
+          leverage: leverage
+        })
+
+        if (!txHash) {
+          toast({
+            title: 'Trade Not Executed',
+            description: 'The on-chain transaction was not confirmed. Nothing was recorded.',
+            variant: 'destructive'
+          })
+          return
+        }
+
+        getCollateralBalance().then(setCollateralBalance)
+      }
+
       const tradeResult = await createTrade({
         pair: selectedPair,
         direction: tradeDirection,
@@ -164,20 +187,9 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
         entry_price: executionPrice,
         stop_loss: stopLoss ? parseFloat(stopLoss) : undefined,
         take_profit: takeProfit ? parseFloat(takeProfit) : undefined,
-        account_mode: accountMode
+        account_mode: accountMode,
+        transaction_hash: txHash ?? undefined
       })
-
-      if (accountMode === 'live' && tradeResult) {
-        const txHash = await openOnChainPositionV2({
-          pair: selectedPair,
-          direction: tradeDirection,
-          margin: lotSize,
-          leverage: leverage
-        });
-        if (txHash) {
-          getCollateralBalance().then(setCollateralBalance);
-        }
-      }
 
       if (tradeResult) {
         setLotSize('0.1')
@@ -185,6 +197,7 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
         setTakeProfit('')
         setLimitPrice('')
       }
+
     } catch (error: any) {
       console.error('Error submitting trade:', error)
       const errorMessage = error?.message || 'Transaction failed';
