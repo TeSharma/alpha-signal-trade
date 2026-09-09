@@ -10,7 +10,6 @@ import { MarketDataProvider } from "@/contexts/MarketDataContext";
 import Index from "./pages/Index";
 import Login from "./pages/Login";
 import NetworkGuard from "./components/layout/NetworkGuard";
-import ZendeskWidget from "./components/support/ZendeskWidget";
 import { AdminRoute } from "./components/auth/AdminRoute";
 
 const Dashboard = lazy(() => import("./pages/Dashboard"));
@@ -26,6 +25,8 @@ const UpdatePassword = lazy(() => import("./pages/UpdatePassword"));
 const VerifyEmail = lazy(() => import("./pages/VerifyEmail"));
 const SeoMonitor = lazy(() => import("./pages/SeoMonitor"));
 const NotFound = lazy(() => import("./pages/NotFound"));
+import ZendeskWidget from "./components/support/ZendeskWidget";
+
 
 const queryClient = new QueryClient();
 
@@ -48,7 +49,6 @@ const App = () => (
         <Sonner />
         <BrowserRouter>
           <NetworkGuard />
-          <ZendeskWidget />
           <Suspense fallback={<RouteFallback />}>
             <Routes>
               <Route path="/" element={<Index />} />
@@ -89,6 +89,52 @@ const App = () => (
               <Route path="*" element={<NotFound />} />
             </Routes>
           </Suspense>
+        <NetworkGuard />
+        <ZendeskWidget />
+        <Routes>
+          <Route path="/" element={<Index />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/dashboard" element={
+            <AuthGuard>
+              <Dashboard />
+            </AuthGuard>
+          } />
+          <Route path="/trade" element={
+            <AuthGuard>
+              <Trade />
+            </AuthGuard>
+          } />
+          <Route path="/signals" element={
+            <AuthGuard>
+              <Signals />
+            </AuthGuard>
+          } />
+          <Route path="/community" element={
+            <AuthGuard>
+              <Community />
+            </AuthGuard>
+          } />
+          <Route path="/education" element={
+            <AuthGuard>
+              <Education />
+            </AuthGuard>
+          } />
+          <Route path="/account" element={
+            <AuthGuard>
+              <Account />
+            </AuthGuard>
+          } />
+          <Route path="/wallet" element={
+            <AuthGuard>
+              <Wallet />
+            </AuthGuard>
+          } />
+          <Route path="/signup" element={<Signup />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/update-password" element={<UpdatePassword />} />
+          <Route path="/verify-email" element={<VerifyEmail />} />
+          <Route path="*" element={<NotFound />} />
+        </Routes>
         </BrowserRouter>
       </AppProvider>
     </TooltipProvider>
