@@ -3,21 +3,26 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Wallet, RefreshCw, AlertTriangle, CheckCircle } from "lucide-react";
-import { useWallet } from "@/hooks/useWallet";
+import { useUnifiedWallet } from "@/wallet";
 import { useNetworkEnforcement } from "@/hooks/useNetworkEnforcement";
 
 const WalletStatus = () => {
-  const { 
-    isConnected, 
-    account, 
-    balance, 
-    chainId, 
-    isConnecting, 
+  const {
+    connected: isConnected,
+    address: account,
+    balance,
+    chainId,
+    isConnecting,
     error,
-    connectWallet, 
-    disconnectWallet, 
-    refreshBalance 
-  } = useWallet();
+    connectInjected,
+    connectEmbedded,
+    disconnectWallet: _unused,
+    disconnect,
+    refreshBalance,
+    source,
+  } = useUnifiedWallet() as ReturnType<typeof useUnifiedWallet> & { disconnectWallet?: unknown };
+  const connectWallet = connectInjected;
+  const disconnectWallet = disconnect;
   const { isCorrectNetwork, networkName, switchToAmoy } = useNetworkEnforcement();
 
   const getNetworkName = (chainId: number | null) => {
@@ -88,13 +93,22 @@ const WalletStatus = () => {
           <p className="text-sm text-muted-foreground">
             Connect your wallet to start trading with real funds.
           </p>
-          <Button 
-            onClick={connectWallet} 
+          <Button
+            onClick={connectWallet}
             disabled={isConnecting}
             className="w-full"
           >
             <Wallet className="h-4 w-4 mr-2" />
-            {isConnecting ? 'Connecting...' : 'Connect Wallet'}
+            {isConnecting ? 'Connecting...' : 'Connect MetaMask'}
+          </Button>
+          <Button
+            variant="outline"
+            onClick={connectEmbedded}
+            disabled={isConnecting}
+            className="w-full"
+          >
+            <Wallet className="h-4 w-4 mr-2" />
+            Create / Connect Embedded Wallet
           </Button>
         </CardContent>
       </Card>
@@ -135,6 +149,13 @@ const WalletStatus = () => {
             <span className="text-sm text-muted-foreground">Network:</span>
             <Badge variant={isCorrectNetwork ? "outline" : "destructive"} className="text-xs">
               {getNetworkName(chainId)}
+            </Badge>
+          </div>
+
+          <div className="flex justify-between items-center">
+            <span className="text-sm text-muted-foreground">Wallet type:</span>
+            <Badge variant="outline" className="text-xs">
+              {source === 'embedded' ? 'Embedded (Privy)' : 'MetaMask'}
             </Badge>
           </div>
 

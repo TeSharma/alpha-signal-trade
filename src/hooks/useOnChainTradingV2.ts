@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import Web3 from 'web3';
 import { useToast } from '@/hooks/use-toast';
+import { useUnifiedWallet } from '@/wallet';
 import { CONTRACT_ADDRESSES, FEE_CONFIG, AMOY_RPC_URL, POLYGON_RPC_URL, getRequiredChainHex, getContractAddresses, getNetworkName, type AccountMode } from '@/config/contracts';
 import { getMarketsForMode } from '@/config/markets';
 
@@ -293,6 +294,13 @@ export const useOnChainTradingV2 = (accountMode: AccountMode = 'demo') => {
   const [isLoading, setIsLoading] = useState(false);
   const [approvalPending, setApprovalPending] = useState(false);
   const { toast } = useToast();
+  const {
+    provider: unifiedProvider,
+    address: unifiedAddress,
+    chainId: unifiedChainId,
+    connected: unifiedConnected,
+    switchNetwork: unifiedSwitchNetwork,
+  } = useUnifiedWallet();
 
   // Mode-aware configuration
   const RPC_ENDPOINTS = getRpcEndpoints(accountMode);
@@ -311,28 +319,34 @@ export const useOnChainTradingV2 = (accountMode: AccountMode = 'demo') => {
     PAIR_IDS[pair] = web3Static.utils.keccak256(pair);
   });
 
-  // Enforce correct chain before write operations
+  // Enforce correct chain before write operations.
+  // Uses the unified wallet (embedded Privy or injected MetaMask) instead of
+  // window.ethereum directly. Read-only contract reads bypass this.
   const enforceNetwork = async (): Promise<boolean> => {
-    if (!window.ethereum) return false;
+    if (!unifiedConnected) return false;
+    if (unifiedChainId == null) return false;
+    const want = parseInt(requiredChainHex, 16);
+    if (unifiedChainId === want) return true;
     try {
-      const chainId: string = await window.ethereum.request({ method: 'eth_chainId' });
-      return chainId === requiredChainHex;
+      await unifiedSwitchNetwork(want);
+      return true;
     } catch {
       return false;
     }
   };
 
   const getWeb3AndAccount = useCallback(async () => {
-    if (typeof window.ethereum === 'undefined') {
-      throw new Error('MetaMask not installed');
+    if (!unifiedConnected || !unifiedProvider) {
+      throw new Error('Wallet not connected');
     }
-    const web3 = new Web3(window.ethereum);
+    const web3 = new Web3(unifiedProvider);
     const accounts = await web3.eth.requestAccounts();
-    if (!accounts || accounts.length === 0) {
+    const account = (accounts && accounts[0]) || unifiedAddress;
+    if (!account) {
       throw new Error('No accounts found');
     }
-    return { web3, account: accounts[0] };
-  }, []);
+    return { web3, account };
+  }, [unifiedConnected, unifiedProvider, unifiedAddress]);
 
   // Get read-only web3 with public RPC (with fallback support)
   const getReadOnlyWeb3 = useCallback((rpcIndex: number = 0) => {

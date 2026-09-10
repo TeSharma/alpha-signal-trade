@@ -1,17 +1,25 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Button } from "@/components/ui/button";
-import { Wallet, RefreshCw, ExternalLink } from "lucide-react";
-import { useWallet } from "@/hooks/useWallet";
+import { Wallet, RefreshCw, ExternalLink, Sparkles } from "lucide-react";
+import { useUnifiedWallet } from "@/wallet";
+import { usePrivy } from '@privy-io/react-auth';
 import { useTronWallet } from "@/hooks/useTronWallet";
+import { useWalletLinkage } from "@/wallet/useWalletLinkage";
 
 const PUBLISHED_URL = "https://alpha-signal-trade.lovable.app";
 
 export const WalletConnectButton = () => {
   const {
-    isConnected: ethConnected,
+    connected: ethConnected,
     isConnecting: ethConnecting,
-    connectWallet: connectEth,
-  } = useWallet();
+    connectEmbedded,
+    connectInjected,
+    address,
+    source,
+    chainId,
+    error,
+  } = useUnifiedWallet();
+  const { ready: privyReady, authenticated: privyAuthenticated, login: privyLogin } = usePrivy();
 
   const {
     isConnected: tronConnected,
@@ -24,13 +32,27 @@ export const WalletConnectButton = () => {
 
   const inIframe = typeof window !== 'undefined' && window.self !== window.top;
 
+  // Link the active EVM wallet to the Supabase user (owner-only RLS).
+  const { linkCurrent } = useWalletLinkage(address, source, chainId);
+  useEffect(() => {
+    if (ethConnected && address) linkCurrent();
+  }, [ethConnected, address, linkCurrent]);
+
+  const handleEmbedded = async () => {
+    // Privy login creates/recovers the non-custodial embedded wallet.
+    if (privyReady && !privyAuthenticated) {
+      await privyLogin();
+      return;
+    }
+    await connectEmbedded();
+  };
+
   const handleConnect = () => {
-    if (window.ethereum) {
-      connectEth();
-    } else if (window.tronWeb) {
-      connectTron();
+    // Prefer embedded; MetaMask stays available via the secondary button.
+    if (!window.ethereum) {
+      handleEmbedded();
     } else {
-      alert('Please install MetaMask or TronLink to connect your wallet');
+      connectInjected();
     }
   };
 
@@ -49,6 +71,25 @@ export const WalletConnectButton = () => {
         variant="outline"
         className="w-full"
         size="sm"
+        onClick={handleEmbedded}
+        disabled={isAnyConnecting || !privyReady}
+      >
+        {isAnyConnecting ? (
+          <>
+            <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+            Connecting...
+          </>
+        ) : (
+          <>
+            <Sparkles className="h-4 w-4 mr-2" />
+            Create / Connect Embedded Wallet
+          </>
+        )}
+      </Button>
+      <Button
+        variant="outline"
+        className="w-full"
+        size="sm"
         onClick={handleConnect}
         disabled={isAnyConnecting}
       >
@@ -60,10 +101,11 @@ export const WalletConnectButton = () => {
         ) : (
           <>
             <Wallet className="h-4 w-4 mr-2" />
-            Connect Wallet
+            Connect MetaMask
           </>
         )}
       </Button>
+      {error && <p className="text-[11px] text-destructive leading-snug">{error}</p>}
       {inIframe && (
         <p className="text-[11px] text-muted-foreground leading-snug">
           Wallets work best on the{' '}

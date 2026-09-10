@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { getRequiredChainId, getRequiredChainHex, getNetworkParams, getNetworkName, type AccountMode } from '@/config/contracts';
+import { useUnifiedWallet } from '@/wallet';
 
 const NETWORK_NAMES: Record<number, string> = {
   1: 'Ethereum Mainnet',
@@ -11,6 +12,7 @@ const NETWORK_NAMES: Record<number, string> = {
 };
 
 export const useNetworkEnforcement = (accountMode: AccountMode = 'demo') => {
+  const { chainId, connected, provider, switchNetwork } = useUnifiedWallet();
   const [currentChainId, setCurrentChainId] = useState<number | null>(null);
   const [isWalletConnected, setIsWalletConnected] = useState(false);
 
@@ -19,42 +21,27 @@ export const useNetworkEnforcement = (accountMode: AccountMode = 'demo') => {
   const networkName = currentChainId ? (NETWORK_NAMES[currentChainId] || `Chain ${currentChainId}`) : 'Unknown';
   const requiredNetworkName = getNetworkName(accountMode);
 
-  // Read chain ID and wallet connection state
+  // Read chain ID and wallet connection state from the unified wallet
+  // (embedded Privy or injected MetaMask). No direct window.ethereum reads.
   const detectNetwork = useCallback(async () => {
-    if (typeof window === 'undefined' || !window.ethereum) {
-      setIsWalletConnected(false);
-      setCurrentChainId(null);
-      return;
-    }
-
-    try {
-      const accounts: string[] = await window.ethereum.request({ method: 'eth_accounts' });
-      setIsWalletConnected(accounts.length > 0);
-
-      const chainIdHex: string = await window.ethereum.request({ method: 'eth_chainId' });
-      setCurrentChainId(parseInt(chainIdHex, 16));
-    } catch (err) {
-      console.error('Network detection error:', err);
-    }
-  }, []);
+    setIsWalletConnected(connected);
+    setCurrentChainId(chainId);
+  }, [connected, chainId]);
 
   // Switch to the required network for the current mode
   const switchToRequiredNetwork = useCallback(async () => {
-    if (!window.ethereum) return;
-
     const targetChainHex = getRequiredChainHex(accountMode);
     const targetParams = getNetworkParams(accountMode);
+    const targetChainId = parseInt(targetChainHex, 16);
 
     try {
-      await window.ethereum.request({
-        method: 'wallet_switchEthereumChain',
-        params: [{ chainId: targetChainHex }],
-      });
+      await switchNetwork(targetChainId);
     } catch (err: any) {
-      // 4902 = chain not added to wallet
-      if (err.code === 4902) {
+      // 4902 = chain not added to wallet (injected wallets only; embedded
+      // wallets switch programmatically without this path)
+      if (err?.code === 4902 && provider?.request) {
         try {
-          await window.ethereum.request({
+          await provider.request({
             method: 'wallet_addEthereumChain',
             params: [targetParams],
           });
@@ -65,31 +52,13 @@ export const useNetworkEnforcement = (accountMode: AccountMode = 'demo') => {
         console.error('Failed to switch network:', err);
       }
     }
-  }, [accountMode, requiredNetworkName]);
+  }, [accountMode, requiredNetworkName, provider, switchNetwork]);
 
   // Backward-compatible alias
   const switchToAmoy = switchToRequiredNetwork;
 
   useEffect(() => {
     detectNetwork();
-
-    if (typeof window !== 'undefined' && window.ethereum) {
-      const handleChainChanged = (chainIdHex: string) => {
-        setCurrentChainId(parseInt(chainIdHex, 16));
-      };
-      const handleAccountsChanged = (accounts: string[]) => {
-        setIsWalletConnected(accounts.length > 0);
-        if (accounts.length > 0) detectNetwork();
-      };
-
-      window.ethereum.on('chainChanged', handleChainChanged);
-      window.ethereum.on('accountsChanged', handleAccountsChanged);
-
-      return () => {
-        window.ethereum?.removeListener('chainChanged', handleChainChanged);
-        window.ethereum?.removeListener('accountsChanged', handleAccountsChanged);
-      };
-    }
   }, [detectNetwork]);
 
   return {

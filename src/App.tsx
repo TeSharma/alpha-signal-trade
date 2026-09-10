@@ -26,6 +26,7 @@ const VerifyEmail = lazy(() => import("./pages/VerifyEmail"));
 const SeoMonitor = lazy(() => import("./pages/SeoMonitor"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 import ZendeskWidget from "./components/support/ZendeskWidget";
+import { PrivyWalletProvider, WalletProvider } from "./wallet";
 
 
 const queryClient = new QueryClient();
@@ -45,9 +46,11 @@ const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <AppProvider>
-        <Toaster />
-        <Sonner />
-        <BrowserRouter>
+        <PrivyWalletProvider>
+          <WalletProvider>
+            <Toaster />
+            <Sonner />
+            <BrowserRouter>
           <NetworkGuard />
           <ZendeskWidget />
           <Suspense fallback={<RouteFallback />}>
@@ -90,7 +93,9 @@ const App = () => (
               <Route path="*" element={<NotFound />} />
             </Routes>
           </Suspense>
-        </BrowserRouter>
+          </BrowserRouter>
+          </WalletProvider>
+        </PrivyWalletProvider>
       </AppProvider>
     </TooltipProvider>
   </QueryClientProvider>
