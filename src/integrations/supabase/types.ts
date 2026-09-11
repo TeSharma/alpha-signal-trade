@@ -881,6 +881,39 @@ export type Database = {
         }
         Relationships: []
       }
+      user_wallets: {
+        Row: {
+          address: string
+          chain_id: number | null
+          created_at: string
+          id: string
+          is_primary: boolean
+          source: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          address: string
+          chain_id?: number | null
+          created_at?: string
+          id?: string
+          is_primary?: boolean
+          source: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          address?: string
+          chain_id?: number | null
+          created_at?: string
+          id?: string
+          is_primary?: boolean
+          source?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       withdrawals: {
         Row: {
           amount: number
