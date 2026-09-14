@@ -290,10 +290,10 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
           </div>
           <p className="text-xs text-muted-foreground">
             {accountMode === 'demo'
-              ? 'Demo: trade any pair off-chain. Live: crypto only (Chainlink-backed).'
-              : 'Live execution: crypto pairs settled on-chain via Chainlink oracle.'}
+              ? 'Demo: trade any pair off-chain. Live: 7 Chainlink-backed markets (crypto, forex, gold).'
+              : 'Live execution: settled on-chain via Chainlink oracle.'}
           </p>
-          {accountMode === 'demo' && isSignalMarket(selectedPair) && !isForexMarketOpen() && (
+          {accountMode === 'demo' && isSignalMarket(selectedPair, 'demo') && !isForexMarketOpen() && (
             <div className="flex items-center gap-2 text-xs text-amber-600 bg-amber-50 dark:bg-amber-950/30 p-2 rounded">
               <AlertTriangle className="h-3 w-3" />
               Forex market is closed (weekend). Trade resumes Sunday ~22:00 UTC.
@@ -530,7 +530,7 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
           className="w-full" 
           size="lg"
           onClick={handleSubmitTrade}
-          disabled={isLoadingSignal || isSubmitting || onChainLoading || approvalPending || (accountMode === 'live' && (!isCorrectNetwork || !oracleHealthy)) || (accountMode === 'demo' && isSignalMarket(selectedPair) && !isForexMarketOpen())}
+          disabled={isLoadingSignal || isSubmitting || onChainLoading || approvalPending || (accountMode === 'live' && (!isCorrectNetwork || !oracleHealthy)) || (accountMode === 'demo' && isSignalMarket(selectedPair, 'demo') && !isForexMarketOpen())}
         >
           {approvalPending ? (
             <span className="flex items-center">

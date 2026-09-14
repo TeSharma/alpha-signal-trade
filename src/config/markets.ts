@@ -25,12 +25,12 @@ export const V1_SIGNAL_MARKETS = ['EUR/USD', 'GBP/USD', 'USD/JPY', 'XAU/USD', 'A
 export type V1SignalPair = typeof V1_SIGNAL_MARKETS[number];
 
 // ─── LIVE ON-CHAIN FOREX/METAL MARKETS ───────────────────────────────────
-// Verified on-chain 2026-09-14 against PriceOracleV2 on Polygon mainnet:
-// only BTC/USD, ETH/USD and POL/USD have registered feeds. EUR/USD, GBP/USD,
-// AUD/USD and XAU/USD return hasFeed=false, so they stay signal-only until the
-// feeds are registered on the oracle. JPY/CHF/NZD/CAD feeds are additionally
-// quoted inverted vs. our naming.
-export const V1_MAINNET_FOREX_MARKETS = [] as const;
+// Registered on PriceOracleV2 (0xf61E4881F363b30384DFbcf1C72845CcE94d4f9f) on
+// Polygon mainnet in tx 0xd7258e6ff9aa244abe82257f9120dc02e7f2454b743e3830fe9d0d62fa2e730f
+// and verified on-chain 2026-09-14: all seven pairs return hasFeed=true with
+// positive, fresh prices. USD/JPY, USD/CHF, NZD/USD and USD/CAD remain
+// signal-only — their Chainlink feeds are quoted inverted vs. our naming.
+export const V1_MAINNET_FOREX_MARKETS = ['EUR/USD', 'GBP/USD', 'AUD/USD', 'XAU/USD'] as const;
 
 // Combined metadata for all v1 markets
 export const MARKET_METADATA: Record<string, MarketMeta> = {
@@ -38,24 +38,31 @@ export const MARKET_METADATA: Record<string, MarketMeta> = {
   'BTC/USD':   { symbol: 'BTC',   icon: '₿', decimals: 2, layer: 'on-chain', network: 'mainnet-only', binanceSymbol: 'btcusdt' },
   'ETH/USD':   { symbol: 'ETH',   icon: 'Ξ', decimals: 2, layer: 'on-chain', network: 'mainnet-only', binanceSymbol: 'ethusdt' },
   'POL/USD':   { symbol: 'POL',   icon: '⬡', decimals: 4, layer: 'on-chain', network: 'all', binanceSymbol: 'polusdt' },
-  // Forex / metals — AI signals only (no registered Chainlink feed on the oracle yet)
-  'EUR/USD':   { symbol: 'EUR',   icon: '€', decimals: 5, layer: 'signal', network: 'all', description: 'AI Signals Only' },
-  'GBP/USD':   { symbol: 'GBP',   icon: '£', decimals: 5, layer: 'signal', network: 'all', description: 'AI Signals Only' },
-  'AUD/USD':   { symbol: 'AUD',   icon: 'A$', decimals: 5, layer: 'signal', network: 'all', description: 'AI Signals Only' },
-  'XAU/USD':   { symbol: 'XAU',   icon: '🥇', decimals: 2, layer: 'signal', network: 'all', description: 'Gold — AI Signals Only' },
+  // Forex / metals — Chainlink feeds registered on mainnet (on-chain in live mode)
+  'EUR/USD':   { symbol: 'EUR',   icon: '€', decimals: 5, layer: 'on-chain', network: 'mainnet-only' },
+  'GBP/USD':   { symbol: 'GBP',   icon: '£', decimals: 5, layer: 'on-chain', network: 'mainnet-only' },
+  'AUD/USD':   { symbol: 'AUD',   icon: 'A$', decimals: 5, layer: 'on-chain', network: 'mainnet-only' },
+  'XAU/USD':   { symbol: 'XAU',   icon: '🥇', decimals: 2, layer: 'on-chain', network: 'mainnet-only', description: 'Gold' },
+  // No registered Chainlink feed in our quote direction — AI signals only
   'USD/JPY':   { symbol: 'JPY',   icon: '¥', decimals: 3, layer: 'signal', network: 'all', description: 'AI Signals Only' },
 };
 
+
 // ─── Helpers ──────────────────────────────────────────────────────────────
 
-export const isTradingMarket = (pair: string): boolean =>
-  (V1_TRADING_MARKETS as readonly string[]).includes(pair);
+// Mode-aware: in live mode the four registered forex/metal feeds are on-chain
+// tradable markets; in demo mode they settle off-chain as before.
+export const isTradingMarket = (pair: string, mode: 'demo' | 'live' = 'live'): boolean =>
+  (V1_TRADING_MARKETS as readonly string[]).includes(pair) ||
+  (mode === 'live' && (V1_MAINNET_FOREX_MARKETS as readonly string[]).includes(pair));
 
-export const isSignalMarket = (pair: string): boolean =>
-  (V1_SIGNAL_MARKETS as readonly string[]).includes(pair);
+export const isSignalMarket = (pair: string, mode: 'demo' | 'live' = 'demo'): boolean =>
+  (V1_SIGNAL_MARKETS as readonly string[]).includes(pair) &&
+  !(mode === 'live' && (V1_MAINNET_FOREX_MARKETS as readonly string[]).includes(pair));
 
 export const getMarketMeta = (pair: string): MarketMeta | undefined =>
   MARKET_METADATA[pair];
+
 
 export const getAmoyTradingMarkets = (): string[] => [...V1_AMOY_MARKETS];
 export const getMainnetTradingMarkets = (): string[] => [...V1_MAINNET_MARKETS];
