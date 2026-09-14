@@ -16,6 +16,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import type { SignalObject } from '@/types/signal';
 import { getAssetMultiplier } from '@/lib/pnl';
+import { computeSignalSizing, getPipSize, DEMO_LEVERAGE, RISK_PERCENT } from '@/lib/riskEngine';
 
 interface ExecuteTradeDialogProps {
   signal: SignalObject | null;
