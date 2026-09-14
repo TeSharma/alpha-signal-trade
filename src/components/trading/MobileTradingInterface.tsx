@@ -18,7 +18,7 @@ import { useNetworkEnforcement } from '@/hooks/useNetworkEnforcement';
 import { getMinimums, isMainnet, FEE_CONFIG, calculateOpenFee, getNetworkName } from '@/config/contracts';
 import { getMarketsForMode, MARKET_METADATA, formatPrice } from '@/config/markets';
 import { useUnifiedWallet } from '@/wallet';
-import { computeRiskPlan, validateStops, RISK_PERCENT } from '@/lib/riskEngine';
+import { computeRiskPlan, validateStops, validateEnteredSize, RISK_PERCENT, DEMO_LEVERAGE } from '@/lib/riskEngine';
 
 interface MobileTradingInterfaceProps {
   accountMode: 'demo' | 'live';
@@ -85,7 +85,7 @@ const MobileTradingInterface = ({ accountMode }: MobileTradingInterfaceProps) =>
     : parseFloat(collateralBalance) || 0;
   const slNum = stopLoss ? parseFloat(stopLoss) : null;
   const tpNum = takeProfit ? parseFloat(takeProfit) : null;
-  const stopValidation = validateStops(tradeDirection, entryPrice, slNum, tpNum);
+  const stopValidation = validateStops(tradeDirection, entryPrice, slNum, tpNum, selectedPair);
   const riskPlan = computeRiskPlan(
     {
       pair: selectedPair,
@@ -102,6 +102,17 @@ const MobileTradingInterface = ({ accountMode }: MobileTradingInterfaceProps) =>
   const overRiskLimit =
     riskPlan.potentialLoss != null && riskCapital > 0 && riskPlan.potentialLoss > riskPlan.riskAmount;
 
+  // Manually typed sizes go through exactly the same checks as the suggested size.
+  const sizeValidation = validateEnteredSize({
+    pair: selectedPair,
+    entryPrice,
+    stopLoss: stopValidation.stopLossError ? null : slNum,
+    capital: riskCapital,
+    leverage: accountMode === 'live' ? leverage : DEMO_LEVERAGE,
+    mode: accountMode,
+    enteredSize: parseFloat(lotSize) || 0,
+  });
+
   const handleSubmitTrade = async () => {
     if (isSubmitting) return;
     setIsSubmitting(true);
@@ -117,6 +128,15 @@ const MobileTradingInterface = ({ accountMode }: MobileTradingInterfaceProps) =>
         toast({
           title: 'Invalid Stop Loss / Take Profit',
           description: stopValidation.stopLossError || stopValidation.takeProfitError || '',
+          variant: 'destructive'
+        });
+        return;
+      }
+
+      if (sizeValidation.error) {
+        toast({
+          title: accountMode === 'live' ? 'Margin Not Allowed' : 'Position Size Not Allowed',
+          description: sizeValidation.error,
           variant: 'destructive'
         });
         return;
@@ -344,7 +364,18 @@ const MobileTradingInterface = ({ accountMode }: MobileTradingInterfaceProps) =>
               placeholder={accountMode === 'live' ? '10' : '0.1'}
               step={accountMode === 'live' ? '1' : '0.01'}
               min={accountMode === 'live' ? '1' : '0.01'}
+              aria-invalid={!!sizeValidation.error}
             />
+            {sizeValidation.error ? (
+              <p className="text-xs text-destructive">{sizeValidation.error}</p>
+            ) : sizeValidation.warning ? (
+              <p className="text-xs text-amber-600">{sizeValidation.warning}</p>
+            ) : null}
+            {sizeValidation.error && (
+              <Button variant="outline" size="sm" onClick={calculateLotSize}>
+                Use suggested size
+              </Button>
+            )}
           </div>
 
           {/* Leverage (Live mode only) */}
@@ -516,7 +547,7 @@ const MobileTradingInterface = ({ accountMode }: MobileTradingInterfaceProps) =>
           className="w-full h-12 text-lg font-semibold" 
           size="lg"
           onClick={handleSubmitTrade}
-          disabled={isSubmitting || onChainLoading || approvalPending || !stopValidation.valid || (accountMode === 'live' && (!isCorrectNetwork || !oracleHealthy))}
+          disabled={isSubmitting || onChainLoading || approvalPending || !stopValidation.valid || !!sizeValidation.error || (accountMode === 'live' && (!isCorrectNetwork || !oracleHealthy))}
         >
           {approvalPending ? (
             <span className="flex items-center">

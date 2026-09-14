@@ -18,7 +18,7 @@ import { isForexMarketOpen } from '@/lib/marketHours'
 import { useLocation } from 'react-router-dom'
 import { useUnifiedWallet } from '@/wallet'
 import type { SignalObject } from '@/types/signal'
-import { computeRiskPlan, validateStops, RISK_PERCENT } from '@/lib/riskEngine'
+import { computeRiskPlan, validateStops, validateEnteredSize, RISK_PERCENT, DEMO_LEVERAGE } from '@/lib/riskEngine'
 import { getAssetMultiplier } from '@/lib/pnl'
 
 interface TradingFormProps {
@@ -122,7 +122,7 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
   const tpNum = takeProfit ? parseFloat(takeProfit) : null
   const enteredSize = parseFloat(lotSize) || 0
 
-  const stopValidation = validateStops(tradeDirection, entryPrice, slNum, tpNum)
+  const stopValidation = validateStops(tradeDirection, entryPrice, slNum, tpNum, selectedPair)
   const riskPlan = computeRiskPlan(
     {
       pair: selectedPair,
@@ -139,6 +139,17 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
   const overRiskLimit =
     riskPlan.potentialLoss != null && riskCapital > 0 && riskPlan.potentialLoss > riskPlan.riskAmount
 
+  // Manually typed sizes go through exactly the same checks as the suggested size.
+  const sizeValidation = validateEnteredSize({
+    pair: selectedPair,
+    entryPrice,
+    stopLoss: stopValidation.stopLossError ? null : slNum,
+    capital: riskCapital,
+    leverage: accountMode === 'live' ? leverage : DEMO_LEVERAGE,
+    mode: accountMode,
+    enteredSize,
+  })
+
   const handleSubmitTrade = async () => {
     if (isSubmitting) return
     
@@ -149,6 +160,15 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
       const marginAmount = parseFloat(lotSize);
       if (!lotSize || marginAmount <= 0) {
         toast({ title: 'Invalid lot size', description: 'Please enter a valid lot size', variant: 'destructive' })
+        return
+      }
+
+      if (sizeValidation.error) {
+        toast({
+          title: accountMode === 'live' ? 'Margin Not Allowed' : 'Position Size Not Allowed',
+          description: sizeValidation.error,
+          variant: 'destructive',
+        })
         return
       }
 
@@ -469,6 +489,7 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
             placeholder={accountMode === 'live' ? '10' : '0.1'}
             step={accountMode === 'live' ? '1' : '0.01'}
             min={accountMode === 'live' ? '1' : '0.01'}
+            aria-invalid={!!sizeValidation.error}
           />
           <div className="text-xs text-muted-foreground">
             {accountMode === 'live' 
@@ -476,6 +497,16 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
               : `Position value: $${(parseFloat(lotSize || '0') * currentPrice * getAssetMultiplier(selectedPair)).toLocaleString()}`
             }
           </div>
+          {sizeValidation.error ? (
+            <p className="text-xs text-destructive">{sizeValidation.error}</p>
+          ) : sizeValidation.warning ? (
+            <p className="text-xs text-amber-600">{sizeValidation.warning}</p>
+          ) : null}
+          {sizeValidation.error && (
+            <Button variant="outline" size="sm" onClick={calculateLotSize}>
+              Use suggested size
+            </Button>
+          )}
         </div>
 
         {/* Leverage Selector (Live mode only) */}
@@ -676,7 +707,7 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
           className="w-full" 
           size="lg"
           onClick={handleSubmitTrade}
-          disabled={isLoadingSignal || isSubmitting || onChainLoading || approvalPending || !stopValidation.valid || (accountMode === 'live' && (!isCorrectNetwork || !oracleHealthy)) || (accountMode === 'demo' && isSignalMarket(selectedPair, 'demo') && !isForexMarketOpen())}
+          disabled={isLoadingSignal || isSubmitting || onChainLoading || approvalPending || !stopValidation.valid || !!sizeValidation.error || (accountMode === 'live' && (!isCorrectNetwork || !oracleHealthy)) || (accountMode === 'demo' && isSignalMarket(selectedPair, 'demo') && !isForexMarketOpen())}
         >
           {approvalPending ? (
             <span className="flex items-center">

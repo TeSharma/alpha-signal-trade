@@ -95,6 +95,82 @@ export function getPipSize(pair: string): number | null {
   return pair.includes('JPY') ? 0.01 : 0.0001;
 }
 
+export interface EnteredSizeValidation {
+  /** Blocking reason, or null when the entered value is acceptable */
+  error: string | null;
+  /** Non-blocking note (e.g. risk cannot be verified without a stop loss) */
+  warning: string | null;
+  notional: number;
+  requiredMargin: number;
+  lossAtStop: number | null;
+  riskAmount: number;
+}
+
+/**
+ * Validate a size the user typed by hand with exactly the same rules the
+ * suggested size is derived from: contract size, 1% risk at the stop, leverage
+ * and available margin. Never adjusts the entered value — it only reports.
+ *
+ * `enteredSize` is a lot size in demo mode and a margin amount in live mode,
+ * matching the trading form's input semantics.
+ */
+export function validateEnteredSize(params: {
+  pair: string;
+  entryPrice: number;
+  stopLoss?: number | null;
+  capital: number;
+  leverage?: number;
+  mode: 'demo' | 'live';
+  enteredSize: number;
+}): EnteredSizeValidation {
+  const { pair, entryPrice, mode, enteredSize } = params;
+  const leverage = Math.max(1, params.leverage ?? (mode === 'demo' ? DEMO_LEVERAGE : 1));
+  const multiplier = getAssetMultiplier(pair);
+  const capital = Math.max(0, params.capital);
+  const riskAmount = capital * RISK_PERCENT;
+  const stopLoss =
+    params.stopLoss != null && Number.isFinite(params.stopLoss) ? params.stopLoss : null;
+  const stopDistance = stopLoss != null && entryPrice ? Math.abs(entryPrice - stopLoss) : 0;
+
+  const notional = mode === 'live' ? enteredSize * leverage : enteredSize * entryPrice * multiplier;
+  const requiredMargin = mode === 'live' ? enteredSize : notional / leverage;
+  const units =
+    mode === 'live'
+      ? entryPrice > 0 && multiplier > 0
+        ? notional / (entryPrice * multiplier)
+        : 0
+      : enteredSize;
+  const lossAtStop = stopDistance > 0 ? stopDistance * units * multiplier : null;
+
+  const money = (n: number) =>
+    `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+  let error: string | null = null;
+  let warning: string | null = null;
+
+  if (!Number.isFinite(enteredSize) || enteredSize <= 0) {
+    error = mode === 'live' ? 'Enter a margin amount greater than 0.' : 'Enter a lot size greater than 0.';
+  } else if (mode === 'demo' && enteredSize > MAX_LOT_SIZE) {
+    error = `Lot size cannot exceed ${MAX_LOT_SIZE}.`;
+  } else if (!entryPrice) {
+    warning = 'Waiting for a live price before this size can be checked.';
+  } else if (capital <= 0) {
+    error = 'No available trading capital for this account.';
+  } else if (requiredMargin > capital + 1e-9) {
+    error = `This size needs ${money(requiredMargin)} of margin at ${leverage}x but only ${money(
+      capital,
+    )} is available (position value ${money(notional)}).`;
+  } else if (lossAtStop != null && lossAtStop > riskAmount * 1.0001) {
+    error = `Loss at your stop would be ${money(lossAtStop)} — above the ${(
+      RISK_PERCENT * 100
+    ).toFixed(0)}% limit of ${money(riskAmount)}. Reduce the size or move the stop closer.`;
+  } else if (lossAtStop == null) {
+    warning = 'Without a stop loss the 1% risk limit cannot be verified for this size.';
+  }
+
+  return { error, warning, notional, requiredMargin, lossAtStop, riskAmount };
+}
+
 export interface RiskPlanInput {
   pair: string;
   direction: 'buy' | 'sell';
@@ -138,6 +214,7 @@ export function validateStops(
   entryPrice: number,
   stopLoss?: number | null,
   takeProfit?: number | null,
+  pair = '',
 ): StopValidation {
   let stopLossError: string | null = null;
   let takeProfitError: string | null = null;
@@ -167,8 +244,12 @@ export function validateStops(
       takeProfitError = `For a BUY the take profit must be above the entry price (${entryPrice}).`;
     } else if (!isLong && takeProfit >= entryPrice) {
       takeProfitError = `For a SELL the take profit must be below the entry price (${entryPrice}).`;
-    } else if (Math.abs(takeProfit - entryPrice) / entryPrice > 5) {
-      takeProfitError = 'Take profit is unrealistically far from the entry price.';
+    } else {
+      // Forex and metals never travel far from spot; crypto genuinely can.
+      const maxAwayFraction = getAssetMultiplier(pair) === 1 ? 5 : 0.1;
+      if (Math.abs(takeProfit - entryPrice) / entryPrice > maxAwayFraction) {
+        takeProfitError = `Take profit is unrealistically far from the entry price (${entryPrice}).`;
+      }
     }
   }
 

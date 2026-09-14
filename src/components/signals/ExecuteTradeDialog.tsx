@@ -16,7 +16,13 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import type { SignalObject } from '@/types/signal';
 import { getAssetMultiplier } from '@/lib/pnl';
-import { computeSignalSizing, getPipSize, DEMO_LEVERAGE, RISK_PERCENT } from '@/lib/riskEngine';
+import {
+  computeSignalSizing,
+  getPipSize,
+  validateEnteredSize,
+  DEMO_LEVERAGE,
+  RISK_PERCENT,
+} from '@/lib/riskEngine';
 
 interface ExecuteTradeDialogProps {
   signal: SignalObject | null;
@@ -88,17 +94,25 @@ export function ExecuteTradeDialog({ signal, open, onOpenChange, onExecuted }: E
   const tp1 = Number(takeProfits[0]);
   const riskReward =
     stopDistance > 0 && Number.isFinite(tp1) ? Math.abs(tp1 - entryMid) / stopDistance : null;
-  const invalid = lotNum <= 0 || lotNum > 999999.9999 || marginRequired > balance;
+  // Same checks as the trading form: contract size, 1% risk, leverage, margin.
+  const sizeValidation = validateEnteredSize({
+    pair: signal.pair,
+    entryPrice: entryMid,
+    stopLoss: signal.stop_loss,
+    capital: balance,
+    leverage: DEMO_LEVERAGE,
+    mode: 'demo',
+    enteredSize: lotNum,
+  });
+  const invalid = !!sizeValidation.error;
 
   const fmt = (n: number) => n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   const handleConfirm = async () => {
     if (invalid) {
       toast({
-        title: 'Invalid lot size',
-        description: marginRequired > balance
-          ? `Required margin ($${fmt(marginRequired)}) exceeds balance ($${fmt(balance)}).`
-          : 'Lot size must be greater than 0.',
+        title: 'Position Size Not Allowed',
+        description: sizeValidation.error ?? 'Lot size must be greater than 0.',
         variant: 'destructive',
       });
       return;
@@ -217,7 +231,11 @@ export function ExecuteTradeDialog({ signal, open, onOpenChange, onExecuted }: E
               value={lotSize}
               onChange={(e) => setLotSize(e.target.value)}
               placeholder="Enter lot size"
+              aria-invalid={invalid}
             />
+            {sizeValidation.error && (
+              <p className="text-xs text-destructive">{sizeValidation.error}</p>
+            )}
             <div className="flex gap-2">
               <Button
                 type="button"
