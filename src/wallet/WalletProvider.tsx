@@ -214,8 +214,24 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   );
 
   const refreshBalance = useCallback(async () => {
-    if (address && provider) await readBalance(address, provider);
-  }, [address, provider, readBalance]);
+    if (address) await readBalance(address, chainId);
+  }, [address, chainId, readBalance]);
+
+  // Keep refs in sync so timers/listeners read current values without
+  // re-subscribing on every render.
+  useEffect(() => {
+    chainIdRef.current = chainId;
+    addressRef.current = address;
+  }, [chainId, address]);
+
+  // Poll the balance on a timer (not on every render) using our own RPC.
+  useEffect(() => {
+    if (!connected || !address) return;
+    const id = setInterval(() => {
+      void readBalance(addressRef.current, chainIdRef.current);
+    }, 60000);
+    return () => clearInterval(id);
+  }, [connected, address, readBalance]);
 
   // Rehydrate an already-approved injected wallet on page load, so a refresh
   // does not drop the session (eth_accounts does not prompt the user).
