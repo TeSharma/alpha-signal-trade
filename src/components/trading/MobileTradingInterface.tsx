@@ -9,6 +9,7 @@ import { Slider } from "@/components/ui/slider";
 import { TrendingUp, TrendingDown, Calculator, X, AlertTriangle, Zap, Link } from "lucide-react";
 import CollapsibleCard from "@/components/ui/collapsible-card";
 import OracleStatus from "@/components/trading/OracleStatus";
+import TradingViewChart from "@/components/trading/TradingViewChart";
 import { useTrades } from '@/hooks/useTrades';
 import { useMarketData } from '@/hooks/useMarketData';
 import { useOnChainTradingV2 } from '@/hooks/useOnChainTradingV2';
