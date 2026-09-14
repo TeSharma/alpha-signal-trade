@@ -33,6 +33,34 @@ const TRADING_PLATFORM_V2_ABI = [
   },
   {
     inputs: [{ name: 'positionId', type: 'uint256' }],
+    name: 'closeWithTrigger',
+    outputs: [],
+    stateMutability: 'nonpayable',
+    type: 'function'
+  },
+  {
+    inputs: [{ name: 'keeper', type: 'address' }],
+    name: 'keepers',
+    outputs: [{ name: '', type: 'bool' }],
+    stateMutability: 'view',
+    type: 'function'
+  },
+  {
+    anonymous: false,
+    inputs: [
+      { indexed: true, name: 'id', type: 'uint256' },
+      { indexed: true, name: 'trader', type: 'address' },
+      { indexed: false, name: 'pairId', type: 'bytes32' },
+      { indexed: false, name: 'isLong', type: 'bool' },
+      { indexed: false, name: 'margin', type: 'uint256' },
+      { indexed: false, name: 'leverage', type: 'uint256' },
+      { indexed: false, name: 'entryPrice', type: 'uint256' }
+    ],
+    name: 'PositionOpened',
+    type: 'event'
+  },
+  {
+    inputs: [{ name: 'positionId', type: 'uint256' }],
     name: 'liquidate',
     outputs: [],
     stateMutability: 'nonpayable',
@@ -187,6 +215,13 @@ const PRICE_ORACLE_V2_ABI = [
     outputs: [{ name: '', type: 'bool' }],
     stateMutability: 'view',
     type: 'function'
+  },
+  {
+    inputs: [{ name: 'pairId', type: 'bytes32' }],
+    name: 'getDecimals',
+    outputs: [{ name: '', type: 'uint8' }],
+    stateMutability: 'view',
+    type: 'function'
   }
 ];
 
@@ -233,6 +268,16 @@ export interface OpenPositionV2Params {
   direction: 'buy' | 'sell';
   margin: string;
   leverage: number;
+  /** Optional stop loss in human price units. Stored on-chain so the keeper can close it. */
+  stopLoss?: number;
+  /** Optional take profit (TP1) in human price units. */
+  takeProfit?: number;
+}
+
+export interface OpenPositionResult {
+  txHash: string;
+  /** On-chain position id, needed for keeper-driven SL/TP closes */
+  positionId: number | null;
 }
 
 export interface PositionV2 {
@@ -634,7 +679,23 @@ export const useOnChainTradingV2 = (accountMode: AccountMode = 'demo') => {
   };
 
   // Open a new position
-  const openPosition = async (params: OpenPositionV2Params): Promise<string | null> => {
+  /** Scale a human price into the oracle's fixed-point representation (Chainlink USD feeds use 8 dp) */
+  const scaleToOracle = async (web3: Web3, pairId: string, price?: number): Promise<string> => {
+    if (!price || !isFinite(price) || price <= 0) return '0';
+    let decimals = 8;
+    try {
+      const oracleContract = getOracleContract(web3);
+      if (oracleContract) {
+        decimals = Number(await oracleContract.methods.getDecimals(pairId).call());
+        if (!Number.isFinite(decimals) || decimals <= 0 || decimals > 30) decimals = 8;
+      }
+    } catch {
+      decimals = 8;
+    }
+    return BigInt(Math.round(price * 10 ** decimals)).toString();
+  };
+
+  const openPosition = async (params: OpenPositionV2Params): Promise<OpenPositionResult | null> => {
     setIsLoading(true);
     try {
       if (!(await enforceNetwork())) {
@@ -687,9 +748,12 @@ export const useOnChainTradingV2 = (accountMode: AccountMode = 'demo') => {
         description: `Fee: ${fee.toFixed(2)} tUSD (0.08%) | Net margin: ${netMargin.toFixed(2)} tUSD`,
       });
 
+      const stopLossScaled = await scaleToOracle(web3, pairId, params.stopLoss);
+      const takeProfitScaled = await scaleToOracle(web3, pairId, params.takeProfit);
+
       try {
         await contract.methods
-          .openPosition(pairId, isLong, marginWei, params.leverage, 0, 0)
+          .openPosition(pairId, isLong, marginWei, params.leverage, stopLossScaled, takeProfitScaled)
           .estimateGas({ from: account });
       } catch (estimateError: any) {
         const errorMsg = extractErrorMessage(estimateError);
@@ -697,15 +761,32 @@ export const useOnChainTradingV2 = (accountMode: AccountMode = 'demo') => {
       }
 
       const tx = await contract.methods
-        .openPosition(pairId, isLong, marginWei, params.leverage, 0, 0)
+        .openPosition(pairId, isLong, marginWei, params.leverage, stopLossScaled, takeProfitScaled)
         .send({ from: account });
+
+      // Position id is needed so the keeper can close this position on SL/TP
+      let positionId: number | null = null;
+      try {
+        const raw = (tx as any).events?.PositionOpened?.returnValues?.id;
+        if (raw !== undefined && raw !== null) positionId = Number(raw);
+      } catch {
+        positionId = null;
+      }
+      if (positionId === null) {
+        try {
+          const ids: any[] = await contract.methods.getUserPositions(account).call();
+          if (ids && ids.length > 0) positionId = Number(ids[ids.length - 1]);
+        } catch {
+          positionId = null;
+        }
+      }
 
       toast({
         title: 'Position Opened',
         description: `${isLong ? 'Long' : 'Short'} ${params.pair} with ${params.leverage}x leverage`,
       });
 
-      return tx.transactionHash as string;
+      return { txHash: tx.transactionHash as string, positionId };
     } catch (error: any) {
       console.error('Error opening position:', error);
       const errorMsg = extractErrorMessage(error);

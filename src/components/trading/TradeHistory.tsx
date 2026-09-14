@@ -17,7 +17,7 @@ interface TradeHistoryProps {
 }
 
 const TradeHistory = ({ accountMode }: TradeHistoryProps) => {
-  const { trades, closeTrade, updatePnL, loading } = useTrades()
+  const { trades, closeTrade, loading } = useTrades()
   const { getCurrentPrice } = useMarketData(accountMode)
   const { toast } = useToast()
   const [activeTab, setActiveTab] = useState('open')
@@ -29,20 +29,10 @@ const TradeHistory = ({ accountMode }: TradeHistoryProps) => {
     trade.status === 'closed' && trade.account_mode === accountMode
   )
 
-  // Update PnL for open trades
-  useEffect(() => {
-    const updateOpenTradesPnL = async () => {
-      for (const trade of openTrades) {
-        const currentPrice = getCurrentPrice(trade.pair)
-        if (currentPrice > 0) {
-          await updatePnL(trade.id, currentPrice)
-        }
-      }
-    }
+  // Open-trade P&L is displayed from live prices (see calculateCurrentPnL).
+  // The stored P&L is written once, at close, by the server.
 
-    const interval = setInterval(updateOpenTradesPnL, 5000) // Update every 5 seconds
-    return () => clearInterval(interval)
-  }, [openTrades, getCurrentPrice, updatePnL])
+
 
   const handleCloseTrade = async (trade: Trade) => {
     const currentPrice = getCurrentPrice(trade.pair)

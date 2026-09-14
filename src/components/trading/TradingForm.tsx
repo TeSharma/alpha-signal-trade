@@ -225,15 +225,21 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
       setSignalResponse(response)
 
       let txHash: string | null = null
+      let chainPositionId: number | null = null
 
       if (accountMode === 'live') {
-        // Execute on-chain FIRST — never record a live trade that has no confirmed transaction
-        txHash = await openOnChainPositionV2({
+        // Execute on-chain FIRST — never record a live trade that has no confirmed transaction.
+        // SL/TP are written into the position so the keeper can close it automatically.
+        const onChain = await openOnChainPositionV2({
           pair: selectedPair,
           direction: tradeDirection,
           margin: lotSize,
-          leverage: leverage
+          leverage: leverage,
+          stopLoss: stopLoss ? parseFloat(stopLoss) : undefined,
+          takeProfit: takeProfit ? parseFloat(takeProfit) : undefined
         })
+        txHash = onChain?.txHash ?? null
+        chainPositionId = onChain?.positionId ?? null
 
         if (!txHash) {
           toast({
@@ -255,7 +261,8 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
         stop_loss: stopLoss ? parseFloat(stopLoss) : undefined,
         take_profit: takeProfit ? parseFloat(takeProfit) : undefined,
         account_mode: accountMode,
-        transaction_hash: txHash ?? undefined
+        transaction_hash: txHash ?? undefined,
+        chain_position_id: chainPositionId ?? undefined
       })
 
       if (tradeResult) {
@@ -625,7 +632,8 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
           )}
           {accountMode === 'live' && (
             <p className="text-xs text-muted-foreground pt-1 border-t">
-              Stop loss and take profit are monitored by the platform, not auto-executed by the contract.
+              Stop loss and take profit are stored with your position on-chain and closed automatically
+              at the Chainlink price once reached. Leave them empty to keep the trade open until you close it.
             </p>
           )}
         </div>

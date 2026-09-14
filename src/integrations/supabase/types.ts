@@ -662,6 +662,9 @@ export type Database = {
       trades: {
         Row: {
           account_mode: string
+          chain_position_id: number | null
+          close_requested_at: string | null
+          close_tx_hash: string | null
           closed_at: string | null
           contract_address: string | null
           created_at: string
@@ -687,6 +690,9 @@ export type Database = {
         }
         Insert: {
           account_mode?: string
+          chain_position_id?: number | null
+          close_requested_at?: string | null
+          close_tx_hash?: string | null
           closed_at?: string | null
           contract_address?: string | null
           created_at?: string
@@ -712,6 +718,9 @@ export type Database = {
         }
         Update: {
           account_mode?: string
+          chain_position_id?: number | null
+          close_requested_at?: string | null
+          close_tx_hash?: string | null
           closed_at?: string | null
           contract_address?: string | null
           created_at?: string

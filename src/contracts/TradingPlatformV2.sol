@@ -62,6 +62,11 @@ contract TradingPlatformV2 is ReentrancyGuard, Ownable {
     mapping(uint256 => Position) public positions;
     mapping(address => uint256[]) public userPositions;
 
+    /// @notice Addresses authorised to close positions whose stored SL/TP has been breached.
+    /// @dev Keepers can ONLY call closeWithTrigger, which verifies the breach on-chain and
+    ///      settles to the position owner. They can never move funds elsewhere.
+    mapping(address => bool) public keepers;
+
     /*//////////////////////////////////////////////////////////////
                                 EVENTS
     //////////////////////////////////////////////////////////////*/
@@ -101,6 +106,14 @@ contract TradingPlatformV2 is ReentrancyGuard, Ownable {
     event TreasuryUpdated(address indexed oldTreasury, address indexed newTreasury);
     event TradingFeesUpdated(uint256 openFeeBps, uint256 closeFeeBps);
     event LiquidatorRewardUpdated(uint256 rewardBps);
+    event KeeperUpdated(address indexed keeper, bool allowed);
+    event PositionTriggerClosed(
+        uint256 indexed id,
+        address indexed trader,
+        address indexed keeper,
+        uint256 price,
+        bool isStopLoss
+    );
 
     /*//////////////////////////////////////////////////////////////
                               CONSTRUCTOR
@@ -199,6 +212,46 @@ contract TradingPlatformV2 is ReentrancyGuard, Ownable {
         require(block.timestamp - updatedAt <= priceTimeout, "Stale price");
 
         _closePosition(id, price);
+    }
+
+    /// @notice Close a position whose stored stop loss or take profit has been breached.
+    /// @dev Callable only by an authorised keeper. The breach is verified on-chain against the
+    ///      Chainlink-backed oracle, and settlement runs through the same path as a manual close,
+    ///      so proceeds always go to the position owner. Positions without an SL and without a TP
+    ///      can never be closed here.
+    function closeWithTrigger(uint256 id) external nonReentrant {
+        require(keepers[msg.sender], "Not keeper");
+
+        Position storage p = positions[id];
+        require(p.isOpen, "Position closed");
+        require(p.stopLoss > 0 || p.takeProfit > 0, "No trigger set");
+
+        (uint256 price, uint256 updatedAt) = oracle.getPrice(p.pairId);
+        require(price > 0, "Invalid price");
+        require(block.timestamp - updatedAt <= priceTimeout, "Stale price");
+
+        bool slHit;
+        bool tpHit;
+
+        if (p.isLong) {
+            slHit = p.stopLoss > 0 && price <= p.stopLoss;
+            tpHit = p.takeProfit > 0 && price >= p.takeProfit;
+        } else {
+            slHit = p.stopLoss > 0 && price >= p.stopLoss;
+            tpHit = p.takeProfit > 0 && price <= p.takeProfit;
+        }
+
+        require(slHit || tpHit, "Trigger not reached");
+
+        address trader = p.trader;
+
+        // Settle at the trigger price so the trader is not penalised by price drift
+        // between the breach and this transaction.
+        uint256 exitPrice = slHit ? p.stopLoss : p.takeProfit;
+
+        _closePosition(id, exitPrice);
+
+        emit PositionTriggerClosed(id, trader, msg.sender, exitPrice, slHit);
     }
 
     function liquidate(uint256 id) external nonReentrant {
@@ -430,5 +483,12 @@ contract TradingPlatformV2 is ReentrancyGuard, Ownable {
 
     function setPriceTimeout(uint256 _timeout) external onlyOwner {
         priceTimeout = _timeout;
+    }
+
+    /// @notice Authorise or revoke a keeper allowed to call closeWithTrigger
+    function setKeeper(address keeper, bool allowed) external onlyOwner {
+        require(keeper != address(0), "Invalid keeper");
+        keepers[keeper] = allowed;
+        emit KeeperUpdated(keeper, allowed);
     }
 }
