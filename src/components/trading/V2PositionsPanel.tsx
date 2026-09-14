@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -6,34 +6,49 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { RefreshCw, TrendingUp, TrendingDown, AlertTriangle, X } from "lucide-react";
 import { useOnChainTradingV2, PositionV2 } from '@/hooks/useOnChainTradingV2';
 import { useNetworkEnforcement } from '@/hooks/useNetworkEnforcement';
+import type { AccountMode } from '@/config/contracts';
 
 interface V2PositionsPanelProps {
+  accountMode?: AccountMode;
   onRefreshBalance?: () => void;
 }
 
-const V2PositionsPanel: React.FC<V2PositionsPanelProps> = ({ onRefreshBalance }) => {
+const V2PositionsPanel: React.FC<V2PositionsPanelProps> = ({ accountMode = 'live', onRefreshBalance }) => {
   const [positions, setPositions] = useState<PositionV2[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  
-  const { getUserOpenPositions, closePosition, isLoading: actionLoading } = useOnChainTradingV2();
-  const { isCorrectNetwork } = useNetworkEnforcement();
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  const { getUserOpenPositions, closePosition, isLoading: actionLoading } = useOnChainTradingV2(accountMode);
+  const { isCorrectNetwork } = useNetworkEnforcement(accountMode);
+
+  // Reads go through the mode's own RPC, so an in-flight guard is enough to
+  // keep refreshes from overlapping.
+  const inFlight = useRef(false);
 
   const fetchPositions = useCallback(async () => {
+    if (inFlight.current) return;
+    inFlight.current = true;
     setIsRefreshing(true);
     try {
       const userPositions = await getUserOpenPositions();
       setPositions(userPositions);
-    } catch (error) {
+      setLoadError(null);
+    } catch (error: any) {
       console.error('Error fetching positions:', error);
+      setLoadError(error?.message || 'Could not read positions from the network');
     } finally {
+      inFlight.current = false;
       setIsRefreshing(false);
+      setHasLoadedOnce(true);
     }
   }, [getUserOpenPositions]);
 
   useEffect(() => {
     fetchPositions();
-  }, [fetchPositions]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accountMode]);
 
   const handleClosePosition = async (positionId: number) => {
     setIsLoading(true);
