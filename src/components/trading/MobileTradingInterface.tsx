@@ -292,11 +292,9 @@ const MobileTradingInterface = ({ accountMode }: MobileTradingInterfaceProps) =>
 
       {/* Chart View */}
       <CollapsibleCard title="Chart View" defaultOpen={showChart}>
-        <div className="h-64 bg-muted rounded-lg flex items-center justify-center">
-          <p className="text-muted-foreground">TradingView Chart</p>
-          <p className="text-sm text-muted-foreground ml-2">(Pinch to zoom)</p>
-        </div>
+        <TradingViewChart pair={selectedPair} height={320} />
       </CollapsibleCard>
+
 
       {/* Trading Form */}
       <Card>
