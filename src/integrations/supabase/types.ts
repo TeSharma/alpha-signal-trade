@@ -676,6 +676,9 @@ export type Database = {
           id: string
           lot_size: number
           pair: string
+          pending_exit_at: string | null
+          pending_exit_kind: string | null
+          pending_exit_price: number | null
           pnl: number | null
           settlement_chain: string | null
           signal_id: string | null
@@ -704,6 +707,9 @@ export type Database = {
           id?: string
           lot_size: number
           pair: string
+          pending_exit_at?: string | null
+          pending_exit_kind?: string | null
+          pending_exit_price?: number | null
           pnl?: number | null
           settlement_chain?: string | null
           signal_id?: string | null
@@ -732,6 +738,9 @@ export type Database = {
           id?: string
           lot_size?: number
           pair?: string
+          pending_exit_at?: string | null
+          pending_exit_kind?: string | null
+          pending_exit_price?: number | null
           pnl?: number | null
           settlement_chain?: string | null
           signal_id?: string | null

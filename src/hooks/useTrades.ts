@@ -19,6 +19,9 @@ export interface Trade {
   transaction_hash?: string;
   chain_position_id?: number;
   close_tx_hash?: string;
+  pending_exit_kind?: string | null;
+  pending_exit_price?: number | null;
+  pending_exit_at?: string | null;
   created_at: string;
   updated_at: string;
   closed_at?: string;
