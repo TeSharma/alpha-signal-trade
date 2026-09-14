@@ -1,10 +1,10 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import Web3 from 'web3';
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Activity, AlertTriangle, CheckCircle, XCircle, RefreshCw, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { getRpcUrl, getContractAddresses, type AccountMode } from '@/config/contracts';
+import { getRpcUrls, getContractAddresses, type AccountMode } from '@/config/contracts';
 import { getMarketsForMode } from '@/config/markets';
 
 // Compute pair IDs locally without MetaMask provider
