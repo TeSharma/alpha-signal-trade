@@ -42,16 +42,20 @@ interface OraclePrices {
 }
 
 export const useOraclePrice = (accountMode: AccountMode = 'demo') => {
-  const [web3, setWeb3] = useState<Web3 | null>(null);
   const [prices, setPrices] = useState<OraclePrices>({});
   const [isConnected, setIsConnected] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const endpointIndexRef = useRef(0);
+  // Web3 instance lives in a ref: rotating the endpoint must not change the
+  // identity of the fetch callbacks, otherwise consumers that depend on them
+  // re-run their polling effect immediately and spin in a request loop.
+  const web3Ref = useRef<Web3 | null>(null);
+  const inFlightRef = useRef(false);
 
   useEffect(() => {
     // Use public RPC for read operations to avoid MetaMask provider overload
     endpointIndexRef.current = 0;
-    setWeb3(new Web3(getRpcUrls(accountMode)[0]));
+    web3Ref.current = new Web3(getRpcUrls(accountMode)[0]);
     setPrices({});
     setIsConnected(true);
   }, [accountMode]);
@@ -61,10 +65,11 @@ export const useOraclePrice = (accountMode: AccountMode = 'demo') => {
     const endpoints = getRpcUrls(accountMode);
     if (endpoints.length < 2) return;
     endpointIndexRef.current = (endpointIndexRef.current + 1) % endpoints.length;
-    setWeb3(new Web3(endpoints[endpointIndexRef.current]));
+    web3Ref.current = new Web3(endpoints[endpointIndexRef.current]);
   }, [accountMode]);
 
   const getOracleContract = useCallback(() => {
+    const web3 = web3Ref.current;
     if (!web3) return null;
 
     const oracleAddress = getContractAddresses(accountMode).PriceOracleV2;
@@ -75,10 +80,11 @@ export const useOraclePrice = (accountMode: AccountMode = 'demo') => {
     }
 
     return new web3.eth.Contract(PRICE_ORACLE_V2_ABI as any, oracleAddress);
-  }, [web3, accountMode]);
+  }, [accountMode]);
 
   const fetchPrice = useCallback(async (pair: string): Promise<OraclePriceData | null> => {
     const contract = getOracleContract();
+    const web3 = web3Ref.current;
     if (!contract || !web3) {
       console.warn('Oracle contract not available');
       return null;
@@ -110,9 +116,11 @@ export const useOraclePrice = (accountMode: AccountMode = 'demo') => {
       console.error(`Error fetching price for ${pair}:`, error);
       return null;
     }
-  }, [getOracleContract, web3]);
+  }, [getOracleContract]);
 
   const fetchMultiplePrices = useCallback(async (pairs: string[]): Promise<void> => {
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
     setIsLoading(true);
     try {
       const pricePromises = pairs.map(pair => fetchPrice(pair));
@@ -136,6 +144,7 @@ export const useOraclePrice = (accountMode: AccountMode = 'demo') => {
       rotateEndpoint();
       console.error('Error fetching multiple prices:', error);
     } finally {
+      inFlightRef.current = false;
       setIsLoading(false);
     }
   }, [fetchPrice, rotateEndpoint]);
@@ -150,7 +159,7 @@ export const useOraclePrice = (accountMode: AccountMode = 'demo') => {
   };
 
   return {
-    web3,
+    web3: web3Ref.current,
     prices,
     isConnected,
     isLoading,

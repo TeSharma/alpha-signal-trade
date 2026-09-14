@@ -23,6 +23,27 @@ const hexToDec = (hex: string): number | null => {
 
 const WalletContext = createContext<UnifiedWalletContextValue | null>(null);
 
+// Remembers an explicit user disconnect so a page reload does not silently
+// re-attach the previously approved injected wallet.
+const DISCONNECTED_KEY = 'shtrader.wallet.disconnected';
+
+const wasExplicitlyDisconnected = (): boolean => {
+  try {
+    return localStorage.getItem(DISCONNECTED_KEY) === '1';
+  } catch {
+    return false;
+  }
+};
+
+const rememberDisconnect = (value: boolean) => {
+  try {
+    if (value) localStorage.setItem(DISCONNECTED_KEY, '1');
+    else localStorage.removeItem(DISCONNECTED_KEY);
+  } catch {
+    // storage unavailable — session-only behaviour
+  }
+};
+
 /**
  * Unified wallet provider.
  *
@@ -169,6 +190,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       setConnected(true);
       setIsConnecting(false);
       setWalletConnected(true);
+      rememberDisconnect(false);
       await readBalance(accounts[0], detected);
       toast.success('Wallet connected successfully!');
     } catch (err: any) {
@@ -181,6 +203,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const disconnect = useCallback(async () => {
     // Detaches the active trading wallet only. Does NOT log out of
     // Privy or Supabase auth.
+    rememberDisconnect(true);
     setDisconnected();
     toast.info('Wallet disconnected');
   }, [setDisconnected]);
@@ -239,6 +262,8 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     let cancelled = false;
     const rehydrate = async () => {
       if (!window.ethereum) return;
+      // Respect an explicit disconnect from a previous session.
+      if (wasExplicitlyDisconnected()) return;
       try {
         const accounts: string[] = await window.ethereum.request({ method: 'eth_accounts' });
         if (cancelled || !accounts || accounts.length === 0) return;
