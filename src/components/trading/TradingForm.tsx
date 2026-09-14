@@ -489,6 +489,7 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
             placeholder={accountMode === 'live' ? '10' : '0.1'}
             step={accountMode === 'live' ? '1' : '0.01'}
             min={accountMode === 'live' ? '1' : '0.01'}
+            aria-invalid={!!sizeValidation.error}
           />
           <div className="text-xs text-muted-foreground">
             {accountMode === 'live' 
@@ -496,6 +497,16 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
               : `Position value: $${(parseFloat(lotSize || '0') * currentPrice * getAssetMultiplier(selectedPair)).toLocaleString()}`
             }
           </div>
+          {sizeValidation.error ? (
+            <p className="text-xs text-destructive">{sizeValidation.error}</p>
+          ) : sizeValidation.warning ? (
+            <p className="text-xs text-amber-600">{sizeValidation.warning}</p>
+          ) : null}
+          {sizeValidation.error && (
+            <Button variant="outline" size="sm" onClick={calculateLotSize}>
+              Use suggested size
+            </Button>
+          )}
         </div>
 
         {/* Leverage Selector (Live mode only) */}
