@@ -122,7 +122,7 @@ serve(async (req) => {
     const { data: openTrades, error } = await supabase
       .from("trades")
       .select(
-        "id, user_id, pair, direction, stop_loss, take_profit, account_mode, pending_exit_kind",
+        "id, user_id, pair, direction, lot_size, stop_loss, take_profit, account_mode, pending_exit_kind",
       )
       .eq("status", "open");
 
@@ -134,6 +134,8 @@ serve(async (req) => {
       closedDemo: 0,
       livePendingExits: 0,
       priceUnavailable: 0,
+      liquidityBlocked: 0,
+      liquidityStatus: "n/a" as string,
     };
 
     if (!openTrades || openTrades.length === 0) {
@@ -143,6 +145,20 @@ serve(async (req) => {
     }
 
     const priceCache: Record<string, number | null> = {};
+
+    // Platform liquidity pre-flight — read once per run, only when live trades exist.
+    let liquidity: LiquiditySnapshot | null = null;
+    const hasLiveTrades = openTrades.some((t) => t.account_mode === "live");
+    if (hasLiveTrades) {
+      try {
+        liquidity = await buildLiquiditySnapshot(supabase);
+        summary.liquidityStatus = liquidity.status;
+        console.log("[monitor-positions] liquidity", JSON.stringify(liquidity));
+      } catch (e) {
+        console.error("[monitor-positions] liquidity check failed:", e);
+        summary.liquidityStatus = "UNKNOWN";
+      }
+    }
 
     for (const t of openTrades) {
       // Manual trades without SL and without TP stay open until closed by the user.
