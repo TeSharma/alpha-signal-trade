@@ -12,5 +12,11 @@ verify_jwt = false
 [functions.execute-trade]
 verify_jwt = false
 
+[functions.eulerpool-prices]
+verify_jwt = false
+
+[functions.eulerpool-candles]
+verify_jwt = false
+
 [functions.gsc-monitor]
 verify_jwt = false
