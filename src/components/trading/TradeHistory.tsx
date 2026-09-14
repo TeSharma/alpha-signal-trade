@@ -6,11 +6,12 @@ import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog"
-import { TrendingUp, TrendingDown, X, DollarSign, Clock, Activity } from "lucide-react"
+import { TrendingUp, TrendingDown, X, DollarSign, Clock, Activity, AlertTriangle } from "lucide-react"
 import { useTrades, Trade } from '@/hooks/useTrades'
 import { useMarketData } from '@/hooks/useMarketData'
 import { useToast } from '@/components/ui/use-toast'
 import { computePnL, getAssetMultiplier } from '@/lib/pnl'
+import { useOnChainTradingV2 } from '@/hooks/useOnChainTradingV2'
 
 interface TradeHistoryProps {
   accountMode: 'demo' | 'live'
@@ -20,7 +21,9 @@ const TradeHistory = ({ accountMode }: TradeHistoryProps) => {
   const { trades, closeTrade, loading } = useTrades()
   const { getCurrentPrice } = useMarketData(accountMode)
   const { toast } = useToast()
+  const { closePosition } = useOnChainTradingV2(accountMode)
   const [activeTab, setActiveTab] = useState('open')
+  const [closingId, setClosingId] = useState<string | null>(null)
 
   const openTrades = trades.filter(trade => 
     trade.status === 'open' && trade.account_mode === accountMode
@@ -34,10 +37,30 @@ const TradeHistory = ({ accountMode }: TradeHistoryProps) => {
 
 
 
+  /**
+   * Live positions live on-chain and can only be closed by their owner's wallet, so we
+   * send the transaction first and record the close only once it is confirmed.
+   */
   const handleCloseTrade = async (trade: Trade) => {
     const currentPrice = getCurrentPrice(trade.pair)
-    if (currentPrice > 0) {
+    if (!currentPrice || currentPrice <= 0) {
+      toast({
+        title: 'Price unavailable',
+        description: `No live price for ${trade.pair} right now. Please try again shortly.`,
+        variant: 'destructive',
+      })
+      return
+    }
+
+    setClosingId(trade.id)
+    try {
+      if (trade.account_mode === 'live' && trade.chain_position_id != null) {
+        const txHash = await closePosition(Number(trade.chain_position_id))
+        if (!txHash) return // wallet rejected or transaction failed; trade stays open
+      }
       await closeTrade(trade.id, currentPrice)
+    } finally {
+      setClosingId(null)
     }
   }
 
@@ -65,8 +88,23 @@ const TradeHistory = ({ accountMode }: TradeHistoryProps) => {
     const pnl = isOpen ? calculateCurrentPnL(trade) : (trade.pnl || 0)
     const isProfitable = pnl >= 0
 
+    const pendingExit = isOpen && trade.pending_exit_kind ? trade.pending_exit_kind : null
+    const isClosing = closingId === trade.id
+
     return (
-      <div className="border rounded-lg p-4 space-y-3">
+      <div className={`border rounded-lg p-4 space-y-3 ${pendingExit ? 'border-amber-500 bg-amber-50' : ''}`}>
+        {pendingExit && (
+          <div className="flex items-start gap-2 text-sm text-amber-800">
+            <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+            <p>
+              <span className="font-semibold">
+                {pendingExit === 'stop_loss' ? 'Stop loss' : 'Take profit'} reached
+              </span>{' '}
+              at {Number(trade.pending_exit_price).toFixed(5)}. Confirm the close from your wallet —
+              the position stays open until the transaction is confirmed.
+            </p>
+          </div>
+        )}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Badge 
@@ -88,9 +126,13 @@ const TradeHistory = ({ accountMode }: TradeHistoryProps) => {
               {/* Close Position - closes at market price and updates balance */}
               <AlertDialog>
                 <AlertDialogTrigger asChild>
-                  <Button variant="outline" size="sm">
+                  <Button
+                    variant={pendingExit ? 'default' : 'outline'}
+                    size="sm"
+                    disabled={isClosing}
+                  >
                     <X className="h-4 w-4 mr-1" />
-                    Close Position
+                    {isClosing ? 'Closing…' : pendingExit ? 'Target reached — close now' : 'Close Position'}
                   </Button>
                 </AlertDialogTrigger>
                 <AlertDialogContent>
