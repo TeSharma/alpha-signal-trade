@@ -1,0 +1,4 @@
+ALTER TABLE public.trades
+  ADD COLUMN IF NOT EXISTS pending_exit_kind TEXT,
+  ADD COLUMN IF NOT EXISTS pending_exit_price NUMERIC,
+  ADD COLUMN IF NOT EXISTS pending_exit_at TIMESTAMP WITH TIME ZONE;
