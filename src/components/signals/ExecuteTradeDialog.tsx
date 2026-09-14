@@ -94,7 +94,17 @@ export function ExecuteTradeDialog({ signal, open, onOpenChange, onExecuted }: E
   const tp1 = Number(takeProfits[0]);
   const riskReward =
     stopDistance > 0 && Number.isFinite(tp1) ? Math.abs(tp1 - entryMid) / stopDistance : null;
-  const invalid = lotNum <= 0 || lotNum > 999999.9999 || marginRequired > balance;
+  // Same checks as the trading form: contract size, 1% risk, leverage, margin.
+  const sizeValidation = validateEnteredSize({
+    pair: signal.pair,
+    entryPrice: entryMid,
+    stopLoss: signal.stop_loss,
+    capital: balance,
+    leverage: DEMO_LEVERAGE,
+    mode: 'demo',
+    enteredSize: lotNum,
+  });
+  const invalid = !!sizeValidation.error;
 
   const fmt = (n: number) => n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
