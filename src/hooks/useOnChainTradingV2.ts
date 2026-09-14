@@ -849,7 +849,7 @@ export const useOnChainTradingV2 = (accountMode: AccountMode = 'demo') => {
       return positions;
     } catch (error) {
       console.error('Error fetching positions:', error);
-      return [];
+      throw new Error(extractErrorMessage(error));
     }
   };
 
@@ -903,7 +903,7 @@ export const useOnChainTradingV2 = (accountMode: AccountMode = 'demo') => {
       return positions;
     } catch (error) {
       console.error('Error fetching all positions:', error);
-      return [];
+      throw new Error(extractErrorMessage(error));
     }
   };
 
