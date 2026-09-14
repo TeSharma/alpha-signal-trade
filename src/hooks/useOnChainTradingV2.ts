@@ -563,7 +563,7 @@ export const useOnChainTradingV2 = (accountMode: AccountMode = 'demo') => {
   // Get platform configuration including fees
   const getPlatformConfig = async (): Promise<PlatformConfig | null> => {
     try {
-      const { web3 } = await getWeb3AndAccount();
+      const { web3 } = getReadContext();
       const contract = getTradingContract(web3);
       if (!contract) return null;
 
@@ -599,7 +599,7 @@ export const useOnChainTradingV2 = (accountMode: AccountMode = 'demo') => {
   // Get fee configuration
   const getFeeConfig = async (): Promise<FeeInfo | null> => {
     try {
-      const { web3 } = await getWeb3AndAccount();
+      const { web3 } = getReadContext();
       const contract = getTradingContract(web3);
       if (!contract) return null;
 
@@ -807,9 +807,9 @@ export const useOnChainTradingV2 = (accountMode: AccountMode = 'demo') => {
   // Get user's open positions
   const getUserOpenPositions = async (): Promise<PositionV2[]> => {
     try {
-      const { web3, account } = await getWeb3AndAccount();
+      const { web3, account } = getReadContext();
       const contract = getTradingContract(web3);
-      if (!contract) return [];
+      if (!contract) throw new Error(`Trading contract is not deployed on ${networkName}`);
 
       const positionIds: any[] = await contract.methods
         .getUserOpenPositions(account)
@@ -856,9 +856,9 @@ export const useOnChainTradingV2 = (accountMode: AccountMode = 'demo') => {
   // Get all user positions (including closed)
   const getAllUserPositions = async (): Promise<PositionV2[]> => {
     try {
-      const { web3, account } = await getWeb3AndAccount();
+      const { web3, account } = getReadContext();
       const contract = getTradingContract(web3);
-      if (!contract) return [];
+      if (!contract) throw new Error(`Trading contract is not deployed on ${networkName}`);
 
       const positionIds: any[] = await contract.methods
         .getUserPositions(account)
@@ -910,7 +910,7 @@ export const useOnChainTradingV2 = (accountMode: AccountMode = 'demo') => {
   // Get single position by ID
   const getPosition = async (positionId: number): Promise<PositionV2 | null> => {
     try {
-      const { web3 } = await getWeb3AndAccount();
+      const { web3 } = getReadContext();
       const contract = getTradingContract(web3);
       if (!contract) return null;
 
