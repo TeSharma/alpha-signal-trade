@@ -203,6 +203,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const disconnect = useCallback(async () => {
     // Detaches the active trading wallet only. Does NOT log out of
     // Privy or Supabase auth.
+    rememberDisconnect(true);
     setDisconnected();
     toast.info('Wallet disconnected');
   }, [setDisconnected]);
