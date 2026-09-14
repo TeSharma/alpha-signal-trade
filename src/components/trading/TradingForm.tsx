@@ -632,7 +632,8 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
           )}
           {accountMode === 'live' && (
             <p className="text-xs text-muted-foreground pt-1 border-t">
-              Stop loss and take profit are monitored by the platform, not auto-executed by the contract.
+              Stop loss and take profit are stored with your position on-chain and closed automatically
+              at the Chainlink price once reached. Leave them empty to keep the trade open until you close it.
             </p>
           )}
         </div>
