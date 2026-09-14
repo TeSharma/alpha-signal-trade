@@ -33,6 +33,34 @@ const TRADING_PLATFORM_V2_ABI = [
   },
   {
     inputs: [{ name: 'positionId', type: 'uint256' }],
+    name: 'closeWithTrigger',
+    outputs: [],
+    stateMutability: 'nonpayable',
+    type: 'function'
+  },
+  {
+    inputs: [{ name: 'keeper', type: 'address' }],
+    name: 'keepers',
+    outputs: [{ name: '', type: 'bool' }],
+    stateMutability: 'view',
+    type: 'function'
+  },
+  {
+    anonymous: false,
+    inputs: [
+      { indexed: true, name: 'id', type: 'uint256' },
+      { indexed: true, name: 'trader', type: 'address' },
+      { indexed: false, name: 'pairId', type: 'bytes32' },
+      { indexed: false, name: 'isLong', type: 'bool' },
+      { indexed: false, name: 'margin', type: 'uint256' },
+      { indexed: false, name: 'leverage', type: 'uint256' },
+      { indexed: false, name: 'entryPrice', type: 'uint256' }
+    ],
+    name: 'PositionOpened',
+    type: 'event'
+  },
+  {
+    inputs: [{ name: 'positionId', type: 'uint256' }],
     name: 'liquidate',
     outputs: [],
     stateMutability: 'nonpayable',
@@ -187,6 +215,13 @@ const PRICE_ORACLE_V2_ABI = [
     outputs: [{ name: '', type: 'bool' }],
     stateMutability: 'view',
     type: 'function'
+  },
+  {
+    inputs: [{ name: 'pairId', type: 'bytes32' }],
+    name: 'getDecimals',
+    outputs: [{ name: '', type: 'uint8' }],
+    stateMutability: 'view',
+    type: 'function'
   }
 ];
 
@@ -233,6 +268,16 @@ export interface OpenPositionV2Params {
   direction: 'buy' | 'sell';
   margin: string;
   leverage: number;
+  /** Optional stop loss in human price units. Stored on-chain so the keeper can close it. */
+  stopLoss?: number;
+  /** Optional take profit (TP1) in human price units. */
+  takeProfit?: number;
+}
+
+export interface OpenPositionResult {
+  txHash: string;
+  /** On-chain position id, needed for keeper-driven SL/TP closes */
+  positionId: number | null;
 }
 
 export interface PositionV2 {
