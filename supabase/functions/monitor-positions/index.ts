@@ -251,7 +251,9 @@ serve(async (req) => {
       await supabase.rpc("create_notification", {
         p_user_id: t.user_id,
         p_title: `${t.pair} ${trigger.kind === "stop_loss" ? "stop loss" : "take profit"} reached`,
-        p_message: `Your live ${t.pair} position reached ${trigger.exitPrice}. Open Positions to close it from your wallet.`,
+        p_message: settleable
+          ? `Your live ${t.pair} position reached ${trigger.exitPrice}. Open Positions to close it from your wallet.`
+          : `Your live ${t.pair} position reached ${trigger.exitPrice}. Automatic closing is paused because platform settlement liquidity is insufficient — you can still close it from your wallet.`,
         p_type: trigger.kind === "stop_loss" ? "warning" : "success",
         p_action_url: "/trade",
       }).catch(() => undefined);
