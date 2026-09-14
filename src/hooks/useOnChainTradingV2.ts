@@ -532,10 +532,10 @@ export const useOnChainTradingV2 = (accountMode: AccountMode = 'demo') => {
     return 'Transaction failed';
   };
 
-  // Get collateral balance
+  // Get collateral balance (read-only, on this mode's chain)
   const getCollateralBalance = async (): Promise<string> => {
     try {
-      const { web3, account } = await getWeb3AndAccount();
+      const { web3, account } = getReadContext();
       const collateralContract = getCollateralContract(web3);
       if (!collateralContract) return '0';
       const balance = await collateralContract.methods.balanceOf(account).call() as unknown as string;
@@ -546,15 +546,17 @@ export const useOnChainTradingV2 = (accountMode: AccountMode = 'demo') => {
     }
   };
 
-  // Get native MATIC balance for gas
-  const getMaticBalance = async (): Promise<string> => {
+  // Get native gas-token balance on this mode's chain.
+  // Returns null when the balance is genuinely unknown, so callers never treat
+  // a failed read as "zero balance".
+  const getMaticBalance = async (): Promise<string | null> => {
     try {
-      const { web3, account } = await getWeb3AndAccount();
+      const { web3, account } = getReadContext();
       const balance = await web3.eth.getBalance(account);
       return web3.utils.fromWei(balance, 'ether');
     } catch (error) {
-      console.error('Error fetching MATIC balance:', error);
-      return '0';
+      console.error('Error fetching native balance:', error);
+      return null;
     }
   };
 
