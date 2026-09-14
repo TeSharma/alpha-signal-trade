@@ -41,7 +41,8 @@ const MobileTradingInterface = ({ accountMode }: MobileTradingInterfaceProps) =>
   const { openPosition: openOnChainPositionV2, isLoading: onChainLoading, approvalPending, getCollateralBalance, getMaticBalance, getPlatformConfig } = useOnChainTradingV2(accountMode);
   const { toast } = useToast();
   const { isCorrectNetwork, currentChainId, switchToRequiredNetwork, requiredNetworkName } = useNetworkEnforcement(accountMode);
-  
+  const { address: walletAddress } = useUnifiedWallet();
+
   const networkMinimums = getMinimums(currentChainId ?? undefined);
   const minMargin = networkMinimums.minMargin;
   const [maxLeverage, setMaxLeverage] = useState(50);
@@ -54,15 +55,18 @@ const MobileTradingInterface = ({ accountMode }: MobileTradingInterfaceProps) =>
     }
   }, [accountMode, selectedPair]);
 
+  // Keyed on mode + connected wallet only (hook functions change identity every
+  // render, so including them would refetch continuously).
   useEffect(() => {
-    if (accountMode === 'live') {
+    if (accountMode === 'live' && walletAddress) {
       getCollateralBalance().then(setCollateralBalance);
       getMaticBalance().then(setMaticBalance);
       getPlatformConfig().then(config => {
         if (config) setMaxLeverage(config.maxLeverage);
       });
     }
-  }, [accountMode, getCollateralBalance, getMaticBalance, getPlatformConfig]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accountMode, walletAddress]);
 
   const selectedPairData = prices.find(p => p.pair === selectedPair);
   const currentPrice = getCurrentPrice(selectedPair);
