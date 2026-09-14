@@ -17,8 +17,8 @@ interface TradeHistoryProps {
 }
 
 const TradeHistory = ({ accountMode }: TradeHistoryProps) => {
-  const { trades, closeTrade, cancelTrade, updatePnL } = useTrades()
-  const { getCurrentPrice } = useMarketData()
+  const { trades, closeTrade, cancelTrade, updatePnL, loading } = useTrades()
+  const { getCurrentPrice } = useMarketData(accountMode)
   const { toast } = useToast()
   const [activeTab, setActiveTab] = useState('open')
 
