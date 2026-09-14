@@ -19,6 +19,7 @@ import { useLocation } from 'react-router-dom'
 import { useUnifiedWallet } from '@/wallet'
 import type { SignalObject } from '@/types/signal'
 import { computeRiskPlan, validateStops, RISK_PERCENT } from '@/lib/riskEngine'
+import { getAssetMultiplier } from '@/lib/pnl'
 
 interface TradingFormProps {
   accountMode: 'demo' | 'live';
