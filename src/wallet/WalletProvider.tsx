@@ -51,17 +51,27 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     [privyWallets],
   );
 
+  /**
+   * Balance is read through the app's own RPC endpoints (with fallbacks) rather
+   * than the browser extension's provider, which is frequently rate-limited and
+   * used to spam errors + re-renders. Failures stay quiet and simply leave the
+   * previous value in place.
+   */
   const readBalance = useCallback(
-    async (addr: string, eip1193: any | null) => {
-      try {
-        if (!eip1193) return;
-        const web3 = new Web3(eip1193);
-        const wei = await web3.eth.getBalance(addr);
-        const formatted = web3.utils.fromWei(wei, 'ether');
-        setBalance(parseFloat(formatted).toFixed(4));
-        updateBalance(parseFloat(formatted));
-      } catch (err) {
-        console.error('[unified-wallet] balance read failed:', err);
+    async (addr: string, chain?: number | null) => {
+      if (!addr) return;
+      const endpoints = getRpcUrlsForChain(chain ?? chainIdRef.current);
+      for (const endpoint of endpoints) {
+        try {
+          const web3 = new Web3(endpoint);
+          const wei = await web3.eth.getBalance(addr);
+          const formatted = parseFloat(web3.utils.fromWei(wei, 'ether'));
+          setBalance(formatted.toFixed(4));
+          updateBalance(formatted);
+          return;
+        } catch {
+          // try the next endpoint
+        }
       }
     },
     [updateBalance],
