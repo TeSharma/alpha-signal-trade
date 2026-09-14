@@ -267,12 +267,21 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       try {
         const accounts: string[] = await window.ethereum.request({ method: 'eth_accounts' });
         if (cancelled || !accounts || accounts.length === 0) return;
+        // Read the chain id, retrying once — a null chain id would otherwise
+        // look identical to "wrong network" to every network check.
         let detected: number | null = null;
-        try {
-          const chainHex: string = await window.ethereum.request({ method: 'eth_chainId' });
-          detected = hexToDec(chainHex);
-        } catch {
-          console.log('[unified-wallet] could not read chain id on rehydrate');
+        for (let attempt = 0; attempt < 2 && detected == null; attempt++) {
+          try {
+            const chainHex: string = await window.ethereum.request({ method: 'eth_chainId' });
+            detected = hexToDec(chainHex);
+          } catch {
+            if (attempt === 0) await new Promise((r) => setTimeout(r, 300));
+          }
+        }
+        if (detected == null) {
+          console.warn('[unified-wallet] could not read chain id on rehydrate');
+        } else {
+          console.log('[unified-wallet] rehydrated on chain', detected);
         }
         if (cancelled) return;
         try {
