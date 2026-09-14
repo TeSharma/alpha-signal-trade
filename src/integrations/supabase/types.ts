@@ -1010,6 +1010,10 @@ export type Database = {
         Args: { p_exit_price: number; p_trade_id: string }
         Returns: string
       }
+      close_trade_system: {
+        Args: { p_exit_price: number; p_reason?: string; p_trade_id: string }
+        Returns: Json
+      }
       create_notification: {
         Args: {
           p_action_url?: string
