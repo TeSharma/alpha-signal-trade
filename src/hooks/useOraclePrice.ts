@@ -116,9 +116,11 @@ export const useOraclePrice = (accountMode: AccountMode = 'demo') => {
       console.error(`Error fetching price for ${pair}:`, error);
       return null;
     }
-  }, [getOracleContract, web3]);
+  }, [getOracleContract]);
 
   const fetchMultiplePrices = useCallback(async (pairs: string[]): Promise<void> => {
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
     setIsLoading(true);
     try {
       const pricePromises = pairs.map(pair => fetchPrice(pair));
