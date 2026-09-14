@@ -243,8 +243,12 @@ export function validateStops(
       takeProfitError = `For a BUY the take profit must be above the entry price (${entryPrice}).`;
     } else if (!isLong && takeProfit >= entryPrice) {
       takeProfitError = `For a SELL the take profit must be below the entry price (${entryPrice}).`;
-    } else if (Math.abs(takeProfit - entryPrice) / entryPrice > 5) {
-      takeProfitError = 'Take profit is unrealistically far from the entry price.';
+    } else {
+      // Forex and metals never travel far from spot; crypto genuinely can.
+      const maxAwayFraction = getAssetMultiplier(pair) === 1 ? 5 : 0.1;
+      if (Math.abs(takeProfit - entryPrice) / entryPrice > maxAwayFraction) {
+        takeProfitError = `Take profit is unrealistically far from the entry price (${entryPrice}).`;
+      }
     }
   }
 
