@@ -2,7 +2,7 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useR
 import { ethers } from 'ethers';
 import Web3 from 'web3';
 import { toast } from 'sonner';
-import { usePrivy, useWallets } from '@privy-io/react-auth';
+import { useSafePrivy, useSafePrivyWallets } from './safePrivy';
 import { connectToBlockchain } from '@/lib/web3';
 import { useApp } from '@/contexts/AppContext';
 import {
@@ -33,8 +33,8 @@ const WalletContext = createContext<UnifiedWalletContextValue | null>(null);
  */
 export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { setWalletConnected, updateBalance } = useApp();
-  const { ready: privyReady, authenticated: privyAuthenticated } = usePrivy();
-  const { wallets: privyWallets } = useWallets();
+  const { ready: privyReady, authenticated: privyAuthenticated } = useSafePrivy();
+  const privyWallets = useSafePrivyWallets();
 
   const [address, setAddress] = useState('');
   const [chainId, setChainId] = useState<number | null>(null);
