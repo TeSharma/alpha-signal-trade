@@ -9,6 +9,7 @@ import { Slider } from "@/components/ui/slider";
 import { TrendingUp, TrendingDown, Calculator, X, AlertTriangle, Zap, Link } from "lucide-react";
 import CollapsibleCard from "@/components/ui/collapsible-card";
 import OracleStatus from "@/components/trading/OracleStatus";
+import PlatformLiquidityStatus from "@/components/trading/PlatformLiquidityStatus";
 import TradingViewChart from "@/components/trading/TradingViewChart";
 import { useTrades } from '@/hooks/useTrades';
 import { useMarketData } from '@/hooks/useMarketData';
@@ -273,9 +274,12 @@ const MobileTradingInterface = ({ accountMode }: MobileTradingInterfaceProps) =>
     <main className="space-y-4 p-4">
       {/* Oracle Status for Live Mode */}
       {accountMode === 'live' && (
-        <div className="flex justify-center">
-          <OracleStatus accountMode={accountMode} />
-        </div>
+        <>
+          <div className="flex justify-center">
+            <OracleStatus accountMode={accountMode} />
+          </div>
+          <PlatformLiquidityStatus accountMode={accountMode} />
+        </>
       )}
 
       {/* Pair Selector — only valid markets for mode */}

@@ -11,6 +11,7 @@ import AccountBalance from "@/components/trading/AccountBalance";
 import { DeploymentGuide } from "@/components/trading/DeploymentGuide";
 import V2PositionsPanel from "@/components/trading/V2PositionsPanel";
 import OracleStatus from "@/components/trading/OracleStatus";
+import PlatformLiquidityStatus from "@/components/trading/PlatformLiquidityStatus";
 import TradingViewChart from "@/components/trading/TradingViewChart";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -67,9 +68,12 @@ const Trade = () => {
                     </div>
                     <div className="lg:col-span-2 space-y-6">
                       {accountMode === 'live' && (
-                        <div className="flex justify-end">
-                          <OracleStatus accountMode={accountMode} />
-                        </div>
+                        <>
+                          <div className="flex justify-end">
+                            <OracleStatus accountMode={accountMode} />
+                          </div>
+                          <PlatformLiquidityStatus accountMode={accountMode} />
+                        </>
                       )}
                       <div className="rounded-lg border border-border bg-card p-4 space-y-3">
                         <div className="flex items-center justify-between">

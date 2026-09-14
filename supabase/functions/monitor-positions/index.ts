@@ -8,6 +8,12 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import {
+  buildLiquiditySnapshot,
+  canSettleClose,
+  worstCasePayout,
+  type LiquiditySnapshot,
+} from "../_shared/liquidity.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -102,6 +108,7 @@ function detectTrigger(
 }
 
 serve(async (req) => {
+
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
@@ -115,7 +122,7 @@ serve(async (req) => {
     const { data: openTrades, error } = await supabase
       .from("trades")
       .select(
-        "id, user_id, pair, direction, stop_loss, take_profit, account_mode, pending_exit_kind",
+        "id, user_id, pair, direction, lot_size, stop_loss, take_profit, account_mode, pending_exit_kind",
       )
       .eq("status", "open");
 
@@ -127,6 +134,8 @@ serve(async (req) => {
       closedDemo: 0,
       livePendingExits: 0,
       priceUnavailable: 0,
+      liquidityBlocked: 0,
+      liquidityStatus: "n/a" as string,
     };
 
     if (!openTrades || openTrades.length === 0) {
@@ -136,6 +145,20 @@ serve(async (req) => {
     }
 
     const priceCache: Record<string, number | null> = {};
+
+    // Platform liquidity pre-flight — read once per run, only when live trades exist.
+    let liquidity: LiquiditySnapshot | null = null;
+    const hasLiveTrades = openTrades.some((t) => t.account_mode === "live");
+    if (hasLiveTrades) {
+      try {
+        liquidity = await buildLiquiditySnapshot(supabase);
+        summary.liquidityStatus = liquidity.status;
+        console.log("[monitor-positions] liquidity", JSON.stringify(liquidity));
+      } catch (e) {
+        console.error("[monitor-positions] liquidity check failed:", e);
+        summary.liquidityStatus = "UNKNOWN";
+      }
+    }
 
     for (const t of openTrades) {
       // Manual trades without SL and without TP stay open until closed by the user.
@@ -190,6 +213,25 @@ serve(async (req) => {
       // so nothing off-chain can settle a live position. We flag it and notify the user.
       if (t.pending_exit_kind) continue; // already flagged
 
+      // Liquidity pre-flight: the keeper must never submit a close that is
+      // guaranteed to revert because the platform cannot pay the settlement.
+      // This gate runs before any closeWithTrigger submission is attempted.
+      const requiredPayout = worstCasePayout(Number(t.lot_size ?? 0));
+      const settleable =
+        liquidity?.balance != null &&
+        canSettleClose(liquidity.balance, requiredPayout, liquidity.buffer, trigger.kind);
+
+      if (!settleable) {
+        summary.liquidityBlocked++;
+        console.warn(
+          `[monitor-positions] liquidity gate blocked automatic close of ${t.id}: ` +
+            `needs ${requiredPayout} USDC, platform balance ${liquidity?.balance ?? "unknown"}, ` +
+            `buffer ${liquidity?.buffer ?? "unknown"} (${trigger.kind})`,
+        );
+        // Still flag the pending exit so the user can close from their own wallet,
+        // but never submit an on-chain close while liquidity is insufficient.
+      }
+
       const { error: flagErr } = await supabase
         .from("trades")
         .update({
@@ -209,7 +251,9 @@ serve(async (req) => {
       await supabase.rpc("create_notification", {
         p_user_id: t.user_id,
         p_title: `${t.pair} ${trigger.kind === "stop_loss" ? "stop loss" : "take profit"} reached`,
-        p_message: `Your live ${t.pair} position reached ${trigger.exitPrice}. Open Positions to close it from your wallet.`,
+        p_message: settleable
+          ? `Your live ${t.pair} position reached ${trigger.exitPrice}. Open Positions to close it from your wallet.`
+          : `Your live ${t.pair} position reached ${trigger.exitPrice}. Automatic closing is paused because platform settlement liquidity is insufficient — you can still close it from your wallet.`,
         p_type: trigger.kind === "stop_loss" ? "warning" : "success",
         p_action_url: "/trade",
       }).catch(() => undefined);
