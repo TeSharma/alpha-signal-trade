@@ -31,6 +31,13 @@ const PRICE_ORACLE_V2_ABI = [
     outputs: [{ name: '', type: 'bool' }],
     stateMutability: 'view',
     type: 'function'
+  },
+  {
+    inputs: [{ name: 'pairId', type: 'bytes32' }],
+    name: 'getDecimals',
+    outputs: [{ name: '', type: 'uint8' }],
+    stateMutability: 'view',
+    type: 'function'
   }
 ];
 
@@ -105,9 +112,14 @@ const OracleStatus = ({ accountMode = 'demo' }: OracleStatusProps) => {
               return { pair, available: false, lastUpdated: null, price: null, isStale: true };
             }
 
-            const result = await contract.methods.getPrice(pairId).call() as { price: string; updatedAt: string };
+            const [result, feedDecimals] = await Promise.all([
+              contract.methods.getPrice(pairId).call() as Promise<{ price: string; updatedAt: string }>,
+              contract.methods.getDecimals(pairId).call() as Promise<string>
+            ]);
             const updatedAt = Number(result.updatedAt);
-            const price = web3.utils.fromWei(result.price, 'ether');
+            // PriceOracleV2 reports prices at the feed's own precision (8 for
+            // Chainlink), not 18 — never assume wei here.
+            const price = (Number(result.price) / Math.pow(10, Number(feedDecimals))).toString();
             const staleness = currentTime - updatedAt;
 
             return {
