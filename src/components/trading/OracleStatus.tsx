@@ -59,15 +59,12 @@ const OracleStatus = ({ accountMode = 'demo' }: OracleStatusProps) => {
   const [isConnected, setIsConnected] = useState(false);
 
   // Mode-aware config
-  const rpcUrl = getRpcUrl(accountMode);
   const addresses = getContractAddresses(accountMode);
   const oracleAddress = addresses.PriceOracleV2 as string;
-  const pairs = getMarketsForMode(accountMode);
+  const pairs = useMemo(() => getMarketsForMode(accountMode), [accountMode]);
 
-  // RPC endpoints with fallbacks
-  const RPC_ENDPOINTS = accountMode === 'demo'
-    ? [rpcUrl, 'https://polygon-amoy.drpc.org/', 'https://polygon-amoy-bor-rpc.publicnode.com']
-    : [rpcUrl, 'https://polygon-rpc.com/', 'https://polygon-bor-rpc.publicnode.com'];
+  // Shared RPC endpoints with fallbacks (first dead endpoint must not take live mode offline)
+  const RPC_ENDPOINTS = useMemo(() => getRpcUrls(accountMode), [accountMode]);
 
   const fetchOracleStatus = useCallback(async (rpcIndex: number = 0) => {
     if (!oracleAddress || oracleAddress === '') {
