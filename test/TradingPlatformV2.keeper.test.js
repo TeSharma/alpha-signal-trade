@@ -150,4 +150,98 @@ describe("TradingPlatformV2 — keeper SL/TP execution", function () {
       tradingPlatform.connect(keeper).closeWithTrigger(id)
     ).to.be.revertedWith("Not keeper");
   });
+
+  it("closes a short at its stop loss", async function () {
+    const sl = ethers.parseUnits("1.10", 8);
+    const id = await openShort(sl, 0);
+    await priceOracle.setPrice(PAIR_ID, ethers.parseUnits("1.105", 8));
+
+    await expect(tradingPlatform.connect(keeper).closeWithTrigger(id)).to.not.be.reverted;
+    expect((await tradingPlatform.getPosition(id)).isOpen).to.equal(false);
+  });
+
+  it("triggers when the price is exactly equal to the stop loss or take profit", async function () {
+    const sl = ethers.parseUnits("1.07", 8);
+    const longId = await openLong(sl, 0);
+    await priceOracle.setPrice(PAIR_ID, sl);
+    await expect(tradingPlatform.connect(keeper).closeWithTrigger(longId)).to.not.be.reverted;
+
+    await priceOracle.setPrice(PAIR_ID, ENTRY);
+    const tp = ethers.parseUnits("1.10", 8);
+    const tpTx = await tradingPlatform
+      .connect(trader)
+      .openPosition(PAIR_ID, true, MARGIN, LEVERAGE, 0, tp);
+    await tpTx.wait();
+    await priceOracle.setPrice(PAIR_ID, tp);
+    await expect(tradingPlatform.connect(keeper).closeWithTrigger(2n)).to.not.be.reverted;
+  });
+
+  it("rejects stale oracle data beyond the 120s timeout and accepts data within it", async function () {
+    const sl = ethers.parseUnits("1.07", 8);
+    const id = await openLong(sl, 0);
+    const breach = ethers.parseUnits("1.06", 8);
+
+    const now = (await ethers.provider.getBlock("latest")).timestamp;
+    await priceOracle.setPriceAt(PAIR_ID, breach, now - 200);
+    await expect(
+      tradingPlatform.connect(keeper).closeWithTrigger(id)
+    ).to.be.revertedWith("Stale price");
+
+    const fresh = (await ethers.provider.getBlock("latest")).timestamp;
+    await priceOracle.setPriceAt(PAIR_ID, breach, fresh - 110);
+    await expect(tradingPlatform.connect(keeper).closeWithTrigger(id)).to.not.be.reverted;
+  });
+
+  it("setKeeper is owner-only, rejects the zero address and emits KeeperUpdated", async function () {
+    await expect(
+      tradingPlatform.connect(stranger).setKeeper(stranger.address, true)
+    ).to.be.reverted;
+
+    await expect(
+      tradingPlatform.setKeeper(ethers.ZeroAddress, true)
+    ).to.be.revertedWith("Invalid keeper");
+
+    await expect(tradingPlatform.setKeeper(stranger.address, true))
+      .to.emit(tradingPlatform, "KeeperUpdated")
+      .withArgs(stranger.address, true);
+    expect(await tradingPlatform.keepers(stranger.address)).to.equal(true);
+  });
+
+  it("a trigger close pays the trader exactly the same as a manual close at that price", async function () {
+    const tp = ethers.parseUnits("1.10", 8);
+
+    // Position 1: closed by the keeper at its take profit
+    const id1 = await openLong(0, tp);
+    await priceOracle.setPrice(PAIR_ID, tp);
+    const beforeTrigger = await collateralToken.balanceOf(trader.address);
+    await tradingPlatform.connect(keeper).closeWithTrigger(id1);
+    const triggerPayout = (await collateralToken.balanceOf(trader.address)) - beforeTrigger;
+
+    // Position 2: identical, closed manually by the trader at the same price
+    await priceOracle.setPrice(PAIR_ID, ENTRY);
+    const openTx = await tradingPlatform
+      .connect(trader)
+      .openPosition(PAIR_ID, true, MARGIN, LEVERAGE, 0, tp);
+    await openTx.wait();
+    await priceOracle.setPrice(PAIR_ID, tp);
+    const beforeManual = await collateralToken.balanceOf(trader.address);
+    await tradingPlatform.connect(trader).closePosition(2n);
+    const manualPayout = (await collateralToken.balanceOf(trader.address)) - beforeManual;
+
+    expect(triggerPayout).to.equal(manualPayout);
+  });
+
+  it("the keeper receives nothing and cannot manually close another trader's position", async function () {
+    const sl = ethers.parseUnits("1.07", 8);
+    const id = await openLong(sl, 0);
+    await priceOracle.setPrice(PAIR_ID, ethers.parseUnits("1.06", 8));
+
+    await expect(
+      tradingPlatform.connect(keeper).closePosition(id)
+    ).to.be.revertedWith("Not owner");
+
+    const keeperBefore = await collateralToken.balanceOf(keeper.address);
+    await tradingPlatform.connect(keeper).closeWithTrigger(id);
+    expect(await collateralToken.balanceOf(keeper.address)).to.equal(keeperBefore);
+  });
 });
