@@ -52,6 +52,13 @@ const TradeHistory = ({ accountMode }: TradeHistoryProps) => {
   }
 
 
+  /** A target counts as hit only for a closed trade whose exit reached it. */
+  const isTakeProfitHit = (trade: Trade) => {
+    if (trade.status !== 'closed' || !trade.take_profit || !trade.exit_price) return false
+    const isLong = trade.direction === 'buy' || trade.direction === 'LONG'
+    return isLong ? trade.exit_price >= trade.take_profit : trade.exit_price <= trade.take_profit
+  }
+
   const calculateCurrentPnL = (trade: Trade) => {
     const currentPrice = getCurrentPrice(trade.pair)
     if (!currentPrice || currentPrice <= 0) return trade.pnl || 0
@@ -176,7 +183,7 @@ const TradeHistory = ({ accountMode }: TradeHistoryProps) => {
           )}
           {trade.take_profit && (
             <div className="flex items-center gap-1">
-              <span className="text-green-600">TP1 (executed):</span>
+              <span className="text-green-600">TP1 ({isTakeProfitHit(trade) ? 'hit' : 'attached'}):</span>
               <span className="font-mono">{trade.take_profit.toFixed(5)}</span>
             </div>
           )}
