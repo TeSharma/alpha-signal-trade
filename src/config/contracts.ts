@@ -62,8 +62,14 @@ export const getRequiredChainId = (mode: AccountMode): number =>
 export const getRequiredChainHex = (mode: AccountMode): string =>
   mode === 'demo' ? '0x13882' : '0x89';
 
+export const getRpcUrls = (mode: AccountMode): string[] =>
+  mode === 'demo' ? AMOY_RPC_URLS : POLYGON_RPC_URLS;
+
 export const getRpcUrl = (mode: AccountMode): string =>
-  mode === 'demo' ? AMOY_RPC_URL : POLYGON_RPC_URL;
+  getRpcUrls(mode)[0];
+
+export const getRpcUrlsForChain = (chainId?: number | null): string[] =>
+  chainId === CHAIN_IDS.polygon ? POLYGON_RPC_URLS : AMOY_RPC_URLS;
 
 export const getNetworkParams = (mode: AccountMode) =>
   mode === 'demo' ? AMOY_NETWORK_PARAMS : POLYGON_NETWORK_PARAMS;
