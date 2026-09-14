@@ -129,7 +129,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       setConnected(true);
       setIsConnecting(false);
       setWalletConnected(true);
-      await readBalance(addr, eip1193);
+      await readBalance(addr, Number(network.chainId));
       toast.success('Embedded wallet connected');
     } catch (err: any) {
       setIsConnecting(false);
@@ -169,7 +169,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       setConnected(true);
       setIsConnecting(false);
       setWalletConnected(true);
-      await readBalance(accounts[0], window.ethereum);
+      await readBalance(accounts[0], detected);
       toast.success('Wallet connected successfully!');
     } catch (err: any) {
       setIsConnecting(false);
@@ -247,7 +247,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         setSource('injected');
         setConnected(true);
         setWalletConnected(true);
-        await readBalance(accounts[0], window.ethereum);
+        await readBalance(accounts[0], detected);
       } catch (err) {
         console.log('[unified-wallet] rehydrate skipped:', err);
       }
@@ -265,7 +265,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       if (!accounts || accounts.length === 0) setDisconnected();
       else {
         setAddress(accounts[0]);
-        readBalance(accounts[0], window.ethereum);
+        readBalance(accounts[0], chainIdRef.current);
       }
     };
     const handleChainChanged = (chainHex: string) => setChainId(hexToDec(chainHex));
