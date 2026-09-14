@@ -49,12 +49,16 @@ Requires from you: deploying the upgraded contract (I prepare the script and run
 ### 4. Stop the broken P&L call
 Remove the client's `calculate_trade_pnl` call; open-trade P&L stays client-side from live prices, and the stored P&L is written once at close by `close_trade_system`. This clears the repeating permission error.
 
+### 5. SL and TP stay optional
+No change to how trades are opened: a manual trade may have neither an SL nor a TP, and such a trade is skipped by the monitor and by the keeper. It stays open until the user closes it (or is liquidated, as today).
+
 ## Untouched
-Smart contracts (no deploy, no ABI change), oracle registrations and Chainlink feeds, the 7-market config, USD/JPY staying signals-only, the 1% risk engine, contract sizes, leverage and margin rules, wallet architecture, and Demo/Live separation.
+Oracle contract and its Chainlink registrations, feed addresses, the 7-market config, USD/JPY staying signals-only, the 1% risk engine, contract sizes, leverage and margin rules, fee structure, wallet architecture, and Demo/Live separation.
 
 ## Verification
 - Demo BUY and SELL with SL and with TP1: monitor closes them at the trigger price, status becomes Closed, exit price and P&L correct, demo balance moves by exactly that P&L, snapshot written.
 - Re-running the monitor while price stays beyond the trigger produces no second close and no second balance credit.
-- A manual trade with no SL/TP stays open across monitor runs.
-- Live: trigger detection produces the notification and the "Close now" action; nothing is marked closed without a confirmed transaction.
-- Typecheck and production build clean. No blockchain transactions, nothing committed.
+- A manual trade with no SL/TP stays open across monitor runs, in both modes.
+- Contract test suite extended: keeper-only access, revert when not triggered, revert with no SL/TP set, correct settlement on a valid long SL, short TP and long TP trigger, revert on an already-closed position.
+- Live end-to-end runs only after you deploy and fund the keeper; until then live trades behave exactly as today.
+- Typecheck and production build clean. I run no blockchain transactions and commit nothing.
