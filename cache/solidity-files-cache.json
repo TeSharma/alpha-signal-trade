@@ -2,8 +2,8 @@
   "_format": "hh-sol-cache-2",
   "files": {
     "/dev-server/src/contracts/MockPriceOracleV2.sol": {
-      "lastModificationDate": 1789418837281,
-      "contentHash": "8e5a164245fd682d5906080618176533",
+      "lastModificationDate": 1789423940201,
+      "contentHash": "b5664a9ace1fe5f445bdb02f22897f88",
       "sourceName": "src/contracts/MockPriceOracleV2.sol",
       "solcConfig": {
         "version": "0.8.20",
