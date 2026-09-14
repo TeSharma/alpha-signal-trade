@@ -9,6 +9,7 @@ import { Slider } from "@/components/ui/slider";
 import { TrendingUp, TrendingDown, Calculator, X, AlertTriangle, Zap, Link } from "lucide-react";
 import CollapsibleCard from "@/components/ui/collapsible-card";
 import OracleStatus from "@/components/trading/OracleStatus";
+import TradingViewChart from "@/components/trading/TradingViewChart";
 import { useTrades } from '@/hooks/useTrades';
 import { useMarketData } from '@/hooks/useMarketData';
 import { useOnChainTradingV2 } from '@/hooks/useOnChainTradingV2';
@@ -292,11 +293,9 @@ const MobileTradingInterface = ({ accountMode }: MobileTradingInterfaceProps) =>
 
       {/* Chart View */}
       <CollapsibleCard title="Chart View" defaultOpen={showChart}>
-        <div className="h-64 bg-muted rounded-lg flex items-center justify-center">
-          <p className="text-muted-foreground">TradingView Chart</p>
-          <p className="text-sm text-muted-foreground ml-2">(Pinch to zoom)</p>
-        </div>
+        <TradingViewChart pair={selectedPair} height={320} />
       </CollapsibleCard>
+
 
       {/* Trading Form */}
       <Card>
