@@ -32,7 +32,8 @@ const MobileTradingInterface = ({ accountMode }: MobileTradingInterfaceProps) =>
   const [showChart, setShowChart] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [collateralBalance, setCollateralBalance] = useState('0');
-  const [maticBalance, setMaticBalance] = useState('0');
+  // null = not read yet / read failed. Never treated as "no gas".
+  const [maticBalance, setMaticBalance] = useState<string | null>(null);
 
   const { createTrade, accountBalance } = useTrades();
   const { prices, getCurrentPrice, getBidPrice, getAskPrice, oracleAvailable } = useMarketData(accountMode);
@@ -68,7 +69,7 @@ const MobileTradingInterface = ({ accountMode }: MobileTradingInterfaceProps) =>
   const askPrice = getAskPrice(selectedPair);
 
   const oracleHealthy = accountMode === 'demo' || selectedPairData?.isOraclePrice === true;
-  const maticLow = accountMode === 'live' && parseFloat(maticBalance) < 0.001;
+  const maticLow = accountMode === 'live' && maticBalance !== null && parseFloat(maticBalance) < 0.001;
 
   const handleSubmitTrade = async () => {
     if (isSubmitting) return;

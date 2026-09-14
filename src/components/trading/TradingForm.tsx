@@ -66,7 +66,8 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
   const { toast } = useToast()
   const { isCorrectNetwork, currentChainId, switchToRequiredNetwork, requiredNetworkName } = useNetworkEnforcement(accountMode)
   const [collateralBalance, setCollateralBalance] = useState('0')
-  const [maticBalance, setMaticBalance] = useState('0')
+  // null = not read yet / read failed. Never treated as "no gas".
+  const [maticBalance, setMaticBalance] = useState<string | null>(null)
   const [maxLeverage, setMaxLeverage] = useState(50)
 
   // Reset selected pair when mode changes
@@ -99,7 +100,7 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
 
   // Oracle health: in live mode, require oracle price for selected pair
   const oracleHealthy = accountMode === 'demo' || selectedPairData?.isOraclePrice === true
-  const maticLow = accountMode === 'live' && parseFloat(maticBalance) < 0.001
+  const maticLow = accountMode === 'live' && maticBalance !== null && parseFloat(maticBalance) < 0.001
 
   const handleSubmitTrade = async () => {
     if (isSubmitting) return
