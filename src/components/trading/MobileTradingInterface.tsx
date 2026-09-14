@@ -16,6 +16,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useNetworkEnforcement } from '@/hooks/useNetworkEnforcement';
 import { getMinimums, isMainnet, FEE_CONFIG, calculateOpenFee, getNetworkName } from '@/config/contracts';
 import { getMarketsForMode, MARKET_METADATA, formatPrice } from '@/config/markets';
+import { useUnifiedWallet } from '@/wallet';
 
 interface MobileTradingInterfaceProps {
   accountMode: 'demo' | 'live';
