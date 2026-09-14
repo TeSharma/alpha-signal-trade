@@ -247,7 +247,12 @@ const TradeHistory = ({ accountMode }: TradeHistoryProps) => {
             
             <ScrollArea className="h-96">
               <div className="space-y-3">
-                {openTrades.length === 0 ? (
+                {loading ? (
+                  <div className="text-center py-8 text-gray-500">
+                    <Activity className="h-12 w-12 mx-auto mb-4 opacity-50 animate-pulse" />
+                    <p>Loading your trades…</p>
+                  </div>
+                ) : openTrades.length === 0 ? (
                   <div className="text-center py-8 text-gray-500">
                     <Activity className="h-12 w-12 mx-auto mb-4 opacity-50" />
                     <p>No open trades</p>
@@ -276,7 +281,12 @@ const TradeHistory = ({ accountMode }: TradeHistoryProps) => {
 
             <ScrollArea className="h-96">
               <div className="space-y-3">
-                {closedTrades.length === 0 ? (
+                {loading ? (
+                  <div className="text-center py-8 text-gray-500">
+                    <Clock className="h-12 w-12 mx-auto mb-4 opacity-50 animate-pulse" />
+                    <p>Loading your trades…</p>
+                  </div>
+                ) : closedTrades.length === 0 ? (
                   <div className="text-center py-8 text-gray-500">
                     <Clock className="h-12 w-12 mx-auto mb-4 opacity-50" />
                     <p>No trade history</p>
