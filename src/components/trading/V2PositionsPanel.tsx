@@ -94,25 +94,9 @@ const V2PositionsPanel: React.FC<V2PositionsPanelProps> = ({ accountMode = 'live
     return currentPnL < 0 && lossPercent > 80;
   };
 
-  if (positions.length === 0 && !isRefreshing) {
-    return (
-      <Card>
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-lg">Open Positions (V2)</CardTitle>
-            <Button variant="ghost" size="sm" onClick={fetchPositions} disabled={isRefreshing}>
-              <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground text-center py-4">
-            No open positions
-          </p>
-        </CardContent>
-      </Card>
-    );
-  }
+  const showLoading = isRefreshing && !hasLoadedOnce;
+  const showError = !showLoading && loadError !== null;
+  const showEmpty = !showLoading && !showError && positions.length === 0;
 
   return (
     <Card>
@@ -125,11 +109,29 @@ const V2PositionsPanel: React.FC<V2PositionsPanelProps> = ({ accountMode = 'live
         </div>
       </CardHeader>
       <CardContent className="space-y-3">
-        {isRefreshing && positions.length === 0 ? (
+        {showLoading ? (
           <>
             <Skeleton className="h-24 w-full" />
             <Skeleton className="h-24 w-full" />
           </>
+        ) : showError ? (
+          <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-4 space-y-3">
+            <div className="flex items-start gap-2 text-sm">
+              <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0 text-destructive" />
+              <div>
+                <p className="font-medium">Could not load your open positions</p>
+                <p className="text-muted-foreground break-words">{loadError}</p>
+              </div>
+            </div>
+            <Button variant="outline" size="sm" onClick={fetchPositions} disabled={isRefreshing}>
+              <RefreshCw className={`h-4 w-4 mr-1 ${isRefreshing ? 'animate-spin' : ''}`} />
+              Retry
+            </Button>
+          </div>
+        ) : showEmpty ? (
+          <p className="text-sm text-muted-foreground text-center py-4">
+            No open positions
+          </p>
         ) : (
           positions.map((position) => (
             <div
