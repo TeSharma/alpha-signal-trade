@@ -111,10 +111,8 @@ export function ExecuteTradeDialog({ signal, open, onOpenChange, onExecuted }: E
   const handleConfirm = async () => {
     if (invalid) {
       toast({
-        title: 'Invalid lot size',
-        description: marginRequired > balance
-          ? `Required margin ($${fmt(marginRequired)}) exceeds balance ($${fmt(balance)}).`
-          : 'Lot size must be greater than 0.',
+        title: 'Position Size Not Allowed',
+        description: sizeValidation.error ?? 'Lot size must be greater than 0.',
         variant: 'destructive',
       });
       return;
