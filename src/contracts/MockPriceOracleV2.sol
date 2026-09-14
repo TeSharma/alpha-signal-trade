@@ -14,6 +14,12 @@ contract MockPriceOracleV2 {
         timestamps[pairId] = block.timestamp;
     }
 
+    /// @notice Test helper: set a price with an explicit update timestamp (staleness tests)
+    function setPriceAt(bytes32 pairId, uint256 price, uint256 updatedAt) external {
+        prices[pairId] = price;
+        timestamps[pairId] = updatedAt;
+    }
+
     function getPrice(bytes32 pairId) external view returns (uint256 price, uint256 updatedAt) {
         require(prices[pairId] > 0, "Price not set");
         return (prices[pairId], timestamps[pairId]);
