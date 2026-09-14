@@ -32,26 +32,33 @@ New security-definer function `close_trade_system(p_trade_id, p_exit_price, p_re
 
 Demo auto-close in `evaluate-signals` switches to this function (single source of truth), and the monitor uses it too.
 
-### 3. Live mode: honest behaviour now, plus the upgrade path
-Because the deployed contract will not accept a keeper close, live triggers will:
-- be detected by the monitor and recorded as a pending exit (a notification the user already receives through the existing notifications system: "GBP/USD take profit reached — close position");
-- surface in Open Positions as a highlighted "Target reached — Close now" action that submits the normal `closePosition` transaction from the user's wallet, then updates the database on confirmation;
-- never be labelled "hit" or "closed" until the on-chain close is confirmed.
+### 3. Live mode: true on-chain automatic execution (contract upgrade)
+`TradingPlatformV2` gains one new function, `closeWithTrigger(uint256 id)`:
+- callable only by an address holding a new `KEEPER_ROLE` (granted by the owner);
+- reads the price for the position's pair through the existing `PriceOracleV2` and applies the same staleness limit;
+- requires the stored SL or TP to be genuinely breached in the position's direction (long: price ≤ SL or ≥ TP; short: price ≥ SL or ≤ TP) — a keeper cannot close a position that is not triggered, and cannot close one with no SL and no TP;
+- settles through the existing `_closePosition` path, so fees, margin, leverage, the 300% profit cap and payout to the trader are unchanged;
+- reverts if the position is already closed, which makes a repeat call harmless.
 
-The trade panel's current wording ("platform-monitored, not contract-enforced") is updated to state plainly that live SL/TP require confirmation from the user's wallet.
+Everything else in the contract is untouched. This is a new deployment of the platform contract; the oracle, its Chainlink registrations and the collateral token stay exactly as they are. New platform address goes into `src/config/contracts.ts`, and existing open positions on the old address keep working through manual close.
 
-Smallest production-safe architecture for true live automation (**requires a contract deploy — not part of this change, your decision**):
-add `closeWithTrigger(uint256 id)` to the platform, callable by any address holding a `KEEPER_ROLE`, which reads the Chainlink price through the existing oracle, requires the stored SL/TP to be genuinely breached in the position's direction, and then runs the same `_closePosition` settlement (proceeds still go to the trader). The keeper is then the same `monitor-positions` function signing with a funded keeper wallet key held as a secret. No new oracle, no new price source, no change to fees, margin, leverage or risk rules.
+The keeper is `monitor-positions` itself: on a live trigger it signs `closeWithTrigger` with a dedicated keeper wallet (private key held as a secret, funded with a small amount of POL for gas, holding only `KEEPER_ROLE` — no admin rights, no access to user funds). It waits for the transaction receipt and only then marks the trade closed in the database with the on-chain exit price and settled P&L. A failed or reverted transaction leaves the trade open and is retried on the next run; an in-flight transaction is tracked so the same position is never submitted twice.
+
+Requires from you: deploying the upgraded contract (I prepare the script and run nothing), granting `KEEPER_ROLE` to the keeper address, and funding that keeper wallet with gas.
 
 ### 4. Stop the broken P&L call
 Remove the client's `calculate_trade_pnl` call; open-trade P&L stays client-side from live prices, and the stored P&L is written once at close by `close_trade_system`. This clears the repeating permission error.
 
+### 5. SL and TP stay optional
+No change to how trades are opened: a manual trade may have neither an SL nor a TP, and such a trade is skipped by the monitor and by the keeper. It stays open until the user closes it (or is liquidated, as today).
+
 ## Untouched
-Smart contracts (no deploy, no ABI change), oracle registrations and Chainlink feeds, the 7-market config, USD/JPY staying signals-only, the 1% risk engine, contract sizes, leverage and margin rules, wallet architecture, and Demo/Live separation.
+Oracle contract and its Chainlink registrations, feed addresses, the 7-market config, USD/JPY staying signals-only, the 1% risk engine, contract sizes, leverage and margin rules, fee structure, wallet architecture, and Demo/Live separation.
 
 ## Verification
 - Demo BUY and SELL with SL and with TP1: monitor closes them at the trigger price, status becomes Closed, exit price and P&L correct, demo balance moves by exactly that P&L, snapshot written.
 - Re-running the monitor while price stays beyond the trigger produces no second close and no second balance credit.
-- A manual trade with no SL/TP stays open across monitor runs.
-- Live: trigger detection produces the notification and the "Close now" action; nothing is marked closed without a confirmed transaction.
-- Typecheck and production build clean. No blockchain transactions, nothing committed.
+- A manual trade with no SL/TP stays open across monitor runs, in both modes.
+- Contract test suite extended: keeper-only access, revert when not triggered, revert with no SL/TP set, correct settlement on a valid long SL, short TP and long TP trigger, revert on an already-closed position.
+- Live end-to-end runs only after you deploy and fund the keeper; until then live trades behave exactly as today.
+- Typecheck and production build clean. I run no blockchain transactions and commit nothing.
