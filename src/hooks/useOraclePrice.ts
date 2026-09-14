@@ -46,12 +46,22 @@ export const useOraclePrice = (accountMode: AccountMode = 'demo') => {
   const [prices, setPrices] = useState<OraclePrices>({});
   const [isConnected, setIsConnected] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const endpointIndexRef = useRef(0);
 
   useEffect(() => {
     // Use public RPC for read operations to avoid MetaMask provider overload
-    setWeb3(new Web3(getRpcUrl(accountMode)));
+    endpointIndexRef.current = 0;
+    setWeb3(new Web3(getRpcUrls(accountMode)[0]));
     setPrices({});
     setIsConnected(true);
+  }, [accountMode]);
+
+  // Rotate to the next endpoint when the current one stops answering
+  const rotateEndpoint = useCallback(() => {
+    const endpoints = getRpcUrls(accountMode);
+    if (endpoints.length < 2) return;
+    endpointIndexRef.current = (endpointIndexRef.current + 1) % endpoints.length;
+    setWeb3(new Web3(endpoints[endpointIndexRef.current]));
   }, [accountMode]);
 
   const getOracleContract = useCallback(() => {
