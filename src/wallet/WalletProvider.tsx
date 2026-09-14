@@ -190,6 +190,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       setConnected(true);
       setIsConnecting(false);
       setWalletConnected(true);
+      rememberDisconnect(false);
       await readBalance(accounts[0], detected);
       toast.success('Wallet connected successfully!');
     } catch (err: any) {
