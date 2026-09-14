@@ -707,7 +707,7 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
           className="w-full" 
           size="lg"
           onClick={handleSubmitTrade}
-          disabled={isLoadingSignal || isSubmitting || onChainLoading || approvalPending || !stopValidation.valid || (accountMode === 'live' && (!isCorrectNetwork || !oracleHealthy)) || (accountMode === 'demo' && isSignalMarket(selectedPair, 'demo') && !isForexMarketOpen())}
+          disabled={isLoadingSignal || isSubmitting || onChainLoading || approvalPending || !stopValidation.valid || !!sizeValidation.error || (accountMode === 'live' && (!isCorrectNetwork || !oracleHealthy)) || (accountMode === 'demo' && isSignalMarket(selectedPair, 'demo') && !isForexMarketOpen())}
         >
           {approvalPending ? (
             <span className="flex items-center">
