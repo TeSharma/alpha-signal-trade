@@ -214,6 +214,7 @@ export function validateStops(
   entryPrice: number,
   stopLoss?: number | null,
   takeProfit?: number | null,
+  pair = '',
 ): StopValidation {
   let stopLossError: string | null = null;
   let takeProfitError: string | null = null;
