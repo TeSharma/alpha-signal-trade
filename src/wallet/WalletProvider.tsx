@@ -2,7 +2,7 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useR
 import { ethers } from 'ethers';
 import Web3 from 'web3';
 import { toast } from 'sonner';
-import { usePrivy, useWallets } from '@privy-io/react-auth';
+import { useSafePrivy, useSafePrivyWallets } from './safePrivy';
 import { connectToBlockchain } from '@/lib/web3';
 import { useApp } from '@/contexts/AppContext';
 import {
@@ -33,8 +33,8 @@ const WalletContext = createContext<UnifiedWalletContextValue | null>(null);
  */
 export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { setWalletConnected, updateBalance } = useApp();
-  const { ready: privyReady, authenticated: privyAuthenticated } = usePrivy();
-  const { wallets: privyWallets } = useWallets();
+  const { ready: privyReady, authenticated: privyAuthenticated } = useSafePrivy();
+  const privyWallets = useSafePrivyWallets();
 
   const [address, setAddress] = useState('');
   const [chainId, setChainId] = useState<number | null>(null);
@@ -203,6 +203,48 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const refreshBalance = useCallback(async () => {
     if (address && provider) await readBalance(address, provider);
   }, [address, provider, readBalance]);
+
+  // Rehydrate an already-approved injected wallet on page load, so a refresh
+  // does not drop the session (eth_accounts does not prompt the user).
+  useEffect(() => {
+    let cancelled = false;
+    const rehydrate = async () => {
+      if (!window.ethereum) return;
+      try {
+        const accounts: string[] = await window.ethereum.request({ method: 'eth_accounts' });
+        if (cancelled || !accounts || accounts.length === 0) return;
+        let detected: number | null = null;
+        try {
+          const chainHex: string = await window.ethereum.request({ method: 'eth_chainId' });
+          detected = hexToDec(chainHex);
+        } catch {
+          console.log('[unified-wallet] could not read chain id on rehydrate');
+        }
+        if (cancelled) return;
+        try {
+          const ethersProvider = new ethers.BrowserProvider(window.ethereum);
+          signerRef.current = await ethersProvider.getSigner().catch(() => null);
+        } catch {
+          signerRef.current = null;
+        }
+        if (cancelled) return;
+        setProvider(window.ethereum);
+        setAddress(accounts[0]);
+        setChainId(detected);
+        setSource('injected');
+        setConnected(true);
+        setWalletConnected(true);
+        await readBalance(accounts[0], window.ethereum);
+      } catch (err) {
+        console.log('[unified-wallet] rehydrate skipped:', err);
+      }
+    };
+    rehydrate();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (source !== 'injected' || !window.ethereum) return;

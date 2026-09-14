@@ -2,7 +2,7 @@ import React, { useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Wallet, RefreshCw, ExternalLink, Sparkles } from "lucide-react";
 import { useUnifiedWallet } from "@/wallet";
-import { usePrivy } from '@privy-io/react-auth';
+import { useSafePrivy } from '@/wallet/safePrivy';
 import { useTronWallet } from "@/hooks/useTronWallet";
 import { useWalletLinkage } from "@/wallet/useWalletLinkage";
 
@@ -19,7 +19,7 @@ export const WalletConnectButton = () => {
     chainId,
     error,
   } = useUnifiedWallet();
-  const { ready: privyReady, authenticated: privyAuthenticated, login: privyLogin } = usePrivy();
+  const { ready: privyReady, authenticated: privyAuthenticated, login: privyLogin } = useSafePrivy();
 
   const {
     isConnected: tronConnected,
@@ -40,7 +40,7 @@ export const WalletConnectButton = () => {
 
   const handleEmbedded = async () => {
     // Privy login creates/recovers the non-custodial embedded wallet.
-    if (privyReady && !privyAuthenticated) {
+    if (privyReady && !privyAuthenticated && privyLogin) {
       await privyLogin();
       return;
     }
