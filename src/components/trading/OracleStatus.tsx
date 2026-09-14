@@ -31,6 +31,13 @@ const PRICE_ORACLE_V2_ABI = [
     outputs: [{ name: '', type: 'bool' }],
     stateMutability: 'view',
     type: 'function'
+  },
+  {
+    inputs: [{ name: 'pairId', type: 'bytes32' }],
+    name: 'getDecimals',
+    outputs: [{ name: '', type: 'uint8' }],
+    stateMutability: 'view',
+    type: 'function'
   }
 ];
 
