@@ -144,6 +144,7 @@ export const useOraclePrice = (accountMode: AccountMode = 'demo') => {
       rotateEndpoint();
       console.error('Error fetching multiple prices:', error);
     } finally {
+      inFlightRef.current = false;
       setIsLoading(false);
     }
   }, [fetchPrice, rotateEndpoint]);
