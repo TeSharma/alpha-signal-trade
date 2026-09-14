@@ -204,6 +204,48 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     if (address && provider) await readBalance(address, provider);
   }, [address, provider, readBalance]);
 
+  // Rehydrate an already-approved injected wallet on page load, so a refresh
+  // does not drop the session (eth_accounts does not prompt the user).
+  useEffect(() => {
+    let cancelled = false;
+    const rehydrate = async () => {
+      if (!window.ethereum) return;
+      try {
+        const accounts: string[] = await window.ethereum.request({ method: 'eth_accounts' });
+        if (cancelled || !accounts || accounts.length === 0) return;
+        let detected: number | null = null;
+        try {
+          const chainHex: string = await window.ethereum.request({ method: 'eth_chainId' });
+          detected = hexToDec(chainHex);
+        } catch {
+          console.log('[unified-wallet] could not read chain id on rehydrate');
+        }
+        if (cancelled) return;
+        try {
+          const ethersProvider = new ethers.BrowserProvider(window.ethereum);
+          signerRef.current = await ethersProvider.getSigner().catch(() => null);
+        } catch {
+          signerRef.current = null;
+        }
+        if (cancelled) return;
+        setProvider(window.ethereum);
+        setAddress(accounts[0]);
+        setChainId(detected);
+        setSource('injected');
+        setConnected(true);
+        setWalletConnected(true);
+        await readBalance(accounts[0], window.ethereum);
+      } catch (err) {
+        console.log('[unified-wallet] rehydrate skipped:', err);
+      }
+    };
+    rehydrate();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     if (source !== 'injected' || !window.ethereum) return;
     const handleAccountsChanged = (accounts: string[]) => {
