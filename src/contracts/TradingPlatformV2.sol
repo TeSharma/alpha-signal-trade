@@ -62,6 +62,11 @@ contract TradingPlatformV2 is ReentrancyGuard, Ownable {
     mapping(uint256 => Position) public positions;
     mapping(address => uint256[]) public userPositions;
 
+    /// @notice Addresses authorised to close positions whose stored SL/TP has been breached.
+    /// @dev Keepers can ONLY call closeWithTrigger, which verifies the breach on-chain and
+    ///      settles to the position owner. They can never move funds elsewhere.
+    mapping(address => bool) public keepers;
+
     /*//////////////////////////////////////////////////////////////
                                 EVENTS
     //////////////////////////////////////////////////////////////*/
