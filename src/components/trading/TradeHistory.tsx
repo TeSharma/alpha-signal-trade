@@ -51,9 +51,6 @@ const TradeHistory = ({ accountMode }: TradeHistoryProps) => {
     }
   }
 
-  const handleCancelTrade = async (trade: Trade) => {
-    await cancelTrade(trade.id)
-  }
 
   const calculateCurrentPnL = (trade: Trade) => {
     const currentPrice = getCurrentPrice(trade.pair)
