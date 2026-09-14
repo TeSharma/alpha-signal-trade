@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import Web3 from 'web3';
-import { getContractAddresses, getRpcUrl, type AccountMode } from '@/config/contracts';
+import { getContractAddresses, getRpcUrls, type AccountMode } from '@/config/contracts';
 
 // PriceOracleV2 ABI (uses bytes32 pairId)
 const PRICE_ORACLE_V2_ABI = [
@@ -46,12 +46,22 @@ export const useOraclePrice = (accountMode: AccountMode = 'demo') => {
   const [prices, setPrices] = useState<OraclePrices>({});
   const [isConnected, setIsConnected] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const endpointIndexRef = useRef(0);
 
   useEffect(() => {
     // Use public RPC for read operations to avoid MetaMask provider overload
-    setWeb3(new Web3(getRpcUrl(accountMode)));
+    endpointIndexRef.current = 0;
+    setWeb3(new Web3(getRpcUrls(accountMode)[0]));
     setPrices({});
     setIsConnected(true);
+  }, [accountMode]);
+
+  // Rotate to the next endpoint when the current one stops answering
+  const rotateEndpoint = useCallback(() => {
+    const endpoints = getRpcUrls(accountMode);
+    if (endpoints.length < 2) return;
+    endpointIndexRef.current = (endpointIndexRef.current + 1) % endpoints.length;
+    setWeb3(new Web3(endpoints[endpointIndexRef.current]));
   }, [accountMode]);
 
   const getOracleContract = useCallback(() => {
@@ -115,13 +125,20 @@ export const useOraclePrice = (accountMode: AccountMode = 'demo') => {
         }
       });
 
+      if (pairs.length > 0 && Object.keys(newPrices).length === 0) {
+        // Current endpoint answered nothing — switch to the next one for the
+        // following poll instead of reporting the oracle as offline.
+        rotateEndpoint();
+      }
+
       setPrices(prev => ({ ...prev, ...newPrices }));
     } catch (error) {
+      rotateEndpoint();
       console.error('Error fetching multiple prices:', error);
     } finally {
       setIsLoading(false);
     }
-  }, [fetchPrice]);
+  }, [fetchPrice, rotateEndpoint]);
 
 
   const getPrice = (pair: string): OraclePriceData | null => {

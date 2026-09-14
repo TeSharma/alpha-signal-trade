@@ -2,24 +2,11 @@ import { useState, useCallback } from 'react';
 import Web3 from 'web3';
 import { useToast } from '@/hooks/use-toast';
 import { useUnifiedWallet } from '@/wallet';
-import { CONTRACT_ADDRESSES, FEE_CONFIG, AMOY_RPC_URL, POLYGON_RPC_URL, getRequiredChainHex, getContractAddresses, getNetworkName, type AccountMode } from '@/config/contracts';
+import { CONTRACT_ADDRESSES, FEE_CONFIG, getRpcUrls, getRequiredChainHex, getContractAddresses, getNetworkName, type AccountMode } from '@/config/contracts';
 import { getMarketsForMode } from '@/config/markets';
 
-// RPC endpoints with fallbacks per mode
-const AMOY_RPC_ENDPOINTS = [
-  AMOY_RPC_URL,
-  'https://polygon-amoy.drpc.org/',
-  'https://polygon-amoy-bor-rpc.publicnode.com'
-];
-
-const POLYGON_RPC_ENDPOINTS = [
-  POLYGON_RPC_URL,
-  'https://polygon-rpc.com/',
-  'https://polygon-bor-rpc.publicnode.com'
-];
-
-const getRpcEndpoints = (mode: AccountMode) =>
-  mode === 'demo' ? AMOY_RPC_ENDPOINTS : POLYGON_RPC_ENDPOINTS;
+// Shared RPC endpoints with fallbacks per mode
+const getRpcEndpoints = (mode: AccountMode) => getRpcUrls(mode);
 
 // TradingPlatformV2 ABI (updated with fee functions and priceTimeout)
 const TRADING_PLATFORM_V2_ABI = [

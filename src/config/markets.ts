@@ -25,10 +25,12 @@ export const V1_SIGNAL_MARKETS = ['EUR/USD', 'GBP/USD', 'USD/JPY', 'XAU/USD', 'A
 export type V1SignalPair = typeof V1_SIGNAL_MARKETS[number];
 
 // ─── LIVE ON-CHAIN FOREX/METAL MARKETS ───────────────────────────────────
-// Only pairs with a verified, correctly-oriented Chainlink feed on Polygon
-// mainnet. JPY/CHF/NZD/CAD feeds are quoted inverted vs. our naming, so they
-// stay signal-only until an inversion path exists in the oracle.
-export const V1_MAINNET_FOREX_MARKETS = ['EUR/USD', 'GBP/USD', 'AUD/USD', 'XAU/USD'] as const;
+// Verified on-chain 2026-09-14 against PriceOracleV2 on Polygon mainnet:
+// only BTC/USD, ETH/USD and POL/USD have registered feeds. EUR/USD, GBP/USD,
+// AUD/USD and XAU/USD return hasFeed=false, so they stay signal-only until the
+// feeds are registered on the oracle. JPY/CHF/NZD/CAD feeds are additionally
+// quoted inverted vs. our naming.
+export const V1_MAINNET_FOREX_MARKETS = [] as const;
 
 // Combined metadata for all v1 markets
 export const MARKET_METADATA: Record<string, MarketMeta> = {
@@ -36,11 +38,11 @@ export const MARKET_METADATA: Record<string, MarketMeta> = {
   'BTC/USD':   { symbol: 'BTC',   icon: '₿', decimals: 2, layer: 'on-chain', network: 'mainnet-only', binanceSymbol: 'btcusdt' },
   'ETH/USD':   { symbol: 'ETH',   icon: 'Ξ', decimals: 2, layer: 'on-chain', network: 'mainnet-only', binanceSymbol: 'ethusdt' },
   'POL/USD':   { symbol: 'POL',   icon: '⬡', decimals: 4, layer: 'on-chain', network: 'all', binanceSymbol: 'polusdt' },
-  // Forex / metals — on-chain on mainnet where a Chainlink feed is verified
-  'EUR/USD':   { symbol: 'EUR',   icon: '€', decimals: 5, layer: 'on-chain', network: 'all' },
-  'GBP/USD':   { symbol: 'GBP',   icon: '£', decimals: 5, layer: 'on-chain', network: 'all' },
-  'AUD/USD':   { symbol: 'AUD',   icon: 'A$', decimals: 5, layer: 'on-chain', network: 'all' },
-  'XAU/USD':   { symbol: 'XAU',   icon: '🥇', decimals: 2, layer: 'on-chain', network: 'all', description: 'Gold' },
+  // Forex / metals — AI signals only (no registered Chainlink feed on the oracle yet)
+  'EUR/USD':   { symbol: 'EUR',   icon: '€', decimals: 5, layer: 'signal', network: 'all', description: 'AI Signals Only' },
+  'GBP/USD':   { symbol: 'GBP',   icon: '£', decimals: 5, layer: 'signal', network: 'all', description: 'AI Signals Only' },
+  'AUD/USD':   { symbol: 'AUD',   icon: 'A$', decimals: 5, layer: 'signal', network: 'all', description: 'AI Signals Only' },
+  'XAU/USD':   { symbol: 'XAU',   icon: '🥇', decimals: 2, layer: 'signal', network: 'all', description: 'Gold — AI Signals Only' },
   'USD/JPY':   { symbol: 'JPY',   icon: '¥', decimals: 3, layer: 'signal', network: 'all', description: 'AI Signals Only' },
 };
 

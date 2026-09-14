@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import { useSafePrivy, useSafePrivyWallets } from './safePrivy';
 import { connectToBlockchain } from '@/lib/web3';
 import { useApp } from '@/contexts/AppContext';
+import { getRpcUrlsForChain } from '@/config/contracts';
 import {
   UNIFIED_WALLET_DISCONNECTED,
   type UnifiedWallet,
@@ -45,23 +46,35 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [balance, setBalance] = useState<string | null>(null);
   const [provider, setProvider] = useState<any | null>(null);
   const signerRef = useRef<any | null>(null);
+  const chainIdRef = useRef<number | null>(null);
+  const addressRef = useRef<string>('');
 
   const embeddedWallet = useMemo(
     () => privyWallets.find((w) => w.walletClientType === 'privy') ?? privyWallets[0] ?? null,
     [privyWallets],
   );
 
+  /**
+   * Balance is read through the app's own RPC endpoints (with fallbacks) rather
+   * than the browser extension's provider, which is frequently rate-limited and
+   * used to spam errors + re-renders. Failures stay quiet and simply leave the
+   * previous value in place.
+   */
   const readBalance = useCallback(
-    async (addr: string, eip1193: any | null) => {
-      try {
-        if (!eip1193) return;
-        const web3 = new Web3(eip1193);
-        const wei = await web3.eth.getBalance(addr);
-        const formatted = web3.utils.fromWei(wei, 'ether');
-        setBalance(parseFloat(formatted).toFixed(4));
-        updateBalance(parseFloat(formatted));
-      } catch (err) {
-        console.error('[unified-wallet] balance read failed:', err);
+    async (addr: string, chain?: number | null) => {
+      if (!addr) return;
+      const endpoints = getRpcUrlsForChain(chain ?? chainIdRef.current);
+      for (const endpoint of endpoints) {
+        try {
+          const web3 = new Web3(endpoint);
+          const wei = await web3.eth.getBalance(addr);
+          const formatted = parseFloat(web3.utils.fromWei(wei, 'ether'));
+          setBalance(formatted.toFixed(4));
+          updateBalance(formatted);
+          return;
+        } catch {
+          // try the next endpoint
+        }
       }
     },
     [updateBalance],
@@ -116,7 +129,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       setConnected(true);
       setIsConnecting(false);
       setWalletConnected(true);
-      await readBalance(addr, eip1193);
+      await readBalance(addr, Number(network.chainId));
       toast.success('Embedded wallet connected');
     } catch (err: any) {
       setIsConnecting(false);
@@ -156,7 +169,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       setConnected(true);
       setIsConnecting(false);
       setWalletConnected(true);
-      await readBalance(accounts[0], window.ethereum);
+      await readBalance(accounts[0], detected);
       toast.success('Wallet connected successfully!');
     } catch (err: any) {
       setIsConnecting(false);
@@ -201,8 +214,24 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   );
 
   const refreshBalance = useCallback(async () => {
-    if (address && provider) await readBalance(address, provider);
-  }, [address, provider, readBalance]);
+    if (address) await readBalance(address, chainId);
+  }, [address, chainId, readBalance]);
+
+  // Keep refs in sync so timers/listeners read current values without
+  // re-subscribing on every render.
+  useEffect(() => {
+    chainIdRef.current = chainId;
+    addressRef.current = address;
+  }, [chainId, address]);
+
+  // Poll the balance on a timer (not on every render) using our own RPC.
+  useEffect(() => {
+    if (!connected || !address) return;
+    const id = setInterval(() => {
+      void readBalance(addressRef.current, chainIdRef.current);
+    }, 60000);
+    return () => clearInterval(id);
+  }, [connected, address, readBalance]);
 
   // Rehydrate an already-approved injected wallet on page load, so a refresh
   // does not drop the session (eth_accounts does not prompt the user).
@@ -234,7 +263,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         setSource('injected');
         setConnected(true);
         setWalletConnected(true);
-        await readBalance(accounts[0], window.ethereum);
+        await readBalance(accounts[0], detected);
       } catch (err) {
         console.log('[unified-wallet] rehydrate skipped:', err);
       }
@@ -252,7 +281,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       if (!accounts || accounts.length === 0) setDisconnected();
       else {
         setAddress(accounts[0]);
-        readBalance(accounts[0], window.ethereum);
+        readBalance(accounts[0], chainIdRef.current);
       }
     };
     const handleChainChanged = (chainHex: string) => setChainId(hexToDec(chainHex));
