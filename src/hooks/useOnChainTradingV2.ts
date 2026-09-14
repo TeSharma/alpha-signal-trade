@@ -341,6 +341,17 @@ export const useOnChainTradingV2 = (accountMode: AccountMode = 'demo') => {
     return new Web3(endpoint);
   }, [RPC_ENDPOINTS]);
 
+  /**
+   * Read-only context for view calls: uses this mode's own RPC endpoints and
+   * the already-known connected address. Never calls requestAccounts, so a
+   * pending/unopened wallet prompt can no longer hang a data read (and the
+   * read always targets the mode's chain, not whatever chain the wallet is on).
+   */
+  const getReadContext = useCallback(() => {
+    if (!unifiedAddress) throw new Error('Wallet not connected');
+    return { web3: getReadOnlyWeb3(), account: unifiedAddress };
+  }, [unifiedAddress, getReadOnlyWeb3]);
+
   const getTradingContract = useCallback((web3: Web3) => {
     if (!TRADING_PLATFORM_V2_ADDRESS) return null;
     return new web3.eth.Contract(TRADING_PLATFORM_V2_ABI as any, TRADING_PLATFORM_V2_ADDRESS);
