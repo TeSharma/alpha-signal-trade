@@ -1,11 +1,26 @@
 // Auto-generated file. Do not edit manually.
 
-// Dedicated RPC — env var with public fallback
-export const AMOY_RPC_URL = import.meta.env.VITE_ALCHEMY_AMOY_RPC
-  || 'https://rpc-amoy.polygon.technology/';
+// Dedicated RPC — env var with public fallbacks.
+// NOTE: polygon-rpc.com now rejects unauthenticated traffic (401 "API key
+// disabled"), so it is kept only as a last resort.
+export const AMOY_RPC_URLS: string[] = [
+  import.meta.env.VITE_ALCHEMY_AMOY_RPC,
+  'https://polygon-amoy-bor-rpc.publicnode.com',
+  'https://polygon-amoy.drpc.org',
+  'https://rpc-amoy.polygon.technology/',
+].filter(Boolean) as string[];
 
-export const POLYGON_RPC_URL = import.meta.env.VITE_ALCHEMY_POLYGON_RPC
-  || 'https://polygon-rpc.com/';
+export const POLYGON_RPC_URLS: string[] = [
+  import.meta.env.VITE_ALCHEMY_POLYGON_RPC,
+  'https://polygon-bor-rpc.publicnode.com',
+  'https://polygon.drpc.org',
+  'https://1rpc.io/matic',
+  'https://polygon-rpc.com/',
+].filter(Boolean) as string[];
+
+export const AMOY_RPC_URL = AMOY_RPC_URLS[0];
+export const POLYGON_RPC_URL = POLYGON_RPC_URLS[0];
+
 
 // Native USDC on Polygon Mainnet (6 decimals — same unit as tUSD mwei)
 export const POLYGON_USDC = '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359';
