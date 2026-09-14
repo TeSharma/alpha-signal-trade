@@ -1,13 +1,13 @@
 // Position monitor: closes trades whose stop loss or take-profit-1 has been reached.
 //
 // Demo trades close atomically in the database via close_trade_system (idempotent).
-// Live trades are closed on-chain by calling closeWithTrigger() on TradingPlatformV2
-// from an authorised keeper wallet; the database is only updated after the transaction
-// is confirmed. Trades with neither SL nor TP are never touched.
+// Live trades cannot be closed by anyone but their owner on the currently deployed
+// TradingPlatformV2, so a live trigger is recorded as a pending exit plus a notification
+// and the trade stays open until the user's wallet confirms the close.
+// Trades with neither SL nor TP are never touched.
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { ethers } from "https://esm.sh/ethers@6.13.4";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -29,19 +29,6 @@ const FX_PAIRS: Record<string, { base: string; target: string }> = {
   "AUD/USD": { base: "AUD", target: "USD" },
   "USD/JPY": { base: "USD", target: "JPY" },
 };
-
-// Polygon mainnet — live trading
-const POLYGON_RPC_URLS = [
-  "https://polygon-bor-rpc.publicnode.com",
-  "https://polygon.drpc.org",
-  "https://1rpc.io/matic",
-];
-const TRADING_PLATFORM_V2 = "0x0465161D9aeD6e1C2F9E986Be97F5628E46421D3";
-const PLATFORM_ABI = [
-  "function closeWithTrigger(uint256 id) external",
-  "function keepers(address) view returns (bool)",
-  "function getPosition(uint256 id) view returns (tuple(address trader,bytes32 pairId,bool isLong,uint256 margin,uint256 leverage,uint256 notional,uint256 entryPrice,uint256 liquidationPrice,uint256 stopLoss,uint256 takeProfit,bool isOpen))",
-];
 
 function isForexMarketOpen(date = new Date()): boolean {
   const day = date.getUTCDay();
@@ -114,38 +101,6 @@ function detectTrigger(
   return null;
 }
 
-async function getKeeperContract(): Promise<
-  { contract: ethers.Contract; address: string } | null
-> {
-  const key = Deno.env.get("KEEPER_PRIVATE_KEY");
-  if (!key) return null;
-
-  for (const url of POLYGON_RPC_URLS) {
-    try {
-      const provider = new ethers.JsonRpcProvider(url, 137);
-      const network = await provider.getNetwork();
-      if (Number(network.chainId) !== 137) continue;
-      const wallet = new ethers.Wallet(key, provider);
-      const contract = new ethers.Contract(
-        TRADING_PLATFORM_V2,
-        PLATFORM_ABI,
-        wallet,
-      );
-      const authorised = await contract.keepers(wallet.address);
-      if (!authorised) {
-        console.warn(
-          `[monitor-positions] keeper ${wallet.address} is not authorised on the platform contract`,
-        );
-        return null;
-      }
-      return { contract, address: wallet.address };
-    } catch (e) {
-      console.warn(`[monitor-positions] RPC ${url} unusable:`, e);
-    }
-  }
-  return null;
-}
-
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -160,7 +115,7 @@ serve(async (req) => {
     const { data: openTrades, error } = await supabase
       .from("trades")
       .select(
-        "id, user_id, pair, direction, stop_loss, take_profit, account_mode, chain_position_id, close_tx_hash, close_requested_at",
+        "id, user_id, pair, direction, stop_loss, take_profit, account_mode, pending_exit_kind",
       )
       .eq("status", "open");
 
@@ -170,9 +125,7 @@ serve(async (req) => {
       checked: 0,
       skippedNoTrigger: 0,
       closedDemo: 0,
-      closedLive: 0,
-      liveFailed: 0,
-      liveUnavailable: 0,
+      livePendingExits: 0,
       priceUnavailable: 0,
     };
 
@@ -183,8 +136,6 @@ serve(async (req) => {
     }
 
     const priceCache: Record<string, number | null> = {};
-    let keeper: { contract: ethers.Contract; address: string } | null = null;
-    let keeperResolved = false;
 
     for (const t of openTrades) {
       // Manual trades without SL and without TP stay open until closed by the user.
@@ -234,85 +185,34 @@ serve(async (req) => {
         continue;
       }
 
-      // ---- Live: close on-chain through the keeper, database follows confirmation ----
-      if (t.chain_position_id == null) {
-        console.warn(
-          `[monitor-positions] live trade ${t.id} has no on-chain position id; cannot auto-close`,
-        );
-        summary.liveUnavailable++;
+      // ---- Live: record a pending exit; only the owner's wallet can close on-chain ----
+      // The deployed TradingPlatformV2 restricts closePosition() to the position owner,
+      // so nothing off-chain can settle a live position. We flag it and notify the user.
+      if (t.pending_exit_kind) continue; // already flagged
+
+      const { error: flagErr } = await supabase
+        .from("trades")
+        .update({
+          pending_exit_kind: trigger.kind,
+          pending_exit_price: trigger.exitPrice,
+          pending_exit_at: new Date().toISOString(),
+        })
+        .eq("id", t.id)
+        .eq("status", "open");
+
+      if (flagErr) {
+        console.error(`[monitor-positions] could not flag live trade ${t.id}:`, flagErr);
         continue;
       }
 
-      // A close submitted in the last 5 minutes is still considered in flight.
-      if (
-        t.close_requested_at &&
-        Date.now() - new Date(t.close_requested_at).getTime() < 5 * 60 * 1000
-      ) {
-        continue;
-      }
-
-      if (!keeperResolved) {
-        keeper = await getKeeperContract();
-        keeperResolved = true;
-      }
-      if (!keeper) {
-        summary.liveUnavailable++;
-        continue;
-      }
-
-      try {
-        // Mark the attempt before sending so a crash cannot cause a double submission.
-        await supabase
-          .from("trades")
-          .update({ close_requested_at: new Date().toISOString() })
-          .eq("id", t.id)
-          .eq("status", "open");
-
-        const tx = await keeper.contract.closeWithTrigger(t.chain_position_id);
-        const receipt = await tx.wait();
-
-        if (!receipt || receipt.status !== 1) {
-          console.error(
-            `[monitor-positions] live close reverted for trade ${t.id} (tx ${tx.hash})`,
-          );
-          summary.liveFailed++;
-          continue;
-        }
-
-        // Confirmed on-chain — now record it.
-        const { data: result, error: closeErr } = await supabase.rpc(
-          "close_trade_system",
-          {
-            p_trade_id: t.id,
-            p_exit_price: trigger.exitPrice,
-            p_reason: trigger.kind,
-          },
-        );
-        if (closeErr) {
-          console.error(
-            `[monitor-positions] on-chain close confirmed but DB update failed for ${t.id}:`,
-            closeErr,
-          );
-          summary.liveFailed++;
-          continue;
-        }
-
-        await supabase.from("trades").update({ close_tx_hash: tx.hash }).eq("id", t.id);
-
-        if ((result as { closed?: boolean } | null)?.closed) {
-          summary.closedLive++;
-          await supabase.rpc("create_notification", {
-            p_user_id: t.user_id,
-            p_title: `${t.pair} ${trigger.kind === "stop_loss" ? "stop loss" : "take profit"} executed`,
-            p_message: `Your live ${t.pair} position was closed on-chain at ${trigger.exitPrice}.`,
-            p_type: trigger.kind === "stop_loss" ? "warning" : "success",
-          }).catch(() => undefined);
-        }
-      } catch (e) {
-        // Leave the trade open; the next run retries.
-        console.error(`[monitor-positions] live close failed for ${t.id}:`, e);
-        summary.liveFailed++;
-      }
+      summary.livePendingExits++;
+      await supabase.rpc("create_notification", {
+        p_user_id: t.user_id,
+        p_title: `${t.pair} ${trigger.kind === "stop_loss" ? "stop loss" : "take profit"} reached`,
+        p_message: `Your live ${t.pair} position reached ${trigger.exitPrice}. Open Positions to close it from your wallet.`,
+        p_type: trigger.kind === "stop_loss" ? "warning" : "success",
+        p_action_url: "/trade",
+      }).catch(() => undefined);
     }
 
     console.log("[monitor-positions]", JSON.stringify(summary));
