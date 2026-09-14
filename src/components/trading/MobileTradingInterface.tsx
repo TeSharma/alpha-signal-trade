@@ -517,7 +517,7 @@ const MobileTradingInterface = ({ accountMode }: MobileTradingInterfaceProps) =>
           className="w-full h-12 text-lg font-semibold" 
           size="lg"
           onClick={handleSubmitTrade}
-          disabled={isSubmitting || onChainLoading || approvalPending || (accountMode === 'live' && (!isCorrectNetwork || !oracleHealthy))}
+          disabled={isSubmitting || onChainLoading || approvalPending || !stopValidation.valid || (accountMode === 'live' && (!isCorrectNetwork || !oracleHealthy))}
         >
           {approvalPending ? (
             <span className="flex items-center">
