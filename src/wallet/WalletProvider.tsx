@@ -262,6 +262,8 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     let cancelled = false;
     const rehydrate = async () => {
       if (!window.ethereum) return;
+      // Respect an explicit disconnect from a previous session.
+      if (wasExplicitlyDisconnected()) return;
       try {
         const accounts: string[] = await window.ethereum.request({ method: 'eth_accounts' });
         if (cancelled || !accounts || accounts.length === 0) return;
