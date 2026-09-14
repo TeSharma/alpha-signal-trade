@@ -125,13 +125,20 @@ export const useOraclePrice = (accountMode: AccountMode = 'demo') => {
         }
       });
 
+      if (pairs.length > 0 && Object.keys(newPrices).length === 0) {
+        // Current endpoint answered nothing — switch to the next one for the
+        // following poll instead of reporting the oracle as offline.
+        rotateEndpoint();
+      }
+
       setPrices(prev => ({ ...prev, ...newPrices }));
     } catch (error) {
+      rotateEndpoint();
       console.error('Error fetching multiple prices:', error);
     } finally {
       setIsLoading(false);
     }
-  }, [fetchPrice]);
+  }, [fetchPrice, rotateEndpoint]);
 
 
   const getPrice = (pair: string): OraclePriceData | null => {
