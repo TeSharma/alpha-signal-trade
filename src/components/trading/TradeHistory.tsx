@@ -10,14 +10,14 @@ import { TrendingUp, TrendingDown, X, DollarSign, Clock, Activity } from "lucide
 import { useTrades, Trade } from '@/hooks/useTrades'
 import { useMarketData } from '@/hooks/useMarketData'
 import { useToast } from '@/components/ui/use-toast'
-import { computePnL } from '@/lib/pnl'
+import { computePnL, getAssetMultiplier } from '@/lib/pnl'
 
 interface TradeHistoryProps {
   accountMode: 'demo' | 'live'
 }
 
 const TradeHistory = ({ accountMode }: TradeHistoryProps) => {
-  const { trades, closeTrade, cancelTrade, updatePnL, loading } = useTrades()
+  const { trades, closeTrade, updatePnL, loading } = useTrades()
   const { getCurrentPrice } = useMarketData(accountMode)
   const { toast } = useToast()
   const [activeTab, setActiveTab] = useState('open')
@@ -51,9 +51,6 @@ const TradeHistory = ({ accountMode }: TradeHistoryProps) => {
     }
   }
 
-  const handleCancelTrade = async (trade: Trade) => {
-    await cancelTrade(trade.id)
-  }
 
   const calculateCurrentPnL = (trade: Trade) => {
     const currentPrice = getCurrentPrice(trade.pair)
@@ -91,40 +88,17 @@ const TradeHistory = ({ accountMode }: TradeHistoryProps) => {
           </div>
           {isOpen && (
             <div className="flex gap-2">
-              {/* Cancel Trade Button - Cancels without affecting balance */}
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button variant="ghost" size="sm" className="text-orange-600 hover:text-orange-700 hover:bg-orange-50">
-                    Cancel
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>Cancel Trade</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      Are you sure you want to cancel this {trade.pair} {trade.direction} position? This will remove the trade without affecting your balance.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Keep Trade</AlertDialogCancel>
-                    <AlertDialogAction onClick={() => handleCancelTrade(trade)} className="bg-orange-600 hover:bg-orange-700">
-                      Cancel Trade
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
-
-              {/* Close Trade Button - Closes at market price and updates balance */}
+              {/* Close Position - closes at market price and updates balance */}
               <AlertDialog>
                 <AlertDialogTrigger asChild>
                   <Button variant="outline" size="sm">
                     <X className="h-4 w-4 mr-1" />
-                    Close
+                    Close Position
                   </Button>
                 </AlertDialogTrigger>
                 <AlertDialogContent>
                   <AlertDialogHeader>
-                    <AlertDialogTitle>Close Trade</AlertDialogTitle>
+                    <AlertDialogTitle>Close Position</AlertDialogTitle>
                     <AlertDialogDescription>
                       Are you sure you want to close this {trade.pair} {trade.direction} position at current market price ({currentPrice.toFixed(5)})? This will update your balance with the P&L.
                     </AlertDialogDescription>
@@ -175,22 +149,38 @@ const TradeHistory = ({ accountMode }: TradeHistoryProps) => {
           </div>
         </div>
 
-        {(trade.stop_loss || trade.take_profit) && (
-          <div className="flex gap-4 text-xs">
-            {trade.stop_loss && (
+        <div className="flex flex-wrap gap-4 text-xs">
+          <div className="flex items-center gap-1">
+            <span className="text-gray-500">Position value:</span>
+            <span className="font-mono">
+              ${(trade.lot_size * trade.entry_price * getAssetMultiplier(trade.pair)).toFixed(2)}
+            </span>
+          </div>
+          {trade.stop_loss && (
+            <>
               <div className="flex items-center gap-1">
                 <span className="text-red-600">SL:</span>
                 <span className="font-mono">{trade.stop_loss.toFixed(5)}</span>
               </div>
-            )}
-            {trade.take_profit && (
               <div className="flex items-center gap-1">
-                <span className="text-green-600">TP:</span>
-                <span className="font-mono">{trade.take_profit.toFixed(5)}</span>
+                <span className="text-gray-500">Loss at SL:</span>
+                <span className="font-mono text-red-600">
+                  -${(
+                    Math.abs(trade.entry_price - trade.stop_loss) *
+                    trade.lot_size *
+                    getAssetMultiplier(trade.pair)
+                  ).toFixed(2)}
+                </span>
               </div>
-            )}
-          </div>
-        )}
+            </>
+          )}
+          {trade.take_profit && (
+            <div className="flex items-center gap-1">
+              <span className="text-green-600">TP1 (executed):</span>
+              <span className="font-mono">{trade.take_profit.toFixed(5)}</span>
+            </div>
+          )}
+        </div>
       </div>
     )
   }

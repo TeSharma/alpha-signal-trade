@@ -8,6 +8,93 @@ import { getAssetMultiplier } from '@/lib/pnl';
 
 export const RISK_PERCENT = 0.01; // 1% of available capital per trade
 
+/**
+ * Leverage applied to demo / AI-signal executions.
+ * Leverage NEVER changes the dollar loss at the stop — it only changes
+ * how much of the balance is tied up as margin to hold the position.
+ */
+export const DEMO_LEVERAGE = 30;
+
+/** Max lot size the trades.lot_size column can store (numeric(10,4)). */
+export const MAX_LOT_SIZE = 999999.9999;
+
+export interface SignalSizing {
+  /** 1% of balance */
+  riskAmount: number;
+  /** |entry - stop| in price terms */
+  stopDistance: number;
+  /** lot size that risks exactly 1% at the stop */
+  targetSize: number;
+  /** lot size after margin / storage caps */
+  size: number;
+  /** true when caps forced a smaller size than the 1% target */
+  capped: boolean;
+  notional: number;
+  marginRequired: number;
+  /** actual dollar loss at the stop for `size` */
+  riskAtStop: number;
+  /** riskAtStop as a fraction of balance */
+  riskPercentOfBalance: number;
+  leverage: number;
+  multiplier: number;
+}
+
+/**
+ * Position sizing for a signal execution.
+ * Size is derived from risk / (stop distance × multiplier); the balance limit
+ * applies to REQUIRED MARGIN (notional ÷ leverage), not to notional itself.
+ */
+export function computeSignalSizing(params: {
+  pair: string;
+  entryPrice: number;
+  stopLoss: number;
+  balance: number;
+  leverage?: number;
+}): SignalSizing {
+  const leverage = Math.max(1, params.leverage ?? DEMO_LEVERAGE);
+  const multiplier = getAssetMultiplier(params.pair);
+  const balance = Math.max(0, params.balance);
+  const riskAmount = balance * RISK_PERCENT;
+  const stopDistance =
+    params.entryPrice && params.stopLoss ? Math.abs(params.entryPrice - params.stopLoss) : 0;
+
+  const targetSize =
+    stopDistance > 0 && multiplier > 0 ? riskAmount / (stopDistance * multiplier) : 0;
+
+  // Margin cap: notional / leverage must fit inside the balance.
+  const maxByMargin =
+    params.entryPrice > 0 && multiplier > 0
+      ? (balance * leverage) / (params.entryPrice * multiplier)
+      : 0;
+
+  let size = Math.min(targetSize, maxByMargin, MAX_LOT_SIZE);
+  size = Math.max(0, Math.floor(size * 10000) / 10000);
+
+  const notional = size * params.entryPrice * multiplier;
+  const riskAtStop = size * stopDistance * multiplier;
+
+  return {
+    riskAmount,
+    stopDistance,
+    targetSize: Math.max(0, Math.floor(targetSize * 10000) / 10000),
+    size,
+    capped: targetSize > 0 && size < Math.floor(targetSize * 10000) / 10000 - 1e-9,
+    notional,
+    marginRequired: notional / leverage,
+    riskAtStop,
+    riskPercentOfBalance: balance > 0 ? riskAtStop / balance : 0,
+    leverage,
+    multiplier,
+  };
+}
+
+/** Pip size for display: JPY pairs 0.01, other forex 0.0001, crypto/metals n/a. */
+export function getPipSize(pair: string): number | null {
+  const m = getAssetMultiplier(pair);
+  if (m === 1) return null; // crypto — quote in price terms
+  return pair.includes('JPY') ? 0.01 : 0.0001;
+}
+
 export interface RiskPlanInput {
   pair: string;
   direction: 'buy' | 'sell';
