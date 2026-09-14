@@ -231,7 +231,11 @@ export function ExecuteTradeDialog({ signal, open, onOpenChange, onExecuted }: E
               value={lotSize}
               onChange={(e) => setLotSize(e.target.value)}
               placeholder="Enter lot size"
+              aria-invalid={invalid}
             />
+            {sizeValidation.error && (
+              <p className="text-xs text-destructive">{sizeValidation.error}</p>
+            )}
             <div className="flex gap-2">
               <Button
                 type="button"
