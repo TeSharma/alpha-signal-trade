@@ -341,6 +341,17 @@ export const useOnChainTradingV2 = (accountMode: AccountMode = 'demo') => {
     return new Web3(endpoint);
   }, [RPC_ENDPOINTS]);
 
+  /**
+   * Read-only context for view calls: uses this mode's own RPC endpoints and
+   * the already-known connected address. Never calls requestAccounts, so a
+   * pending/unopened wallet prompt can no longer hang a data read (and the
+   * read always targets the mode's chain, not whatever chain the wallet is on).
+   */
+  const getReadContext = useCallback(() => {
+    if (!unifiedAddress) throw new Error('Wallet not connected');
+    return { web3: getReadOnlyWeb3(), account: unifiedAddress };
+  }, [unifiedAddress, getReadOnlyWeb3]);
+
   const getTradingContract = useCallback((web3: Web3) => {
     if (!TRADING_PLATFORM_V2_ADDRESS) return null;
     return new web3.eth.Contract(TRADING_PLATFORM_V2_ABI as any, TRADING_PLATFORM_V2_ADDRESS);
@@ -521,10 +532,10 @@ export const useOnChainTradingV2 = (accountMode: AccountMode = 'demo') => {
     return 'Transaction failed';
   };
 
-  // Get collateral balance
+  // Get collateral balance (read-only, on this mode's chain)
   const getCollateralBalance = async (): Promise<string> => {
     try {
-      const { web3, account } = await getWeb3AndAccount();
+      const { web3, account } = getReadContext();
       const collateralContract = getCollateralContract(web3);
       if (!collateralContract) return '0';
       const balance = await collateralContract.methods.balanceOf(account).call() as unknown as string;
@@ -535,22 +546,24 @@ export const useOnChainTradingV2 = (accountMode: AccountMode = 'demo') => {
     }
   };
 
-  // Get native MATIC balance for gas
-  const getMaticBalance = async (): Promise<string> => {
+  // Get native gas-token balance on this mode's chain.
+  // Returns null when the balance is genuinely unknown, so callers never treat
+  // a failed read as "zero balance".
+  const getMaticBalance = async (): Promise<string | null> => {
     try {
-      const { web3, account } = await getWeb3AndAccount();
+      const { web3, account } = getReadContext();
       const balance = await web3.eth.getBalance(account);
       return web3.utils.fromWei(balance, 'ether');
     } catch (error) {
-      console.error('Error fetching MATIC balance:', error);
-      return '0';
+      console.error('Error fetching native balance:', error);
+      return null;
     }
   };
 
   // Get platform configuration including fees
   const getPlatformConfig = async (): Promise<PlatformConfig | null> => {
     try {
-      const { web3 } = await getWeb3AndAccount();
+      const { web3 } = getReadContext();
       const contract = getTradingContract(web3);
       if (!contract) return null;
 
@@ -586,7 +599,7 @@ export const useOnChainTradingV2 = (accountMode: AccountMode = 'demo') => {
   // Get fee configuration
   const getFeeConfig = async (): Promise<FeeInfo | null> => {
     try {
-      const { web3 } = await getWeb3AndAccount();
+      const { web3 } = getReadContext();
       const contract = getTradingContract(web3);
       if (!contract) return null;
 
@@ -794,9 +807,9 @@ export const useOnChainTradingV2 = (accountMode: AccountMode = 'demo') => {
   // Get user's open positions
   const getUserOpenPositions = async (): Promise<PositionV2[]> => {
     try {
-      const { web3, account } = await getWeb3AndAccount();
+      const { web3, account } = getReadContext();
       const contract = getTradingContract(web3);
-      if (!contract) return [];
+      if (!contract) throw new Error(`Trading contract is not deployed on ${networkName}`);
 
       const positionIds: any[] = await contract.methods
         .getUserOpenPositions(account)
@@ -836,16 +849,16 @@ export const useOnChainTradingV2 = (accountMode: AccountMode = 'demo') => {
       return positions;
     } catch (error) {
       console.error('Error fetching positions:', error);
-      return [];
+      throw new Error(extractErrorMessage(error));
     }
   };
 
   // Get all user positions (including closed)
   const getAllUserPositions = async (): Promise<PositionV2[]> => {
     try {
-      const { web3, account } = await getWeb3AndAccount();
+      const { web3, account } = getReadContext();
       const contract = getTradingContract(web3);
-      if (!contract) return [];
+      if (!contract) throw new Error(`Trading contract is not deployed on ${networkName}`);
 
       const positionIds: any[] = await contract.methods
         .getUserPositions(account)
@@ -890,14 +903,14 @@ export const useOnChainTradingV2 = (accountMode: AccountMode = 'demo') => {
       return positions;
     } catch (error) {
       console.error('Error fetching all positions:', error);
-      return [];
+      throw new Error(extractErrorMessage(error));
     }
   };
 
   // Get single position by ID
   const getPosition = async (positionId: number): Promise<PositionV2 | null> => {
     try {
-      const { web3 } = await getWeb3AndAccount();
+      const { web3 } = getReadContext();
       const contract = getTradingContract(web3);
       if (!contract) return null;
 

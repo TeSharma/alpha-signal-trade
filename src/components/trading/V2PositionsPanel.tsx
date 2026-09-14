@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -6,34 +6,49 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { RefreshCw, TrendingUp, TrendingDown, AlertTriangle, X } from "lucide-react";
 import { useOnChainTradingV2, PositionV2 } from '@/hooks/useOnChainTradingV2';
 import { useNetworkEnforcement } from '@/hooks/useNetworkEnforcement';
+import type { AccountMode } from '@/config/contracts';
 
 interface V2PositionsPanelProps {
+  accountMode?: AccountMode;
   onRefreshBalance?: () => void;
 }
 
-const V2PositionsPanel: React.FC<V2PositionsPanelProps> = ({ onRefreshBalance }) => {
+const V2PositionsPanel: React.FC<V2PositionsPanelProps> = ({ accountMode = 'live', onRefreshBalance }) => {
   const [positions, setPositions] = useState<PositionV2[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  
-  const { getUserOpenPositions, closePosition, isLoading: actionLoading } = useOnChainTradingV2();
-  const { isCorrectNetwork } = useNetworkEnforcement();
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  const { getUserOpenPositions, closePosition, isLoading: actionLoading } = useOnChainTradingV2(accountMode);
+  const { isCorrectNetwork } = useNetworkEnforcement(accountMode);
+
+  // Reads go through the mode's own RPC, so an in-flight guard is enough to
+  // keep refreshes from overlapping.
+  const inFlight = useRef(false);
 
   const fetchPositions = useCallback(async () => {
+    if (inFlight.current) return;
+    inFlight.current = true;
     setIsRefreshing(true);
     try {
       const userPositions = await getUserOpenPositions();
       setPositions(userPositions);
-    } catch (error) {
+      setLoadError(null);
+    } catch (error: any) {
       console.error('Error fetching positions:', error);
+      setLoadError(error?.message || 'Could not read positions from the network');
     } finally {
+      inFlight.current = false;
       setIsRefreshing(false);
+      setHasLoadedOnce(true);
     }
   }, [getUserOpenPositions]);
 
   useEffect(() => {
     fetchPositions();
-  }, [fetchPositions]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accountMode]);
 
   const handleClosePosition = async (positionId: number) => {
     setIsLoading(true);
@@ -79,25 +94,9 @@ const V2PositionsPanel: React.FC<V2PositionsPanelProps> = ({ onRefreshBalance })
     return currentPnL < 0 && lossPercent > 80;
   };
 
-  if (positions.length === 0 && !isRefreshing) {
-    return (
-      <Card>
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-lg">Open Positions (V2)</CardTitle>
-            <Button variant="ghost" size="sm" onClick={fetchPositions} disabled={isRefreshing}>
-              <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground text-center py-4">
-            No open positions
-          </p>
-        </CardContent>
-      </Card>
-    );
-  }
+  const showLoading = isRefreshing && !hasLoadedOnce;
+  const showError = !showLoading && loadError !== null;
+  const showEmpty = !showLoading && !showError && positions.length === 0;
 
   return (
     <Card>
@@ -110,11 +109,29 @@ const V2PositionsPanel: React.FC<V2PositionsPanelProps> = ({ onRefreshBalance })
         </div>
       </CardHeader>
       <CardContent className="space-y-3">
-        {isRefreshing && positions.length === 0 ? (
+        {showLoading ? (
           <>
             <Skeleton className="h-24 w-full" />
             <Skeleton className="h-24 w-full" />
           </>
+        ) : showError ? (
+          <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-4 space-y-3">
+            <div className="flex items-start gap-2 text-sm">
+              <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0 text-destructive" />
+              <div>
+                <p className="font-medium">Could not load your open positions</p>
+                <p className="text-muted-foreground break-words">{loadError}</p>
+              </div>
+            </div>
+            <Button variant="outline" size="sm" onClick={fetchPositions} disabled={isRefreshing}>
+              <RefreshCw className={`h-4 w-4 mr-1 ${isRefreshing ? 'animate-spin' : ''}`} />
+              Retry
+            </Button>
+          </div>
+        ) : showEmpty ? (
+          <p className="text-sm text-muted-foreground text-center py-4">
+            No open positions
+          </p>
         ) : (
           positions.map((position) => (
             <div

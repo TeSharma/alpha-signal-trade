@@ -16,6 +16,7 @@ import { getMinimums, isMainnet, FEE_CONFIG, calculateOpenFee, getNetworkName } 
 import { getMarketsForMode, MARKET_METADATA, formatPrice, isSignalMarket } from '@/config/markets'
 import { isForexMarketOpen } from '@/lib/marketHours'
 import { useLocation } from 'react-router-dom'
+import { useUnifiedWallet } from '@/wallet'
 import type { SignalObject } from '@/types/signal'
 
 interface TradingFormProps {
@@ -65,8 +66,10 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
   const { openPosition: openOnChainPositionV2, isLoading: onChainLoading, approvalPending, getCollateralBalance, getMaticBalance, getPlatformConfig } = useOnChainTradingV2(accountMode)
   const { toast } = useToast()
   const { isCorrectNetwork, currentChainId, switchToRequiredNetwork, requiredNetworkName } = useNetworkEnforcement(accountMode)
+  const { address: walletAddress } = useUnifiedWallet()
   const [collateralBalance, setCollateralBalance] = useState('0')
-  const [maticBalance, setMaticBalance] = useState('0')
+  // null = not read yet / read failed. Never treated as "no gas".
+  const [maticBalance, setMaticBalance] = useState<string | null>(null)
   const [maxLeverage, setMaxLeverage] = useState(50)
 
   // Reset selected pair when mode changes
@@ -77,16 +80,19 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
     }
   }, [accountMode, selectedPair])
 
-  // Fetch collateral balance, MATIC balance, and platform config for live mode
+  // Fetch collateral balance, gas balance, and platform config for live mode.
+  // Keyed on mode + connected wallet only: the hook's functions are re-created
+  // on every render, so including them would refetch on every render.
   useEffect(() => {
-    if (accountMode === 'live') {
+    if (accountMode === 'live' && walletAddress) {
       getCollateralBalance().then(setCollateralBalance);
       getMaticBalance().then(setMaticBalance);
       getPlatformConfig().then(config => {
         if (config) setMaxLeverage(config.maxLeverage);
       });
     }
-  }, [accountMode, getCollateralBalance, getMaticBalance, getPlatformConfig]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accountMode, walletAddress]);
 
   // Get minimums based on current network
   const networkMinimums = getMinimums(currentChainId);
@@ -99,7 +105,7 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
 
   // Oracle health: in live mode, require oracle price for selected pair
   const oracleHealthy = accountMode === 'demo' || selectedPairData?.isOraclePrice === true
-  const maticLow = accountMode === 'live' && parseFloat(maticBalance) < 0.001
+  const maticLow = accountMode === 'live' && maticBalance !== null && parseFloat(maticBalance) < 0.001
 
   const handleSubmitTrade = async () => {
     if (isSubmitting) return

@@ -16,6 +16,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useNetworkEnforcement } from '@/hooks/useNetworkEnforcement';
 import { getMinimums, isMainnet, FEE_CONFIG, calculateOpenFee, getNetworkName } from '@/config/contracts';
 import { getMarketsForMode, MARKET_METADATA, formatPrice } from '@/config/markets';
+import { useUnifiedWallet } from '@/wallet';
 
 interface MobileTradingInterfaceProps {
   accountMode: 'demo' | 'live';
@@ -32,14 +33,16 @@ const MobileTradingInterface = ({ accountMode }: MobileTradingInterfaceProps) =>
   const [showChart, setShowChart] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [collateralBalance, setCollateralBalance] = useState('0');
-  const [maticBalance, setMaticBalance] = useState('0');
+  // null = not read yet / read failed. Never treated as "no gas".
+  const [maticBalance, setMaticBalance] = useState<string | null>(null);
 
   const { createTrade, accountBalance } = useTrades();
   const { prices, getCurrentPrice, getBidPrice, getAskPrice, oracleAvailable } = useMarketData(accountMode);
   const { openPosition: openOnChainPositionV2, isLoading: onChainLoading, approvalPending, getCollateralBalance, getMaticBalance, getPlatformConfig } = useOnChainTradingV2(accountMode);
   const { toast } = useToast();
   const { isCorrectNetwork, currentChainId, switchToRequiredNetwork, requiredNetworkName } = useNetworkEnforcement(accountMode);
-  
+  const { address: walletAddress } = useUnifiedWallet();
+
   const networkMinimums = getMinimums(currentChainId ?? undefined);
   const minMargin = networkMinimums.minMargin;
   const [maxLeverage, setMaxLeverage] = useState(50);
@@ -52,15 +55,18 @@ const MobileTradingInterface = ({ accountMode }: MobileTradingInterfaceProps) =>
     }
   }, [accountMode, selectedPair]);
 
+  // Keyed on mode + connected wallet only (hook functions change identity every
+  // render, so including them would refetch continuously).
   useEffect(() => {
-    if (accountMode === 'live') {
+    if (accountMode === 'live' && walletAddress) {
       getCollateralBalance().then(setCollateralBalance);
       getMaticBalance().then(setMaticBalance);
       getPlatformConfig().then(config => {
         if (config) setMaxLeverage(config.maxLeverage);
       });
     }
-  }, [accountMode, getCollateralBalance, getMaticBalance, getPlatformConfig]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accountMode, walletAddress]);
 
   const selectedPairData = prices.find(p => p.pair === selectedPair);
   const currentPrice = getCurrentPrice(selectedPair);
@@ -68,7 +74,7 @@ const MobileTradingInterface = ({ accountMode }: MobileTradingInterfaceProps) =>
   const askPrice = getAskPrice(selectedPair);
 
   const oracleHealthy = accountMode === 'demo' || selectedPairData?.isOraclePrice === true;
-  const maticLow = accountMode === 'live' && parseFloat(maticBalance) < 0.001;
+  const maticLow = accountMode === 'live' && maticBalance !== null && parseFloat(maticBalance) < 0.001;
 
   const handleSubmitTrade = async () => {
     if (isSubmitting) return;

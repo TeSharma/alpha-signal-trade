@@ -84,7 +84,7 @@ const Trade = () => {
                         <TradingViewChart pair={chartPair} height={500} />
                       </div>
                       <MarketOverview accountMode={accountMode} />
-                      {accountMode === 'live' && <V2PositionsPanel />}
+                      {accountMode === 'live' && <V2PositionsPanel accountMode={accountMode} />}
                       <TradeHistory accountMode={accountMode} />
                     </div>
                   </div>
