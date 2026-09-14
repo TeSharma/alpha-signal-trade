@@ -15,12 +15,17 @@ const PRIVY_UNAVAILABLE: SafePrivy = {
 };
 
 /**
- * Privy hooks throw when PrivyProvider is not mounted (no VITE_PRIVY_APP_ID).
- * These wrappers keep the app rendering with MetaMask-only support instead of
- * crashing the whole tree. Hook call order stays stable — the underlying hook
- * is always invoked.
+ * Privy hooks throw (and log a warning on every render) when PrivyProvider is
+ * not mounted, which happens when VITE_PRIVY_APP_ID is not configured. The flag
+ * below is a build-time constant, so skipping the hooks entirely keeps hook call
+ * order stable while avoiding console noise and re-render churn.
  */
+export const PRIVY_ENABLED = Boolean(import.meta.env.VITE_PRIVY_APP_ID);
+
+const EMPTY_WALLETS = [] as ReturnType<typeof useWallets>['wallets'];
+
 export function useSafePrivy(): SafePrivy {
+  if (!PRIVY_ENABLED) return PRIVY_UNAVAILABLE;
   try {
     const { ready, authenticated, login } = usePrivy();
     return { ready, authenticated, login: async () => { await login(); }, available: true };
@@ -30,9 +35,10 @@ export function useSafePrivy(): SafePrivy {
 }
 
 export function useSafePrivyWallets() {
+  if (!PRIVY_ENABLED) return EMPTY_WALLETS;
   try {
     return useWallets().wallets;
   } catch {
-    return [] as ReturnType<typeof useWallets>['wallets'];
+    return EMPTY_WALLETS;
   }
 }
