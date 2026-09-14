@@ -17,11 +17,23 @@ const ORACLE = "0xf61E4881F363b30384DFbcf1C72845CcE94d4f9f"; // PriceOracleV2 (u
 const COLLATERAL = "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359"; // native USDC on Polygon
 
 async function main() {
-  const [deployer] = await hre.ethers.getSigners();
   const net = await hre.ethers.provider.getNetwork();
   const keeper = process.env.KEEPER_ADDRESS;
 
   console.log("Network:      ", net.chainId.toString());
+
+  if (net.chainId !== 137n) {
+    throw new Error(`Wrong network: expected Polygon Mainnet (137), got ${net.chainId}`);
+  }
+
+  const signers = await hre.ethers.getSigners();
+  if (signers.length === 0) {
+    throw new Error(
+      "No signer configured. Set PRIVATE_KEY (owner wallet) in the environment before deploying.",
+    );
+  }
+  const [deployer] = signers;
+
   console.log("Deployer:     ", deployer.address);
   console.log("Oracle:       ", ORACLE, "(reused, not redeployed)");
   console.log("Collateral:   ", COLLATERAL, "(reused)");
