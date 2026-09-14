@@ -18,7 +18,7 @@ import { useNetworkEnforcement } from '@/hooks/useNetworkEnforcement';
 import { getMinimums, isMainnet, FEE_CONFIG, calculateOpenFee, getNetworkName } from '@/config/contracts';
 import { getMarketsForMode, MARKET_METADATA, formatPrice } from '@/config/markets';
 import { useUnifiedWallet } from '@/wallet';
-import { computeRiskPlan, validateStops, RISK_PERCENT } from '@/lib/riskEngine';
+import { computeRiskPlan, validateStops, validateEnteredSize, RISK_PERCENT, DEMO_LEVERAGE } from '@/lib/riskEngine';
 
 interface MobileTradingInterfaceProps {
   accountMode: 'demo' | 'live';

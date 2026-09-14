@@ -18,7 +18,7 @@ import { isForexMarketOpen } from '@/lib/marketHours'
 import { useLocation } from 'react-router-dom'
 import { useUnifiedWallet } from '@/wallet'
 import type { SignalObject } from '@/types/signal'
-import { computeRiskPlan, validateStops, RISK_PERCENT } from '@/lib/riskEngine'
+import { computeRiskPlan, validateStops, validateEnteredSize, RISK_PERCENT, DEMO_LEVERAGE } from '@/lib/riskEngine'
 import { getAssetMultiplier } from '@/lib/pnl'
 
 interface TradingFormProps {
