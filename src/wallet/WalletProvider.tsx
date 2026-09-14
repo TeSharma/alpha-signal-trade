@@ -23,6 +23,27 @@ const hexToDec = (hex: string): number | null => {
 
 const WalletContext = createContext<UnifiedWalletContextValue | null>(null);
 
+// Remembers an explicit user disconnect so a page reload does not silently
+// re-attach the previously approved injected wallet.
+const DISCONNECTED_KEY = 'shtrader.wallet.disconnected';
+
+const wasExplicitlyDisconnected = (): boolean => {
+  try {
+    return localStorage.getItem(DISCONNECTED_KEY) === '1';
+  } catch {
+    return false;
+  }
+};
+
+const rememberDisconnect = (value: boolean) => {
+  try {
+    if (value) localStorage.setItem(DISCONNECTED_KEY, '1');
+    else localStorage.removeItem(DISCONNECTED_KEY);
+  } catch {
+    // storage unavailable — session-only behaviour
+  }
+};
+
 /**
  * Unified wallet provider.
  *
