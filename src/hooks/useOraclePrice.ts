@@ -159,7 +159,7 @@ export const useOraclePrice = (accountMode: AccountMode = 'demo') => {
   };
 
   return {
-    web3,
+    web3: web3Ref.current,
     prices,
     isConnected,
     isLoading,
