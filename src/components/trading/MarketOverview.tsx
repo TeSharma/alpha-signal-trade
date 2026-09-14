@@ -112,7 +112,7 @@ const MarketOverview = ({ accountMode = 'demo' }: MarketOverviewProps) => {
           {/* Forex notice */}
           <div className="mt-4 flex items-center gap-2 text-sm text-muted-foreground bg-muted rounded-lg p-3">
             <Info className="h-4 w-4 shrink-0" />
-            <span>EUR/USD, GBP/USD, AUD/USD and Gold trade on-chain in Live mode via Chainlink feeds. USD/JPY stays AI-signals only.</span>
+            <span>Live mode trades BTC/USD, ETH/USD and POL/USD on-chain via Chainlink feeds. Forex and Gold stay AI-signals only until their feeds are registered.</span>
           </div>
         </CardContent>
       </Card>
