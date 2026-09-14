@@ -17,6 +17,7 @@ import { useNetworkEnforcement } from '@/hooks/useNetworkEnforcement';
 import { getMinimums, isMainnet, FEE_CONFIG, calculateOpenFee, getNetworkName } from '@/config/contracts';
 import { getMarketsForMode, MARKET_METADATA, formatPrice } from '@/config/markets';
 import { useUnifiedWallet } from '@/wallet';
+import { computeRiskPlan, validateStops, RISK_PERCENT } from '@/lib/riskEngine';
 
 interface MobileTradingInterfaceProps {
   accountMode: 'demo' | 'live';
@@ -76,6 +77,30 @@ const MobileTradingInterface = ({ accountMode }: MobileTradingInterfaceProps) =>
   const oracleHealthy = accountMode === 'demo' || selectedPairData?.isOraclePrice === true;
   const maticLow = accountMode === 'live' && maticBalance !== null && parseFloat(maticBalance) < 0.001;
 
+  // ─── Risk engine (1% per trade) ────────────────────────────────────────
+  const entryPrice = (tradeDirection === 'buy' ? askPrice : bidPrice) || currentPrice;
+  const riskCapital = accountMode === 'demo'
+    ? (accountBalance?.demo_balance ?? 10000)
+    : parseFloat(collateralBalance) || 0;
+  const slNum = stopLoss ? parseFloat(stopLoss) : null;
+  const tpNum = takeProfit ? parseFloat(takeProfit) : null;
+  const stopValidation = validateStops(tradeDirection, entryPrice, slNum, tpNum);
+  const riskPlan = computeRiskPlan(
+    {
+      pair: selectedPair,
+      direction: tradeDirection,
+      entryPrice,
+      stopLoss: stopValidation.stopLossError ? null : slNum,
+      takeProfit: stopValidation.takeProfitError ? null : tpNum,
+      capital: riskCapital,
+      leverage: accountMode === 'live' ? leverage : 1,
+      mode: accountMode,
+    },
+    parseFloat(lotSize) || 0,
+  );
+  const overRiskLimit =
+    riskPlan.potentialLoss != null && riskCapital > 0 && riskPlan.potentialLoss > riskPlan.riskAmount;
+
   const handleSubmitTrade = async () => {
     if (isSubmitting) return;
     setIsSubmitting(true);
@@ -84,6 +109,15 @@ const MobileTradingInterface = ({ accountMode }: MobileTradingInterfaceProps) =>
       const marginAmount = parseFloat(lotSize);
       if (!lotSize || marginAmount <= 0) {
         toast({ title: 'Invalid lot size', description: 'Please enter a valid lot size', variant: 'destructive' });
+        return;
+      }
+
+      if (!stopValidation.valid) {
+        toast({
+          title: 'Invalid Stop Loss / Take Profit',
+          description: stopValidation.stopLossError || stopValidation.takeProfitError || '',
+          variant: 'destructive'
+        });
         return;
       }
 
@@ -183,12 +217,28 @@ const MobileTradingInterface = ({ accountMode }: MobileTradingInterfaceProps) =>
   };
 
   const calculateLotSize = () => {
-    const balance = accountMode === 'demo' 
-      ? (accountBalance?.demo_balance || 10000) 
-      : parseFloat(collateralBalance) || 0;
-    const riskPercent = 2;
-    const suggestedLot = Math.max(1, Math.floor(balance * (riskPercent / 100)));
-    setLotSize(suggestedLot.toString());
+    if (!riskPlan.hasStopLoss || riskPlan.stopDistance <= 0) {
+      toast({
+        title: 'Stop Loss Required',
+        description: 'Enter a stop loss first — position size comes from your 1% risk and the stop distance.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    if (!entryPrice || riskCapital <= 0) {
+      toast({
+        title: 'Cannot Calculate Yet',
+        description: !entryPrice ? 'Waiting for a live price for this market.' : 'No available trading capital found.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    if (accountMode === 'live') {
+      const margin = Math.max(minMargin, Math.min(riskPlan.suggestedMargin, riskCapital));
+      setLotSize(margin.toFixed(2));
+    } else {
+      setLotSize((Math.floor(riskPlan.positionSize * 10000) / 10000).toString());
+    }
   };
 
   return (
@@ -318,12 +368,78 @@ const MobileTradingInterface = ({ accountMode }: MobileTradingInterfaceProps) =>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
               <Label className="text-sm">Stop Loss</Label>
-              <Input type="number" value={stopLoss} onChange={(e) => setStopLoss(e.target.value)} placeholder="SL" step="0.01" />
+              <Input
+                type="number"
+                value={stopLoss}
+                onChange={(e) => setStopLoss(e.target.value)}
+                placeholder="SL"
+                step="0.00001"
+                aria-invalid={!!stopValidation.stopLossError}
+              />
             </div>
             <div className="space-y-2">
               <Label className="text-sm">Take Profit</Label>
-              <Input type="number" value={takeProfit} onChange={(e) => setTakeProfit(e.target.value)} placeholder="TP" step="0.01" />
+              <Input
+                type="number"
+                value={takeProfit}
+                onChange={(e) => setTakeProfit(e.target.value)}
+                placeholder="TP"
+                step="0.00001"
+                aria-invalid={!!stopValidation.takeProfitError}
+              />
             </div>
+          </div>
+          {(stopValidation.stopLossError || stopValidation.takeProfitError) && (
+            <p className="text-xs text-destructive">
+              {stopValidation.stopLossError || stopValidation.takeProfitError}
+            </p>
+          )}
+
+          {/* Risk Engine Panel */}
+          <div className="rounded-lg border border-border p-3 space-y-1 text-sm">
+            <div className="flex items-center gap-2 font-semibold">
+              <Calculator className="h-4 w-4" />
+              Risk Engine ({(RISK_PERCENT * 100).toFixed(0)}% per trade)
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Max risk (1%):</span>
+              <span className="font-mono">${riskPlan.riskAmount.toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Stop distance:</span>
+              <span className="font-mono">{riskPlan.stopDistance > 0 ? riskPlan.stopDistance.toFixed(5) : '—'}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">{accountMode === 'live' ? 'Suggested margin:' : 'Suggested lot:'}</span>
+              <span className="font-mono">
+                {riskPlan.stopDistance > 0
+                  ? accountMode === 'live'
+                    ? `${riskPlan.suggestedMargin.toFixed(2)} tUSD`
+                    : (Math.floor(riskPlan.positionSize * 10000) / 10000).toString()
+                  : '—'}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Loss if SL hit:</span>
+              <span className={`font-mono ${overRiskLimit ? 'text-destructive' : ''}`}>
+                {riskPlan.potentialLoss != null ? `-$${riskPlan.potentialLoss.toFixed(2)}` : '—'}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Profit if TP hit:</span>
+              <span className="font-mono text-green-600">
+                {riskPlan.potentialProfit != null ? `+$${riskPlan.potentialProfit.toFixed(2)}` : '—'}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Risk : Reward</span>
+              <span className="font-mono">{riskPlan.riskReward != null ? `1 : ${riskPlan.riskReward.toFixed(2)}` : '—'}</span>
+            </div>
+            {overRiskLimit && (
+              <p className="text-xs text-destructive pt-1">
+                This size risks more than 1% of your capital.
+              </p>
+            )}
           </div>
 
           {/* Trade Summary */}
