@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState, memo } from 'react';
+import { Loader2 } from 'lucide-react';
 
 interface TradingViewChartProps {
   pair: string;
@@ -18,16 +19,19 @@ const TV_SYMBOL_MAP: Record<string, string> = {
   'XAU/USD': 'OANDA:XAUUSD',
 };
 
+type Status = 'loading' | 'ready' | 'failed';
+
 const TradingViewChart: React.FC<TradingViewChartProps> = ({ pair, height = 500, theme = 'light' }) => {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [failed, setFailed] = useState(false);
+  const [status, setStatus] = useState<Status>('loading');
   const symbol = TV_SYMBOL_MAP[pair] || 'BINANCE:BTCUSDT';
 
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
 
-    setFailed(false);
+    let cancelled = false;
+    setStatus('loading');
     container.innerHTML = '';
 
     // TradingView injects its iframe as a sibling of the script, so it needs a
@@ -42,7 +46,9 @@ const TradingViewChart: React.FC<TradingViewChartProps> = ({ pair, height = 500,
     script.src = 'https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js';
     script.type = 'text/javascript';
     script.async = true;
-    script.onerror = () => setFailed(true);
+    script.onerror = () => {
+      if (!cancelled) setStatus('failed');
+    };
     script.text = JSON.stringify({
       autosize: true,
       symbol,
@@ -58,21 +64,44 @@ const TradingViewChart: React.FC<TradingViewChartProps> = ({ pair, height = 500,
     });
     container.appendChild(script);
 
+    // The widget script gives no ready callback — poll for the iframe it injects.
+    const started = Date.now();
+    const poll = window.setInterval(() => {
+      if (cancelled) return;
+      if (container.querySelector('iframe')) {
+        setStatus('ready');
+        window.clearInterval(poll);
+      } else if (Date.now() - started > 10000) {
+        setStatus('failed');
+        window.clearInterval(poll);
+      }
+    }, 300);
+
     return () => {
+      cancelled = true;
+      window.clearInterval(poll);
       container.innerHTML = '';
     };
   }, [symbol, theme]);
 
   return (
     <div
-      className="tradingview-widget-container w-full rounded-md border border-border overflow-hidden relative"
+      className="tradingview-widget-container w-full rounded-md border border-border overflow-hidden relative bg-card"
       style={{ height }}
     >
       <div ref={containerRef} style={{ height: '100%', width: '100%' }} />
-      {failed && (
+
+      {status === 'loading' && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-card">
+          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+          <p className="text-sm text-muted-foreground">Loading {pair} chart…</p>
+        </div>
+      )}
+
+      {status === 'failed' && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-card text-center p-4">
           <p className="text-sm text-muted-foreground">
-            The chart could not load. An ad blocker or network restriction may be blocking it.
+            The {pair} chart could not load. An ad blocker or network restriction may be blocking it.
           </p>
           <a
             className="text-sm text-primary underline"

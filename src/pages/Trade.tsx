@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Sidebar from "@/components/layout/Sidebar";
 import TopBar from "@/components/layout/TopBar";
 import MobileHeader from "@/components/layout/MobileHeader";
@@ -15,12 +15,16 @@ import TradingViewChart from "@/components/trading/TradingViewChart";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { getNetworkName } from '@/config/contracts';
-
-const CHART_PAIRS = ['BTC/USD', 'ETH/USD', 'POL/USD', 'EUR/USD', 'GBP/USD', 'USD/JPY'];
+import { getMarketsForMode } from '@/config/markets';
 
 const Trade = () => {
   const [accountMode, setAccountMode] = useState<'demo' | 'live'>('demo');
   const [chartPair, setChartPair] = useState<string>('BTC/USD');
+  const chartPairs = getMarketsForMode(accountMode);
+
+  useEffect(() => {
+    if (!chartPairs.includes(chartPair)) setChartPair(chartPairs[0] || 'BTC/USD');
+  }, [chartPairs, chartPair]);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -75,7 +79,7 @@ const Trade = () => {
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                              {CHART_PAIRS.map((p) => (
+                              {chartPairs.map((p) => (
                                 <SelectItem key={p} value={p}>{p}</SelectItem>
                               ))}
                             </SelectContent>
