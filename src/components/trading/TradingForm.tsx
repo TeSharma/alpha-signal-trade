@@ -16,6 +16,7 @@ import { getMinimums, isMainnet, FEE_CONFIG, calculateOpenFee, getNetworkName } 
 import { getMarketsForMode, MARKET_METADATA, formatPrice, isSignalMarket } from '@/config/markets'
 import { isForexMarketOpen } from '@/lib/marketHours'
 import { useLocation } from 'react-router-dom'
+import { useUnifiedWallet } from '@/wallet'
 import type { SignalObject } from '@/types/signal'
 
 interface TradingFormProps {
