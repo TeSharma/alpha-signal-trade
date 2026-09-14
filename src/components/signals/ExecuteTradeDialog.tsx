@@ -25,8 +25,6 @@ interface ExecuteTradeDialogProps {
   onExecuted?: () => void;
 }
 
-const RISK_PERCENT = 0.01; // 1% of balance suggested risk
-
 export function ExecuteTradeDialog({ signal, open, onOpenChange, onExecuted }: ExecuteTradeDialogProps) {
   const { toast } = useToast();
   const [balance, setBalance] = useState<number>(10000);
@@ -38,23 +36,25 @@ export function ExecuteTradeDialog({ signal, open, onOpenChange, onExecuted }: E
     return (signal.entry_zone[0] + signal.entry_zone[1]) / 2;
   }, [signal]);
 
-  const stopDistance = useMemo(() => {
-    if (!signal) return 0;
-    return Math.abs(entryMid - signal.stop_loss);
-  }, [signal, entryMid]);
-
   const multiplier = useMemo(() => (signal ? getAssetMultiplier(signal.pair) : 1), [signal]);
 
-  // Suggested 1%-risk position size (units of base asset / standard lots)
-  const suggestedSize = useMemo(() => {
-    if (!signal || stopDistance <= 0 || multiplier <= 0) return 0;
-    const riskAmount = balance * RISK_PERCENT;
-    const size = riskAmount / (stopDistance * multiplier);
-    // Cap so notional ≤ balance
-    const maxByBalance = balance / Math.max(entryMid * multiplier, 0.0001);
-    const capped = Math.min(size, maxByBalance, 999999.9999);
-    return Math.max(0, Math.floor(capped * 10000) / 10000);
-  }, [signal, stopDistance, balance, entryMid, multiplier]);
+  // 1%-risk sizing. Leverage affects required margin only, never the loss at the stop.
+  const sizing = useMemo(
+    () =>
+      computeSignalSizing({
+        pair: signal?.pair ?? '',
+        entryPrice: entryMid,
+        stopLoss: signal?.stop_loss ?? 0,
+        balance,
+        leverage: DEMO_LEVERAGE,
+      }),
+    [signal, entryMid, balance],
+  );
+
+  const stopDistance = sizing.stopDistance;
+  const suggestedSize = sizing.size;
+  const pipSize = signal ? getPipSize(signal.pair) : null;
+  const stopPips = pipSize ? stopDistance / pipSize : null;
 
   // Load balance + reset lot size when opening
   useEffect(() => {
@@ -82,15 +82,22 @@ export function ExecuteTradeDialog({ signal, open, onOpenChange, onExecuted }: E
   const lotNum = parseFloat(lotSize) || 0;
   const riskIfHit = lotNum * stopDistance * multiplier;
   const notional = lotNum * entryMid * multiplier;
+  const marginRequired = notional / DEMO_LEVERAGE;
   const isLong = signal.direction === 'LONG';
-  const invalid = lotNum <= 0 || lotNum > 999999.9999 || notional > balance;
+  const takeProfits = Array.isArray(signal.take_profit) ? signal.take_profit : [signal.take_profit];
+  const tp1 = Number(takeProfits[0]);
+  const riskReward =
+    stopDistance > 0 && Number.isFinite(tp1) ? Math.abs(tp1 - entryMid) / stopDistance : null;
+  const invalid = lotNum <= 0 || lotNum > 999999.9999 || marginRequired > balance;
+
+  const fmt = (n: number) => n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   const handleConfirm = async () => {
     if (invalid) {
       toast({
         title: 'Invalid lot size',
-        description: notional > balance
-          ? `Notional ($${notional.toFixed(2)}) exceeds balance ($${balance.toFixed(2)}).`
+        description: marginRequired > balance
+          ? `Required margin ($${fmt(marginRequired)}) exceeds balance ($${fmt(balance)}).`
           : 'Lot size must be greater than 0.',
         variant: 'destructive',
       });
@@ -140,7 +147,7 @@ export function ExecuteTradeDialog({ signal, open, onOpenChange, onExecuted }: E
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             Confirm Trade
@@ -168,23 +175,37 @@ export function ExecuteTradeDialog({ signal, open, onOpenChange, onExecuted }: E
             </div>
             <div>
               <p className="text-muted-foreground">Stop Loss</p>
-              <p className="font-mono font-medium text-destructive">{signal.stop_loss}</p>
+              <p className="font-mono font-medium text-destructive">
+                {signal.stop_loss}
+                {stopPips != null && (
+                  <span className="text-muted-foreground"> ({stopPips.toFixed(1)} pips)</span>
+                )}
+              </p>
             </div>
             <div>
               <p className="text-muted-foreground">Take Profit</p>
-              <p className="font-mono font-medium text-green-500">
-                {signal.take_profit.join(' / ')}
+              <p className="font-mono font-medium text-green-600">
+                {Number.isFinite(tp1) ? tp1 : '—'}
+                <span className="text-muted-foreground"> (TP1)</span>
               </p>
             </div>
             <div>
               <p className="text-muted-foreground">Account Balance</p>
-              <p className="font-mono font-medium">${balance.toFixed(2)}</p>
+              <p className="font-mono font-medium">${fmt(balance)}</p>
             </div>
             <div>
-              <p className="text-muted-foreground">Suggested (1% risk)</p>
+              <p className="text-muted-foreground">Suggested ({(RISK_PERCENT * 100).toFixed(0)}% risk)</p>
               <p className="font-mono font-medium">{suggestedSize}</p>
             </div>
           </div>
+
+          {takeProfits.length > 1 && (
+            <p className="text-xs text-muted-foreground bg-muted rounded-md p-2">
+              This signal lists {takeProfits.length} targets ({takeProfits.map((tp) => tp).join(' / ')}).
+              Only <strong>TP1</strong> is attached to the trade and executed; TP2 and TP3 are guidance
+              for manual management.
+            </p>
+          )}
 
           <div className="space-y-2">
             <Label htmlFor="lot-size">Lot Size</Label>
@@ -219,20 +240,52 @@ export function ExecuteTradeDialog({ signal, open, onOpenChange, onExecuted }: E
 
           <div className="bg-muted rounded-lg p-3 space-y-1 text-sm">
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Notional value:</span>
-              <span className="font-mono">${notional.toFixed(2)}</span>
+              <span className="text-muted-foreground">Target risk (1% of balance):</span>
+              <span className="font-mono">${fmt(sizing.riskAmount)}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Risk if SL hit:</span>
-              <span className={`font-mono ${riskIfHit > balance * 0.05 ? 'text-destructive' : ''}`}>
-                ${riskIfHit.toFixed(2)} ({balance > 0 ? ((riskIfHit / balance) * 100).toFixed(2) : '0'}%)
+              <span className="text-muted-foreground">Stop distance:</span>
+              <span className="font-mono">
+                {stopDistance.toFixed(5)}
+                {stopPips != null ? ` (${stopPips.toFixed(1)} pips)` : ''}
               </span>
             </div>
-            {notional > balance && (
-              <p className="text-xs text-destructive pt-1">
-                ⚠ Notional exceeds account balance.
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Position value (notional):</span>
+              <span className="font-mono">${fmt(notional)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Margin required ({DEMO_LEVERAGE}x):</span>
+              <span className="font-mono">${fmt(marginRequired)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Loss if SL hit:</span>
+              <span className={`font-mono ${riskIfHit > sizing.riskAmount * 1.01 ? 'text-destructive' : ''}`}>
+                ${fmt(riskIfHit)} ({balance > 0 ? ((riskIfHit / balance) * 100).toFixed(2) : '0'}%)
+              </span>
+            </div>
+            {riskReward != null && (
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Risk : Reward (TP1):</span>
+                <span className="font-mono">1 : {riskReward.toFixed(2)}</span>
+              </div>
+            )}
+            {sizing.capped && (
+              <p className="text-xs text-amber-600 pt-1">
+                Margin limits cap the size at {sizing.size} lots, so the risk at the stop is
+                ${fmt(sizing.riskAtStop)} ({(sizing.riskPercentOfBalance * 100).toFixed(2)}%) instead of
+                the full 1% target.
               </p>
             )}
+            {marginRequired > balance && (
+              <p className="text-xs text-destructive pt-1">
+                ⚠ Required margin exceeds your balance.
+              </p>
+            )}
+            <p className="text-xs text-muted-foreground pt-1">
+              Leverage changes only the margin needed to hold this position — never the dollar loss at
+              your stop.
+            </p>
           </div>
         </div>
 

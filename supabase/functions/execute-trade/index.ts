@@ -202,10 +202,12 @@ Deno.serve(async (req) => {
       positionSize = position_size_override;
     }
 
-    // Cap position size by available balance (notional ≤ balance)
-    const maxPositionByBalance = accountBalance / (entryPrice * multiplier);
-    if (positionSize > maxPositionByBalance) {
-      positionSize = maxPositionByBalance;
+    // Cap by REQUIRED MARGIN (notional / leverage ≤ balance).
+    // Leverage changes the margin needed, never the dollar loss at the stop.
+    const LEVERAGE = 30;
+    const maxPositionByMargin = (accountBalance * LEVERAGE) / (entryPrice * multiplier);
+    if (positionSize > maxPositionByMargin) {
+      positionSize = maxPositionByMargin;
     }
 
     // Cap by DB column constraint: numeric(10,4) → max < 1,000,000
