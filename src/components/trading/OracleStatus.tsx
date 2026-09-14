@@ -123,12 +123,19 @@ const OracleStatus = ({ accountMode = 'demo' }: OracleStatusProps) => {
         })
       );
 
+      const availableFeeds = statuses.filter(s => s.available);
+
+      // A flaky/rate-limited endpoint reports every feed as missing — try the
+      // next endpoint before declaring the oracle offline.
+      if (availableFeeds.length === 0 && rpcIndex < maxRetries - 1) {
+        return fetchOracleStatus(rpcIndex + 1);
+      }
+
       setFeedStatuses(statuses);
       setLastRefresh(new Date());
 
-      const availableFeeds = statuses.filter(s => s.available);
       const staleFeeds = statuses.filter(s => s.isStale);
-      
+
       if (availableFeeds.length === 0) {
         setOverallStatus('unavailable');
       } else if (staleFeeds.length > 0) {
@@ -137,6 +144,9 @@ const OracleStatus = ({ accountMode = 'demo' }: OracleStatusProps) => {
         setOverallStatus('healthy');
       }
     } catch (error) {
+      if (rpcIndex < maxRetries - 1) {
+        return fetchOracleStatus(rpcIndex + 1);
+      }
       console.error('Error fetching oracle status:', error);
       setOverallStatus('unavailable');
     } finally {
