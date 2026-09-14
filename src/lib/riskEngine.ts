@@ -91,7 +91,7 @@ export function computeSignalSizing(params: {
 /** Pip size for display: JPY pairs 0.01, other forex 0.0001, crypto/metals n/a. */
 export function getPipSize(pair: string): number | null {
   const m = getAssetMultiplier(pair);
-  if (m === 1) return null; // crypto — quote in price terms
+  if (m === 1 || m === 100) return null; // crypto & metals — quote in price terms
   return pair.includes('JPY') ? 0.01 : 0.0001;
 }
 

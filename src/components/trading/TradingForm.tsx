@@ -472,7 +472,7 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
           <div className="text-xs text-muted-foreground">
             {accountMode === 'live' 
               ? `Position size: $${(parseFloat(lotSize || '0') * leverage).toLocaleString()}`
-              : `Position value: $${(parseFloat(lotSize || '0') * currentPrice * 100000).toLocaleString()}`
+              : `Position value: $${(parseFloat(lotSize || '0') * currentPrice * getAssetMultiplier(selectedPair)).toLocaleString()}`
             }
           </div>
         </div>
