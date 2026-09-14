@@ -79,9 +79,10 @@ const OracleStatus = ({ accountMode = 'demo' }: OracleStatusProps) => {
       const endpoint = RPC_ENDPOINTS[rpcIndex % RPC_ENDPOINTS.length];
       const web3 = new Web3(endpoint);
       const contract = new web3.eth.Contract(PRICE_ORACLE_V2_ABI as any, oracleAddress);
-      
+
       try {
-        await web3.eth.getCode(oracleAddress);
+        const code = await web3.eth.getCode(oracleAddress);
+        if (!code || code === '0x') throw new Error('No contract code at oracle address');
         setIsConnected(true);
       } catch (error: any) {
         if (rpcIndex < maxRetries - 1) {
