@@ -484,4 +484,11 @@ contract TradingPlatformV2 is ReentrancyGuard, Ownable {
     function setPriceTimeout(uint256 _timeout) external onlyOwner {
         priceTimeout = _timeout;
     }
+
+    /// @notice Authorise or revoke a keeper allowed to call closeWithTrigger
+    function setKeeper(address keeper, bool allowed) external onlyOwner {
+        require(keeper != address(0), "Invalid keeper");
+        keepers[keeper] = allowed;
+        emit KeeperUpdated(keeper, allowed);
+    }
 }
