@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import { useSafePrivy, useSafePrivyWallets } from './safePrivy';
 import { connectToBlockchain } from '@/lib/web3';
 import { useApp } from '@/contexts/AppContext';
+import { getRpcUrlsForChain } from '@/config/contracts';
 import {
   UNIFIED_WALLET_DISCONNECTED,
   type UnifiedWallet,
@@ -45,6 +46,8 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [balance, setBalance] = useState<string | null>(null);
   const [provider, setProvider] = useState<any | null>(null);
   const signerRef = useRef<any | null>(null);
+  const chainIdRef = useRef<number | null>(null);
+  const addressRef = useRef<string>('');
 
   const embeddedWallet = useMemo(
     () => privyWallets.find((w) => w.walletClientType === 'privy') ?? privyWallets[0] ?? null,
