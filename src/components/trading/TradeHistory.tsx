@@ -55,7 +55,7 @@ const TradeHistory = ({ accountMode }: TradeHistoryProps) => {
   /** A target counts as hit only for a closed trade whose exit reached it. */
   const isTakeProfitHit = (trade: Trade) => {
     if (trade.status !== 'closed' || !trade.take_profit || !trade.exit_price) return false
-    const isLong = trade.direction === 'buy' || trade.direction === 'LONG'
+    const isLong = String(trade.direction).toLowerCase() === 'buy'
     return isLong ? trade.exit_price >= trade.take_profit : trade.exit_price <= trade.take_profit
   }
 
