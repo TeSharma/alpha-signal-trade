@@ -16,6 +16,7 @@ export interface RiskPlanInput {
   takeProfit?: number | null;
   capital: number;
   leverage?: number;
+  mode: 'demo' | 'live';
 }
 
 export interface RiskPlan {
@@ -111,12 +112,12 @@ export function computeRiskPlan(input: RiskPlanInput, enteredSize?: number): Ris
   let potentialProfit: number | null = null;
 
   if (enteredSize != null && enteredSize > 0 && entryPrice) {
-    const enteredNotional = enteredSize * leverage > 0 ? enteredSize : 0;
-    // Units of base asset represented by the entered value
+    // Live: the entered value is margin, so notional = margin × leverage.
+    // Demo: the entered value is already a lot size.
     const units =
-      leverage > 1
-        ? (enteredSize * leverage) / (entryPrice * multiplier) // live: margin × leverage = notional
-        : enteredNotional; // demo: entered value is already a lot size
+      input.mode === 'live'
+        ? (enteredSize * leverage) / (entryPrice * multiplier)
+        : enteredSize;
 
     if (stopDistance > 0) potentialLoss = stopDistance * units * multiplier;
     if (takeProfit != null) potentialProfit = Math.abs(takeProfit - entryPrice) * units * multiplier;
