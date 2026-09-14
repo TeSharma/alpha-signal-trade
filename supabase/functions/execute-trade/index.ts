@@ -192,7 +192,12 @@ Deno.serve(async (req) => {
 
     // Asset-class multiplier — must match public.calculate_trade_pnl
     const CRYPTO = new Set(['BTC/USD','ETH/USD','POL/USD','SOL/USD','BNB/USD','XRP/USD','ADA/USD','DOGE/USD','AVAX/USD','MATIC/USD','LINK/USD','DOT/USD']);
-    const multiplier = CRYPTO.has(signal.pair) ? 1 : (signal.pair.includes('JPY') ? 1000 : 100000);
+    const METALS = new Set(['XAU/USD','XAG/USD']);
+    const multiplier = CRYPTO.has(signal.pair)
+      ? 1
+      : METALS.has(signal.pair)
+        ? 100
+        : (signal.pair.includes('JPY') ? 1000 : 100000);
 
     const riskAmount = accountBalance * 0.01; // 1% risk
     let positionSize = riskAmount / (stopDistance * multiplier);

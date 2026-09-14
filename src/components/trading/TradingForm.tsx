@@ -19,6 +19,7 @@ import { useLocation } from 'react-router-dom'
 import { useUnifiedWallet } from '@/wallet'
 import type { SignalObject } from '@/types/signal'
 import { computeRiskPlan, validateStops, RISK_PERCENT } from '@/lib/riskEngine'
+import { getAssetMultiplier } from '@/lib/pnl'
 
 interface TradingFormProps {
   accountMode: 'demo' | 'live';
@@ -472,7 +473,7 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
           <div className="text-xs text-muted-foreground">
             {accountMode === 'live' 
               ? `Position size: $${(parseFloat(lotSize || '0') * leverage).toLocaleString()}`
-              : `Position value: $${(parseFloat(lotSize || '0') * currentPrice * 100000).toLocaleString()}`
+              : `Position value: $${(parseFloat(lotSize || '0') * currentPrice * getAssetMultiplier(selectedPair)).toLocaleString()}`
             }
           </div>
         </div>
