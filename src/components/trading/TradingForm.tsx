@@ -122,7 +122,7 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
   const tpNum = takeProfit ? parseFloat(takeProfit) : null
   const enteredSize = parseFloat(lotSize) || 0
 
-  const stopValidation = validateStops(tradeDirection, entryPrice, slNum, tpNum)
+  const stopValidation = validateStops(tradeDirection, entryPrice, slNum, tpNum, selectedPair)
   const riskPlan = computeRiskPlan(
     {
       pair: selectedPair,
@@ -139,6 +139,17 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
   const overRiskLimit =
     riskPlan.potentialLoss != null && riskCapital > 0 && riskPlan.potentialLoss > riskPlan.riskAmount
 
+  // Manually typed sizes go through exactly the same checks as the suggested size.
+  const sizeValidation = validateEnteredSize({
+    pair: selectedPair,
+    entryPrice,
+    stopLoss: stopValidation.stopLossError ? null : slNum,
+    capital: riskCapital,
+    leverage: accountMode === 'live' ? leverage : DEMO_LEVERAGE,
+    mode: accountMode,
+    enteredSize,
+  })
+
   const handleSubmitTrade = async () => {
     if (isSubmitting) return
     
@@ -149,6 +160,15 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
       const marginAmount = parseFloat(lotSize);
       if (!lotSize || marginAmount <= 0) {
         toast({ title: 'Invalid lot size', description: 'Please enter a valid lot size', variant: 'destructive' })
+        return
+      }
+
+      if (sizeValidation.error) {
+        toast({
+          title: accountMode === 'live' ? 'Margin Not Allowed' : 'Position Size Not Allowed',
+          description: sizeValidation.error,
+          variant: 'destructive',
+        })
         return
       }
 
