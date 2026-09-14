@@ -213,6 +213,25 @@ serve(async (req) => {
       // so nothing off-chain can settle a live position. We flag it and notify the user.
       if (t.pending_exit_kind) continue; // already flagged
 
+      // Liquidity pre-flight: the keeper must never submit a close that is
+      // guaranteed to revert because the platform cannot pay the settlement.
+      // This gate runs before any closeWithTrigger submission is attempted.
+      const requiredPayout = worstCasePayout(Number(t.lot_size ?? 0));
+      const settleable =
+        liquidity?.balance != null &&
+        canSettleClose(liquidity.balance, requiredPayout, liquidity.buffer, trigger.kind);
+
+      if (!settleable) {
+        summary.liquidityBlocked++;
+        console.warn(
+          `[monitor-positions] liquidity gate blocked automatic close of ${t.id}: ` +
+            `needs ${requiredPayout} USDC, platform balance ${liquidity?.balance ?? "unknown"}, ` +
+            `buffer ${liquidity?.buffer ?? "unknown"} (${trigger.kind})`,
+        );
+        // Still flag the pending exit so the user can close from their own wallet,
+        // but never submit an on-chain close while liquidity is insufficient.
+      }
+
       const { error: flagErr } = await supabase
         .from("trades")
         .update({
