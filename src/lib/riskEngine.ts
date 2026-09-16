@@ -155,7 +155,14 @@ export function validateEnteredSize(params: {
   } else if (!entryPrice) {
     warning = 'Waiting for a live price before this size can be checked.';
   } else if (capital <= 0) {
-    error = 'No available trading capital for this account.';
+    // Live capital comes from an on-chain read that can transiently fail. Warn
+    // instead of blocking — the trade path re-checks the balance before sending.
+    if (mode === 'live') {
+      warning = 'Your trading balance could not be read yet, so this size cannot be checked.';
+    } else {
+      error = 'No available trading capital for this account.';
+    }
+
   } else if (requiredMargin > capital + 1e-9) {
     error = `This size needs ${money(requiredMargin)} of margin at ${leverage}x but only ${money(
       capital,

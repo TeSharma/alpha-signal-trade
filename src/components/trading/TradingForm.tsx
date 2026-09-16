@@ -38,7 +38,7 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
   const prefill = (location.state as any)?.prefill as SignalObject | undefined
   const [selectedPair, setSelectedPair] = useState(availableMarkets[0] || 'POL/USD')
   const [tradeDirection, setTradeDirection] = useState<'buy' | 'sell'>('buy')
-  const [lotSize, setLotSize] = useState('10')
+  const [lotSize, setLotSize] = useState(accountMode === 'demo' ? '0.01' : '10')
   const [leverage, setLeverage] = useState(5)
   const [stopLoss, setStopLoss] = useState('')
   const [takeProfit, setTakeProfit] = useState('')
@@ -48,6 +48,14 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
   const [isLoadingSignal, setIsLoadingSignal] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [prefillApplied, setPrefillApplied] = useState(false)
+
+  // Reset the size input to a sensible default for the mode (lots in demo,
+  // margin in live) so the form never opens on a size the risk rules reject.
+  useEffect(() => {
+    setLotSize(accountMode === 'demo' ? '0.01' : '10')
+  }, [accountMode])
+
+
 
   // Apply signal prefill from AI Signals page
   useEffect(() => {
@@ -251,7 +259,10 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
         }
 
         getCollateralBalance().then(setCollateralBalance)
+        // Tell the open-positions panel to reload now that a position exists.
+        window.dispatchEvent(new Event('shtrader:positions-updated'))
       }
+
 
       const tradeResult = await createTrade({
         pair: selectedPair,
