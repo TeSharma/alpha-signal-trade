@@ -212,7 +212,10 @@ const MobileTradingInterface = ({ accountMode }: MobileTradingInterfaceProps) =>
         }
 
         getCollateralBalance().then(setCollateralBalance);
+        // Tell the open-positions panel to reload now that a position exists.
+        window.dispatchEvent(new Event('shtrader:positions-updated'));
       }
+
 
       const tradeResult = await createTrade({
         pair: selectedPair,

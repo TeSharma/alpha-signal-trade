@@ -45,10 +45,19 @@ const V2PositionsPanel: React.FC<V2PositionsPanelProps> = ({ accountMode = 'live
     }
   }, [getUserOpenPositions]);
 
+  // Reload when the mode changes, when a wallet connects (reads need an
+  // address), and whenever a new position is opened elsewhere in the app.
   useEffect(() => {
     fetchPositions();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [accountMode]);
+  }, [accountMode, walletAddress, isWalletConnected]);
+
+  useEffect(() => {
+    const onUpdated = () => fetchPositions();
+    window.addEventListener('shtrader:positions-updated', onUpdated);
+    return () => window.removeEventListener('shtrader:positions-updated', onUpdated);
+  }, [fetchPositions]);
+
 
   const handleClosePosition = async (positionId: number) => {
     setIsLoading(true);
