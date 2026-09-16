@@ -6,6 +6,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { RefreshCw, TrendingUp, TrendingDown, AlertTriangle, X } from "lucide-react";
 import { useOnChainTradingV2, PositionV2 } from '@/hooks/useOnChainTradingV2';
 import { useNetworkEnforcement } from '@/hooks/useNetworkEnforcement';
+import { useUnifiedWallet } from '@/wallet';
+
 import type { AccountMode } from '@/config/contracts';
 
 interface V2PositionsPanelProps {
@@ -22,6 +24,8 @@ const V2PositionsPanel: React.FC<V2PositionsPanelProps> = ({ accountMode = 'live
 
   const { getUserOpenPositions, closePosition, isLoading: actionLoading } = useOnChainTradingV2(accountMode);
   const { isCorrectNetwork } = useNetworkEnforcement(accountMode);
+  const { address: walletAddress, connected: isWalletConnected } = useUnifiedWallet();
+
 
   // Reads go through the mode's own RPC, so an in-flight guard is enough to
   // keep refreshes from overlapping.
