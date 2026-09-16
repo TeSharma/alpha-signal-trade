@@ -34,8 +34,21 @@ const TradingViewChart: React.FC<TradingViewChartProps> = ({ pair, height = 500,
     setStatus('loading');
     container.innerHTML = '';
 
-    // TradingView injects its iframe as a sibling of the script, so it needs a
-    // dedicated wrapper with an explicit size for `autosize` to resolve.
+    // TradingView's embed script resolves its host like this:
+    //   const parent = script.parentNode;
+    //   const isContainer = parent.classList.contains('tradingview-widget-container');
+    //   this.iframeContainer = isContainer ? parent : document.createElement('div');
+    //   const widget = iframeContainer.querySelector('.tradingview-widget-container__widget');
+    //
+    // So the <script> MUST be appended directly into the element carrying the
+    // `tradingview-widget-container` class, with `.tradingview-widget-container__widget`
+    // as its sibling. If the parent lacks that class, TradingView falls back to a
+    // brand-new unstyled <div>, the widget div is never found, and the iframe ends up
+    // at `height: 100%` inside an auto-height (0px) box — i.e. an invisible chart.
+    //
+    // That is why `containerRef` below is applied to the element that also carries the
+    // class, and why that element must not have React-rendered children (the effect
+    // owns its contents and clears them on cleanup).
     const widget = document.createElement('div');
     widget.className = 'tradingview-widget-container__widget';
     widget.style.height = '100%';
@@ -86,10 +99,21 @@ const TradingViewChart: React.FC<TradingViewChartProps> = ({ pair, height = 500,
 
   return (
     <div
-      className="tradingview-widget-container w-full rounded-md border border-border overflow-hidden relative bg-card"
+      className="w-full rounded-md border border-border overflow-hidden relative bg-card"
       style={{ height }}
     >
-      <div ref={containerRef} style={{ height: '100%', width: '100%' }} />
+      {/*
+        TradingView-owned subtree. This element must carry the
+        `tradingview-widget-container` class itself — the embed script looks up
+        `script.parentNode` and bails to an unstyled fallback div if the class is
+        missing. It must also render NO React children, because the effect injects
+        the widget div + script here and clears the node on cleanup/re-symbol.
+      */}
+      <div
+        ref={containerRef}
+        className="tradingview-widget-container"
+        style={{ height: '100%', width: '100%' }}
+      />
 
       {status === 'loading' && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-card">

@@ -1,0 +1,20 @@
+# ShTrader
+
+> Decentralized forex trading platform with self-custody wallets, AI trading signals, and an education suite for emerging-market traders.
+
+ShTrader combines on-chain crypto trading (Polygon) and AI-generated forex signals with a TradingView-powered charting interface, demo and live accounts, and built-in education content.
+
+## Pages
+
+- [Home](/): Product overview, features, and call to action.
+- [Trade](/trade): Live and demo trading interface with charts, market overview, and order panel.
+- [Signals](/signals): AI-generated trading signals with entry zones, stop loss, take profit, and execution.
+- [Education](/education): Forex trading courses and learning modules.
+- [Community](/community): Trader community chat and discussion rooms.
+- [Dashboard](/dashboard): Portfolio overview, balances, and recent activity.
+- [Wallet](/wallet): Deposits, withdrawals, and wallet connection.
+
+## Optional
+
+- [Login](/login): Account sign-in.
+- [Sign up](/signup): Create a new account.
