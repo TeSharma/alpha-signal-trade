@@ -20,7 +20,11 @@ async function main() {
   const net = await hre.ethers.provider.getNetwork();
   const keeper = process.env.KEEPER_ADDRESS;
 
-  console.log("Network:      ", net.chainId.toString());
+  console.log(
+    "Network:      ",
+    net.chainId.toString(),
+    net.chainId === 137n ? "(Polygon Mainnet)" : "(UNEXPECTED NETWORK)",
+  );
 
   if (net.chainId !== 137n) {
     throw new Error(`Wrong network: expected Polygon Mainnet (137), got ${net.chainId}`);
@@ -44,6 +48,9 @@ async function main() {
   }
   if (!hre.ethers.isAddress(keeper)) {
     throw new Error(`KEEPER_ADDRESS is not a valid address: ${keeper}`);
+  }
+  if (keeper === hre.ethers.ZeroAddress) {
+    throw new Error("KEEPER_ADDRESS must not be the zero address");
   }
 
   if (keeper.toLowerCase() === deployer.address.toLowerCase()) {
@@ -105,9 +112,13 @@ async function main() {
   }
 
   const platform = await Factory.deploy(ORACLE, COLLATERAL);
+  console.log(
+    "\nDeployment tx sent:",
+    platform.deploymentTransaction()?.hash ?? "(hash unavailable)",
+  );
   await platform.waitForDeployment();
   const address = await platform.getAddress();
-  console.log("\nTradingPlatformV2 deployed:", address);
+  console.log("TradingPlatformV2 deployed:", address);
   console.log("Keeper NOT yet authorised. Verify the contract, then run:");
   console.log(`  SET_KEEPER=1 PLATFORM_ADDRESS=${address} KEEPER_ADDRESS=${keeper} SUBMIT=1 ...`);
 }
