@@ -2,24 +2,11 @@ import { useState, useCallback } from 'react';
 import Web3 from 'web3';
 import { useToast } from '@/hooks/use-toast';
 import { useUnifiedWallet } from '@/wallet';
-import { CONTRACT_ADDRESSES, FEE_CONFIG, AMOY_RPC_URL, POLYGON_RPC_URL, getRequiredChainHex, getContractAddresses, getNetworkName, type AccountMode } from '@/config/contracts';
+import { CONTRACT_ADDRESSES, FEE_CONFIG, getRpcUrls, getRequiredChainHex, getContractAddresses, getNetworkName, type AccountMode } from '@/config/contracts';
 import { getMarketsForMode } from '@/config/markets';
 
-// RPC endpoints with fallbacks per mode
-const AMOY_RPC_ENDPOINTS = [
-  AMOY_RPC_URL,
-  'https://polygon-amoy.drpc.org/',
-  'https://polygon-amoy-bor-rpc.publicnode.com'
-];
-
-const POLYGON_RPC_ENDPOINTS = [
-  POLYGON_RPC_URL,
-  'https://polygon-rpc.com/',
-  'https://polygon-bor-rpc.publicnode.com'
-];
-
-const getRpcEndpoints = (mode: AccountMode) =>
-  mode === 'demo' ? AMOY_RPC_ENDPOINTS : POLYGON_RPC_ENDPOINTS;
+// Shared RPC endpoints with fallbacks per mode
+const getRpcEndpoints = (mode: AccountMode) => getRpcUrls(mode);
 
 // TradingPlatformV2 ABI (updated with fee functions and priceTimeout)
 const TRADING_PLATFORM_V2_ABI = [
@@ -43,6 +30,34 @@ const TRADING_PLATFORM_V2_ABI = [
     outputs: [],
     stateMutability: 'nonpayable',
     type: 'function'
+  },
+  {
+    inputs: [{ name: 'positionId', type: 'uint256' }],
+    name: 'closeWithTrigger',
+    outputs: [],
+    stateMutability: 'nonpayable',
+    type: 'function'
+  },
+  {
+    inputs: [{ name: 'keeper', type: 'address' }],
+    name: 'keepers',
+    outputs: [{ name: '', type: 'bool' }],
+    stateMutability: 'view',
+    type: 'function'
+  },
+  {
+    anonymous: false,
+    inputs: [
+      { indexed: true, name: 'id', type: 'uint256' },
+      { indexed: true, name: 'trader', type: 'address' },
+      { indexed: false, name: 'pairId', type: 'bytes32' },
+      { indexed: false, name: 'isLong', type: 'bool' },
+      { indexed: false, name: 'margin', type: 'uint256' },
+      { indexed: false, name: 'leverage', type: 'uint256' },
+      { indexed: false, name: 'entryPrice', type: 'uint256' }
+    ],
+    name: 'PositionOpened',
+    type: 'event'
   },
   {
     inputs: [{ name: 'positionId', type: 'uint256' }],
@@ -200,6 +215,13 @@ const PRICE_ORACLE_V2_ABI = [
     outputs: [{ name: '', type: 'bool' }],
     stateMutability: 'view',
     type: 'function'
+  },
+  {
+    inputs: [{ name: 'pairId', type: 'bytes32' }],
+    name: 'getDecimals',
+    outputs: [{ name: '', type: 'uint8' }],
+    stateMutability: 'view',
+    type: 'function'
   }
 ];
 
@@ -246,6 +268,16 @@ export interface OpenPositionV2Params {
   direction: 'buy' | 'sell';
   margin: string;
   leverage: number;
+  /** Optional stop loss in human price units. Stored on-chain so the keeper can close it. */
+  stopLoss?: number;
+  /** Optional take profit (TP1) in human price units. */
+  takeProfit?: number;
+}
+
+export interface OpenPositionResult {
+  txHash: string;
+  /** On-chain position id, needed for keeper-driven SL/TP closes */
+  positionId: number | null;
 }
 
 export interface PositionV2 {
@@ -353,6 +385,17 @@ export const useOnChainTradingV2 = (accountMode: AccountMode = 'demo') => {
     const endpoint = RPC_ENDPOINTS[rpcIndex % RPC_ENDPOINTS.length];
     return new Web3(endpoint);
   }, [RPC_ENDPOINTS]);
+
+  /**
+   * Read-only context for view calls: uses this mode's own RPC endpoints and
+   * the already-known connected address. Never calls requestAccounts, so a
+   * pending/unopened wallet prompt can no longer hang a data read (and the
+   * read always targets the mode's chain, not whatever chain the wallet is on).
+   */
+  const getReadContext = useCallback(() => {
+    if (!unifiedAddress) throw new Error('Wallet not connected');
+    return { web3: getReadOnlyWeb3(), account: unifiedAddress };
+  }, [unifiedAddress, getReadOnlyWeb3]);
 
   const getTradingContract = useCallback((web3: Web3) => {
     if (!TRADING_PLATFORM_V2_ADDRESS) return null;
@@ -534,10 +577,10 @@ export const useOnChainTradingV2 = (accountMode: AccountMode = 'demo') => {
     return 'Transaction failed';
   };
 
-  // Get collateral balance
+  // Get collateral balance (read-only, on this mode's chain)
   const getCollateralBalance = async (): Promise<string> => {
     try {
-      const { web3, account } = await getWeb3AndAccount();
+      const { web3, account } = getReadContext();
       const collateralContract = getCollateralContract(web3);
       if (!collateralContract) return '0';
       const balance = await collateralContract.methods.balanceOf(account).call() as unknown as string;
@@ -548,22 +591,24 @@ export const useOnChainTradingV2 = (accountMode: AccountMode = 'demo') => {
     }
   };
 
-  // Get native MATIC balance for gas
-  const getMaticBalance = async (): Promise<string> => {
+  // Get native gas-token balance on this mode's chain.
+  // Returns null when the balance is genuinely unknown, so callers never treat
+  // a failed read as "zero balance".
+  const getMaticBalance = async (): Promise<string | null> => {
     try {
-      const { web3, account } = await getWeb3AndAccount();
+      const { web3, account } = getReadContext();
       const balance = await web3.eth.getBalance(account);
       return web3.utils.fromWei(balance, 'ether');
     } catch (error) {
-      console.error('Error fetching MATIC balance:', error);
-      return '0';
+      console.error('Error fetching native balance:', error);
+      return null;
     }
   };
 
   // Get platform configuration including fees
   const getPlatformConfig = async (): Promise<PlatformConfig | null> => {
     try {
-      const { web3 } = await getWeb3AndAccount();
+      const { web3 } = getReadContext();
       const contract = getTradingContract(web3);
       if (!contract) return null;
 
@@ -599,7 +644,7 @@ export const useOnChainTradingV2 = (accountMode: AccountMode = 'demo') => {
   // Get fee configuration
   const getFeeConfig = async (): Promise<FeeInfo | null> => {
     try {
-      const { web3 } = await getWeb3AndAccount();
+      const { web3 } = getReadContext();
       const contract = getTradingContract(web3);
       if (!contract) return null;
 
@@ -634,7 +679,23 @@ export const useOnChainTradingV2 = (accountMode: AccountMode = 'demo') => {
   };
 
   // Open a new position
-  const openPosition = async (params: OpenPositionV2Params): Promise<string | null> => {
+  /** Scale a human price into the oracle's fixed-point representation (Chainlink USD feeds use 8 dp) */
+  const scaleToOracle = async (web3: Web3, pairId: string, price?: number): Promise<string> => {
+    if (!price || !isFinite(price) || price <= 0) return '0';
+    let decimals = 8;
+    try {
+      const oracleContract = getOracleContract(web3);
+      if (oracleContract) {
+        decimals = Number(await oracleContract.methods.getDecimals(pairId).call());
+        if (!Number.isFinite(decimals) || decimals <= 0 || decimals > 30) decimals = 8;
+      }
+    } catch {
+      decimals = 8;
+    }
+    return BigInt(Math.round(price * 10 ** decimals)).toString();
+  };
+
+  const openPosition = async (params: OpenPositionV2Params): Promise<OpenPositionResult | null> => {
     setIsLoading(true);
     try {
       if (!(await enforceNetwork())) {
@@ -687,9 +748,12 @@ export const useOnChainTradingV2 = (accountMode: AccountMode = 'demo') => {
         description: `Fee: ${fee.toFixed(2)} tUSD (0.08%) | Net margin: ${netMargin.toFixed(2)} tUSD`,
       });
 
+      const stopLossScaled = await scaleToOracle(web3, pairId, params.stopLoss);
+      const takeProfitScaled = await scaleToOracle(web3, pairId, params.takeProfit);
+
       try {
         await contract.methods
-          .openPosition(pairId, isLong, marginWei, params.leverage, 0, 0)
+          .openPosition(pairId, isLong, marginWei, params.leverage, stopLossScaled, takeProfitScaled)
           .estimateGas({ from: account });
       } catch (estimateError: any) {
         const errorMsg = extractErrorMessage(estimateError);
@@ -697,15 +761,32 @@ export const useOnChainTradingV2 = (accountMode: AccountMode = 'demo') => {
       }
 
       const tx = await contract.methods
-        .openPosition(pairId, isLong, marginWei, params.leverage, 0, 0)
+        .openPosition(pairId, isLong, marginWei, params.leverage, stopLossScaled, takeProfitScaled)
         .send({ from: account });
+
+      // Position id is needed so the keeper can close this position on SL/TP
+      let positionId: number | null = null;
+      try {
+        const raw = (tx as any).events?.PositionOpened?.returnValues?.id;
+        if (raw !== undefined && raw !== null) positionId = Number(raw);
+      } catch {
+        positionId = null;
+      }
+      if (positionId === null) {
+        try {
+          const ids: any[] = await contract.methods.getUserPositions(account).call();
+          if (ids && ids.length > 0) positionId = Number(ids[ids.length - 1]);
+        } catch {
+          positionId = null;
+        }
+      }
 
       toast({
         title: 'Position Opened',
         description: `${isLong ? 'Long' : 'Short'} ${params.pair} with ${params.leverage}x leverage`,
       });
 
-      return tx.transactionHash as string;
+      return { txHash: tx.transactionHash as string, positionId };
     } catch (error: any) {
       console.error('Error opening position:', error);
       const errorMsg = extractErrorMessage(error);
@@ -807,9 +888,9 @@ export const useOnChainTradingV2 = (accountMode: AccountMode = 'demo') => {
   // Get user's open positions
   const getUserOpenPositions = async (): Promise<PositionV2[]> => {
     try {
-      const { web3, account } = await getWeb3AndAccount();
+      const { web3, account } = getReadContext();
       const contract = getTradingContract(web3);
-      if (!contract) return [];
+      if (!contract) throw new Error(`Trading contract is not deployed on ${networkName}`);
 
       const positionIds: any[] = await contract.methods
         .getUserOpenPositions(account)
@@ -849,16 +930,16 @@ export const useOnChainTradingV2 = (accountMode: AccountMode = 'demo') => {
       return positions;
     } catch (error) {
       console.error('Error fetching positions:', error);
-      return [];
+      throw new Error(extractErrorMessage(error));
     }
   };
 
   // Get all user positions (including closed)
   const getAllUserPositions = async (): Promise<PositionV2[]> => {
     try {
-      const { web3, account } = await getWeb3AndAccount();
+      const { web3, account } = getReadContext();
       const contract = getTradingContract(web3);
-      if (!contract) return [];
+      if (!contract) throw new Error(`Trading contract is not deployed on ${networkName}`);
 
       const positionIds: any[] = await contract.methods
         .getUserPositions(account)
@@ -903,14 +984,14 @@ export const useOnChainTradingV2 = (accountMode: AccountMode = 'demo') => {
       return positions;
     } catch (error) {
       console.error('Error fetching all positions:', error);
-      return [];
+      throw new Error(extractErrorMessage(error));
     }
   };
 
   // Get single position by ID
   const getPosition = async (positionId: number): Promise<PositionV2 | null> => {
     try {
-      const { web3 } = await getWeb3AndAccount();
+      const { web3 } = getReadContext();
       const contract = getTradingContract(web3);
       if (!contract) return null;
 

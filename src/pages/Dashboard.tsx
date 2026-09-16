@@ -52,7 +52,7 @@ interface DashboardProps {
 
 const DesktopDashboard = ({ accountMode, navigate }: DashboardProps) => {
   const { trades, accountBalance, loading, resetDemoBalance } = useTrades();
-  const { getUserOpenPositions } = useOnChainTradingV2();
+  const { getUserOpenPositions } = useOnChainTradingV2(accountMode);
   const [openPositionsCount, setOpenPositionsCount] = useState(0);
   const [floatingPnL, setFloatingPnL] = useState(0);
   const [isResetting, setIsResetting] = useState(false);
@@ -363,7 +363,7 @@ const DesktopDashboard = ({ accountMode, navigate }: DashboardProps) => {
 
 const MobileDashboard = ({ accountMode, navigate }: DashboardProps) => {
   const { trades, accountBalance, loading, resetDemoBalance } = useTrades();
-  const { getUserOpenPositions } = useOnChainTradingV2();
+  const { getUserOpenPositions } = useOnChainTradingV2(accountMode);
   const [openPositionsCount, setOpenPositionsCount] = useState(0);
   const [floatingPnL, setFloatingPnL] = useState(0);
   const [isResetting, setIsResetting] = useState(false);

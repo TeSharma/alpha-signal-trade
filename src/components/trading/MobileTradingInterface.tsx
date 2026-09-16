@@ -9,6 +9,8 @@ import { Slider } from "@/components/ui/slider";
 import { TrendingUp, TrendingDown, Calculator, X, AlertTriangle, Zap, Link } from "lucide-react";
 import CollapsibleCard from "@/components/ui/collapsible-card";
 import OracleStatus from "@/components/trading/OracleStatus";
+import PlatformLiquidityStatus from "@/components/trading/PlatformLiquidityStatus";
+import TradingViewChart from "@/components/trading/TradingViewChart";
 import { useTrades } from '@/hooks/useTrades';
 import { useMarketData } from '@/hooks/useMarketData';
 import { useOnChainTradingV2 } from '@/hooks/useOnChainTradingV2';
@@ -16,6 +18,8 @@ import { useToast } from '@/hooks/use-toast';
 import { useNetworkEnforcement } from '@/hooks/useNetworkEnforcement';
 import { getMinimums, isMainnet, FEE_CONFIG, calculateOpenFee, getNetworkName } from '@/config/contracts';
 import { getMarketsForMode, MARKET_METADATA, formatPrice } from '@/config/markets';
+import { useUnifiedWallet } from '@/wallet';
+import { computeRiskPlan, validateStops, validateEnteredSize, RISK_PERCENT, DEMO_LEVERAGE } from '@/lib/riskEngine';
 
 interface MobileTradingInterfaceProps {
   accountMode: 'demo' | 'live';
@@ -32,14 +36,16 @@ const MobileTradingInterface = ({ accountMode }: MobileTradingInterfaceProps) =>
   const [showChart, setShowChart] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [collateralBalance, setCollateralBalance] = useState('0');
-  const [maticBalance, setMaticBalance] = useState('0');
+  // null = not read yet / read failed. Never treated as "no gas".
+  const [maticBalance, setMaticBalance] = useState<string | null>(null);
 
   const { createTrade, accountBalance } = useTrades();
   const { prices, getCurrentPrice, getBidPrice, getAskPrice, oracleAvailable } = useMarketData(accountMode);
   const { openPosition: openOnChainPositionV2, isLoading: onChainLoading, approvalPending, getCollateralBalance, getMaticBalance, getPlatformConfig } = useOnChainTradingV2(accountMode);
   const { toast } = useToast();
   const { isCorrectNetwork, currentChainId, switchToRequiredNetwork, requiredNetworkName } = useNetworkEnforcement(accountMode);
-  
+  const { address: walletAddress } = useUnifiedWallet();
+
   const networkMinimums = getMinimums(currentChainId ?? undefined);
   const minMargin = networkMinimums.minMargin;
   const [maxLeverage, setMaxLeverage] = useState(50);
@@ -52,15 +58,18 @@ const MobileTradingInterface = ({ accountMode }: MobileTradingInterfaceProps) =>
     }
   }, [accountMode, selectedPair]);
 
+  // Keyed on mode + connected wallet only (hook functions change identity every
+  // render, so including them would refetch continuously).
   useEffect(() => {
-    if (accountMode === 'live') {
+    if (accountMode === 'live' && walletAddress) {
       getCollateralBalance().then(setCollateralBalance);
       getMaticBalance().then(setMaticBalance);
       getPlatformConfig().then(config => {
         if (config) setMaxLeverage(config.maxLeverage);
       });
     }
-  }, [accountMode, getCollateralBalance, getMaticBalance, getPlatformConfig]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accountMode, walletAddress]);
 
   const selectedPairData = prices.find(p => p.pair === selectedPair);
   const currentPrice = getCurrentPrice(selectedPair);
@@ -68,7 +77,42 @@ const MobileTradingInterface = ({ accountMode }: MobileTradingInterfaceProps) =>
   const askPrice = getAskPrice(selectedPair);
 
   const oracleHealthy = accountMode === 'demo' || selectedPairData?.isOraclePrice === true;
-  const maticLow = accountMode === 'live' && parseFloat(maticBalance) < 0.001;
+  const maticLow = accountMode === 'live' && maticBalance !== null && parseFloat(maticBalance) < 0.001;
+
+  // ─── Risk engine (1% per trade) ────────────────────────────────────────
+  const entryPrice = (tradeDirection === 'buy' ? askPrice : bidPrice) || currentPrice;
+  const riskCapital = accountMode === 'demo'
+    ? (accountBalance?.demo_balance ?? 10000)
+    : parseFloat(collateralBalance) || 0;
+  const slNum = stopLoss ? parseFloat(stopLoss) : null;
+  const tpNum = takeProfit ? parseFloat(takeProfit) : null;
+  const stopValidation = validateStops(tradeDirection, entryPrice, slNum, tpNum, selectedPair);
+  const riskPlan = computeRiskPlan(
+    {
+      pair: selectedPair,
+      direction: tradeDirection,
+      entryPrice,
+      stopLoss: stopValidation.stopLossError ? null : slNum,
+      takeProfit: stopValidation.takeProfitError ? null : tpNum,
+      capital: riskCapital,
+      leverage: accountMode === 'live' ? leverage : 1,
+      mode: accountMode,
+    },
+    parseFloat(lotSize) || 0,
+  );
+  const overRiskLimit =
+    riskPlan.potentialLoss != null && riskCapital > 0 && riskPlan.potentialLoss > riskPlan.riskAmount;
+
+  // Manually typed sizes go through exactly the same checks as the suggested size.
+  const sizeValidation = validateEnteredSize({
+    pair: selectedPair,
+    entryPrice,
+    stopLoss: stopValidation.stopLossError ? null : slNum,
+    capital: riskCapital,
+    leverage: accountMode === 'live' ? leverage : DEMO_LEVERAGE,
+    mode: accountMode,
+    enteredSize: parseFloat(lotSize) || 0,
+  });
 
   const handleSubmitTrade = async () => {
     if (isSubmitting) return;
@@ -78,6 +122,24 @@ const MobileTradingInterface = ({ accountMode }: MobileTradingInterfaceProps) =>
       const marginAmount = parseFloat(lotSize);
       if (!lotSize || marginAmount <= 0) {
         toast({ title: 'Invalid lot size', description: 'Please enter a valid lot size', variant: 'destructive' });
+        return;
+      }
+
+      if (!stopValidation.valid) {
+        toast({
+          title: 'Invalid Stop Loss / Take Profit',
+          description: stopValidation.stopLossError || stopValidation.takeProfitError || '',
+          variant: 'destructive'
+        });
+        return;
+      }
+
+      if (sizeValidation.error) {
+        toast({
+          title: accountMode === 'live' ? 'Margin Not Allowed' : 'Position Size Not Allowed',
+          description: sizeValidation.error,
+          variant: 'destructive'
+        });
         return;
       }
 
@@ -117,15 +179,21 @@ const MobileTradingInterface = ({ accountMode }: MobileTradingInterfaceProps) =>
       const executionPrice = tradeDirection === 'buy' ? askPrice : bidPrice;
 
       let txHash: string | null = null;
+      let chainPositionId: number | null = null;
 
       if (accountMode === 'live') {
-        // Execute on-chain FIRST — never record a live trade that has no confirmed transaction
-        txHash = await openOnChainPositionV2({
+        // Execute on-chain FIRST — never record a live trade that has no confirmed transaction.
+        // SL/TP are written into the position so the keeper can close it automatically.
+        const onChain = await openOnChainPositionV2({
           pair: selectedPair,
           direction: tradeDirection,
           margin: lotSize,
-          leverage: leverage
+          leverage: leverage,
+          stopLoss: stopLoss ? parseFloat(stopLoss) : undefined,
+          takeProfit: takeProfit ? parseFloat(takeProfit) : undefined
         });
+        txHash = onChain?.txHash ?? null;
+        chainPositionId = onChain?.positionId ?? null;
 
         if (!txHash) {
           toast({
@@ -147,7 +215,8 @@ const MobileTradingInterface = ({ accountMode }: MobileTradingInterfaceProps) =>
         stop_loss: stopLoss ? parseFloat(stopLoss) : undefined,
         take_profit: takeProfit ? parseFloat(takeProfit) : undefined,
         account_mode: accountMode,
-        transaction_hash: txHash ?? undefined
+        transaction_hash: txHash ?? undefined,
+        chain_position_id: chainPositionId ?? undefined
       });
 
       if (tradeResult) {
@@ -177,21 +246,40 @@ const MobileTradingInterface = ({ accountMode }: MobileTradingInterfaceProps) =>
   };
 
   const calculateLotSize = () => {
-    const balance = accountMode === 'demo' 
-      ? (accountBalance?.demo_balance || 10000) 
-      : parseFloat(collateralBalance) || 0;
-    const riskPercent = 2;
-    const suggestedLot = Math.max(1, Math.floor(balance * (riskPercent / 100)));
-    setLotSize(suggestedLot.toString());
+    if (!riskPlan.hasStopLoss || riskPlan.stopDistance <= 0) {
+      toast({
+        title: 'Stop Loss Required',
+        description: 'Enter a stop loss first — position size comes from your 1% risk and the stop distance.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    if (!entryPrice || riskCapital <= 0) {
+      toast({
+        title: 'Cannot Calculate Yet',
+        description: !entryPrice ? 'Waiting for a live price for this market.' : 'No available trading capital found.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    if (accountMode === 'live') {
+      const margin = Math.max(minMargin, Math.min(riskPlan.suggestedMargin, riskCapital));
+      setLotSize(margin.toFixed(2));
+    } else {
+      setLotSize((Math.floor(riskPlan.positionSize * 10000) / 10000).toString());
+    }
   };
 
   return (
     <main className="space-y-4 p-4">
       {/* Oracle Status for Live Mode */}
       {accountMode === 'live' && (
-        <div className="flex justify-center">
-          <OracleStatus accountMode={accountMode} />
-        </div>
+        <>
+          <div className="flex justify-center">
+            <OracleStatus accountMode={accountMode} />
+          </div>
+          <PlatformLiquidityStatus accountMode={accountMode} />
+        </>
       )}
 
       {/* Pair Selector — only valid markets for mode */}
@@ -236,11 +324,9 @@ const MobileTradingInterface = ({ accountMode }: MobileTradingInterfaceProps) =>
 
       {/* Chart View */}
       <CollapsibleCard title="Chart View" defaultOpen={showChart}>
-        <div className="h-64 bg-muted rounded-lg flex items-center justify-center">
-          <p className="text-muted-foreground">TradingView Chart</p>
-          <p className="text-sm text-muted-foreground ml-2">(Pinch to zoom)</p>
-        </div>
+        <TradingViewChart pair={selectedPair} height={320} />
       </CollapsibleCard>
+
 
       {/* Trading Form */}
       <Card>
@@ -289,7 +375,18 @@ const MobileTradingInterface = ({ accountMode }: MobileTradingInterfaceProps) =>
               placeholder={accountMode === 'live' ? '10' : '0.1'}
               step={accountMode === 'live' ? '1' : '0.01'}
               min={accountMode === 'live' ? '1' : '0.01'}
+              aria-invalid={!!sizeValidation.error}
             />
+            {sizeValidation.error ? (
+              <p className="text-xs text-destructive">{sizeValidation.error}</p>
+            ) : sizeValidation.warning ? (
+              <p className="text-xs text-amber-600">{sizeValidation.warning}</p>
+            ) : null}
+            {sizeValidation.error && (
+              <Button variant="outline" size="sm" onClick={calculateLotSize}>
+                Use suggested size
+              </Button>
+            )}
           </div>
 
           {/* Leverage (Live mode only) */}
@@ -312,12 +409,78 @@ const MobileTradingInterface = ({ accountMode }: MobileTradingInterfaceProps) =>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
               <Label className="text-sm">Stop Loss</Label>
-              <Input type="number" value={stopLoss} onChange={(e) => setStopLoss(e.target.value)} placeholder="SL" step="0.01" />
+              <Input
+                type="number"
+                value={stopLoss}
+                onChange={(e) => setStopLoss(e.target.value)}
+                placeholder="SL"
+                step="0.00001"
+                aria-invalid={!!stopValidation.stopLossError}
+              />
             </div>
             <div className="space-y-2">
               <Label className="text-sm">Take Profit</Label>
-              <Input type="number" value={takeProfit} onChange={(e) => setTakeProfit(e.target.value)} placeholder="TP" step="0.01" />
+              <Input
+                type="number"
+                value={takeProfit}
+                onChange={(e) => setTakeProfit(e.target.value)}
+                placeholder="TP"
+                step="0.00001"
+                aria-invalid={!!stopValidation.takeProfitError}
+              />
             </div>
+          </div>
+          {(stopValidation.stopLossError || stopValidation.takeProfitError) && (
+            <p className="text-xs text-destructive">
+              {stopValidation.stopLossError || stopValidation.takeProfitError}
+            </p>
+          )}
+
+          {/* Risk Engine Panel */}
+          <div className="rounded-lg border border-border p-3 space-y-1 text-sm">
+            <div className="flex items-center gap-2 font-semibold">
+              <Calculator className="h-4 w-4" />
+              Risk Engine ({(RISK_PERCENT * 100).toFixed(0)}% per trade)
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Max risk (1%):</span>
+              <span className="font-mono">${riskPlan.riskAmount.toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Stop distance:</span>
+              <span className="font-mono">{riskPlan.stopDistance > 0 ? riskPlan.stopDistance.toFixed(5) : '—'}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">{accountMode === 'live' ? 'Suggested margin:' : 'Suggested lot:'}</span>
+              <span className="font-mono">
+                {riskPlan.stopDistance > 0
+                  ? accountMode === 'live'
+                    ? `${riskPlan.suggestedMargin.toFixed(2)} tUSD`
+                    : (Math.floor(riskPlan.positionSize * 10000) / 10000).toString()
+                  : '—'}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Loss if SL hit:</span>
+              <span className={`font-mono ${overRiskLimit ? 'text-destructive' : ''}`}>
+                {riskPlan.potentialLoss != null ? `-$${riskPlan.potentialLoss.toFixed(2)}` : '—'}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Profit if TP hit:</span>
+              <span className="font-mono text-green-600">
+                {riskPlan.potentialProfit != null ? `+$${riskPlan.potentialProfit.toFixed(2)}` : '—'}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Risk : Reward</span>
+              <span className="font-mono">{riskPlan.riskReward != null ? `1 : ${riskPlan.riskReward.toFixed(2)}` : '—'}</span>
+            </div>
+            {overRiskLimit && (
+              <p className="text-xs text-destructive pt-1">
+                This size risks more than 1% of your capital.
+              </p>
+            )}
           </div>
 
           {/* Trade Summary */}
@@ -395,7 +558,7 @@ const MobileTradingInterface = ({ accountMode }: MobileTradingInterfaceProps) =>
           className="w-full h-12 text-lg font-semibold" 
           size="lg"
           onClick={handleSubmitTrade}
-          disabled={isSubmitting || onChainLoading || approvalPending || (accountMode === 'live' && (!isCorrectNetwork || !oracleHealthy))}
+          disabled={isSubmitting || onChainLoading || approvalPending || !stopValidation.valid || !!sizeValidation.error || (accountMode === 'live' && (!isCorrectNetwork || !oracleHealthy))}
         >
           {approvalPending ? (
             <span className="flex items-center">

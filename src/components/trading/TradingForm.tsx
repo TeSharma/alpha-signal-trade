@@ -16,7 +16,10 @@ import { getMinimums, isMainnet, FEE_CONFIG, calculateOpenFee, getNetworkName } 
 import { getMarketsForMode, MARKET_METADATA, formatPrice, isSignalMarket } from '@/config/markets'
 import { isForexMarketOpen } from '@/lib/marketHours'
 import { useLocation } from 'react-router-dom'
+import { useUnifiedWallet } from '@/wallet'
 import type { SignalObject } from '@/types/signal'
+import { computeRiskPlan, validateStops, validateEnteredSize, RISK_PERCENT, DEMO_LEVERAGE } from '@/lib/riskEngine'
+import { getAssetMultiplier } from '@/lib/pnl'
 
 interface TradingFormProps {
   accountMode: 'demo' | 'live';
@@ -65,8 +68,10 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
   const { openPosition: openOnChainPositionV2, isLoading: onChainLoading, approvalPending, getCollateralBalance, getMaticBalance, getPlatformConfig } = useOnChainTradingV2(accountMode)
   const { toast } = useToast()
   const { isCorrectNetwork, currentChainId, switchToRequiredNetwork, requiredNetworkName } = useNetworkEnforcement(accountMode)
+  const { address: walletAddress } = useUnifiedWallet()
   const [collateralBalance, setCollateralBalance] = useState('0')
-  const [maticBalance, setMaticBalance] = useState('0')
+  // null = not read yet / read failed. Never treated as "no gas".
+  const [maticBalance, setMaticBalance] = useState<string | null>(null)
   const [maxLeverage, setMaxLeverage] = useState(50)
 
   // Reset selected pair when mode changes
@@ -77,16 +82,19 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
     }
   }, [accountMode, selectedPair])
 
-  // Fetch collateral balance, MATIC balance, and platform config for live mode
+  // Fetch collateral balance, gas balance, and platform config for live mode.
+  // Keyed on mode + connected wallet only: the hook's functions are re-created
+  // on every render, so including them would refetch on every render.
   useEffect(() => {
-    if (accountMode === 'live') {
+    if (accountMode === 'live' && walletAddress) {
       getCollateralBalance().then(setCollateralBalance);
       getMaticBalance().then(setMaticBalance);
       getPlatformConfig().then(config => {
         if (config) setMaxLeverage(config.maxLeverage);
       });
     }
-  }, [accountMode, getCollateralBalance, getMaticBalance, getPlatformConfig]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accountMode, walletAddress]);
 
   // Get minimums based on current network
   const networkMinimums = getMinimums(currentChainId);
@@ -99,7 +107,48 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
 
   // Oracle health: in live mode, require oracle price for selected pair
   const oracleHealthy = accountMode === 'demo' || selectedPairData?.isOraclePrice === true
-  const maticLow = accountMode === 'live' && parseFloat(maticBalance) < 0.001
+  const maticLow = accountMode === 'live' && maticBalance !== null && parseFloat(maticBalance) < 0.001
+
+  // ─── Risk engine (1% per trade) ────────────────────────────────────────
+  const entryPrice = orderType === 'limit' && limitPrice
+    ? parseFloat(limitPrice)
+    : (tradeDirection === 'buy' ? askPrice : bidPrice) || currentPrice
+
+  const riskCapital = accountMode === 'demo'
+    ? (accountBalance?.demo_balance ?? 10000)
+    : parseFloat(collateralBalance) || 0
+
+  const slNum = stopLoss ? parseFloat(stopLoss) : null
+  const tpNum = takeProfit ? parseFloat(takeProfit) : null
+  const enteredSize = parseFloat(lotSize) || 0
+
+  const stopValidation = validateStops(tradeDirection, entryPrice, slNum, tpNum, selectedPair)
+  const riskPlan = computeRiskPlan(
+    {
+      pair: selectedPair,
+      direction: tradeDirection,
+      entryPrice,
+      stopLoss: stopValidation.stopLossError ? null : slNum,
+      takeProfit: stopValidation.takeProfitError ? null : tpNum,
+      capital: riskCapital,
+      leverage: accountMode === 'live' ? leverage : 1,
+      mode: accountMode,
+    },
+    enteredSize,
+  )
+  const overRiskLimit =
+    riskPlan.potentialLoss != null && riskCapital > 0 && riskPlan.potentialLoss > riskPlan.riskAmount
+
+  // Manually typed sizes go through exactly the same checks as the suggested size.
+  const sizeValidation = validateEnteredSize({
+    pair: selectedPair,
+    entryPrice,
+    stopLoss: stopValidation.stopLossError ? null : slNum,
+    capital: riskCapital,
+    leverage: accountMode === 'live' ? leverage : DEMO_LEVERAGE,
+    mode: accountMode,
+    enteredSize,
+  })
 
   const handleSubmitTrade = async () => {
     if (isSubmitting) return
@@ -111,6 +160,24 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
       const marginAmount = parseFloat(lotSize);
       if (!lotSize || marginAmount <= 0) {
         toast({ title: 'Invalid lot size', description: 'Please enter a valid lot size', variant: 'destructive' })
+        return
+      }
+
+      if (sizeValidation.error) {
+        toast({
+          title: accountMode === 'live' ? 'Margin Not Allowed' : 'Position Size Not Allowed',
+          description: sizeValidation.error,
+          variant: 'destructive',
+        })
+        return
+      }
+
+      if (!stopValidation.valid) {
+        toast({
+          title: 'Invalid Stop Loss / Take Profit',
+          description: stopValidation.stopLossError || stopValidation.takeProfitError || '',
+          variant: 'destructive'
+        })
         return
       }
 
@@ -158,15 +225,21 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
       setSignalResponse(response)
 
       let txHash: string | null = null
+      let chainPositionId: number | null = null
 
       if (accountMode === 'live') {
-        // Execute on-chain FIRST — never record a live trade that has no confirmed transaction
-        txHash = await openOnChainPositionV2({
+        // Execute on-chain FIRST — never record a live trade that has no confirmed transaction.
+        // SL/TP are written into the position so the keeper can close it automatically.
+        const onChain = await openOnChainPositionV2({
           pair: selectedPair,
           direction: tradeDirection,
           margin: lotSize,
-          leverage: leverage
+          leverage: leverage,
+          stopLoss: stopLoss ? parseFloat(stopLoss) : undefined,
+          takeProfit: takeProfit ? parseFloat(takeProfit) : undefined
         })
+        txHash = onChain?.txHash ?? null
+        chainPositionId = onChain?.positionId ?? null
 
         if (!txHash) {
           toast({
@@ -188,7 +261,8 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
         stop_loss: stopLoss ? parseFloat(stopLoss) : undefined,
         take_profit: takeProfit ? parseFloat(takeProfit) : undefined,
         account_mode: accountMode,
-        transaction_hash: txHash ?? undefined
+        transaction_hash: txHash ?? undefined,
+        chain_position_id: chainPositionId ?? undefined
       })
 
       if (tradeResult) {
@@ -229,12 +303,31 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
   }
 
   const calculateLotSize = () => {
-    const balance = accountMode === 'demo' 
-      ? (accountBalance?.demo_balance || 10000) 
-      : (accountBalance?.live_balance || 0);
-    const riskPercent = 2;
-    const suggestedLot = (balance * (riskPercent / 100) / 10000).toFixed(2);
-    setLotSize(suggestedLot);
+    if (!riskPlan.hasStopLoss || riskPlan.stopDistance <= 0) {
+      toast({
+        title: 'Stop Loss Required',
+        description: 'Enter a stop loss price first — position size is derived from your 1% risk and the stop distance.',
+        variant: 'destructive',
+      })
+      return
+    }
+    if (!entryPrice || riskCapital <= 0) {
+      toast({
+        title: 'Cannot Calculate Yet',
+        description: !entryPrice ? 'Waiting for a live price for this market.' : 'No available trading capital found.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    if (accountMode === 'live') {
+      let margin = riskPlan.suggestedMargin
+      margin = Math.min(margin, riskCapital)
+      if (margin < minMargin) margin = minMargin
+      setLotSize(margin.toFixed(2))
+    } else {
+      setLotSize((Math.floor(riskPlan.positionSize * 10000) / 10000).toString())
+    }
   };
 
   return (
@@ -290,10 +383,10 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
           </div>
           <p className="text-xs text-muted-foreground">
             {accountMode === 'demo'
-              ? 'Demo: trade any pair off-chain. Live: crypto only (Chainlink-backed).'
-              : 'Live execution: crypto pairs settled on-chain via Chainlink oracle.'}
+              ? 'Demo: trade any pair off-chain. Live: 7 Chainlink-backed markets (crypto, forex, gold).'
+              : 'Live execution: settled on-chain via Chainlink oracle.'}
           </p>
-          {accountMode === 'demo' && isSignalMarket(selectedPair) && !isForexMarketOpen() && (
+          {accountMode === 'demo' && isSignalMarket(selectedPair, 'demo') && !isForexMarketOpen() && (
             <div className="flex items-center gap-2 text-xs text-amber-600 bg-amber-50 dark:bg-amber-950/30 p-2 rounded">
               <AlertTriangle className="h-3 w-3" />
               Forex market is closed (weekend). Trade resumes Sunday ~22:00 UTC.
@@ -403,13 +496,24 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
             placeholder={accountMode === 'live' ? '10' : '0.1'}
             step={accountMode === 'live' ? '1' : '0.01'}
             min={accountMode === 'live' ? '1' : '0.01'}
+            aria-invalid={!!sizeValidation.error}
           />
           <div className="text-xs text-muted-foreground">
             {accountMode === 'live' 
               ? `Position size: $${(parseFloat(lotSize || '0') * leverage).toLocaleString()}`
-              : `Position value: $${(parseFloat(lotSize || '0') * currentPrice * 100000).toLocaleString()}`
+              : `Position value: $${(parseFloat(lotSize || '0') * currentPrice * getAssetMultiplier(selectedPair)).toLocaleString()}`
             }
           </div>
+          {sizeValidation.error ? (
+            <p className="text-xs text-destructive">{sizeValidation.error}</p>
+          ) : sizeValidation.warning ? (
+            <p className="text-xs text-amber-600">{sizeValidation.warning}</p>
+          ) : null}
+          {sizeValidation.error && (
+            <Button variant="outline" size="sm" onClick={calculateLotSize}>
+              Use suggested size
+            </Button>
+          )}
         </div>
 
         {/* Leverage Selector (Live mode only) */}
@@ -443,14 +547,96 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
 
         {/* Stop Loss */}
         <div className="space-y-2">
-          <Label>Stop Loss (Optional)</Label>
-          <Input type="number" value={stopLoss} onChange={(e) => setStopLoss(e.target.value)} placeholder="Enter stop loss price" step="0.01" />
+          <Label>Stop Loss</Label>
+          <Input
+            type="number"
+            value={stopLoss}
+            onChange={(e) => setStopLoss(e.target.value)}
+            placeholder={entryPrice ? `e.g. ${(tradeDirection === 'buy' ? entryPrice * 0.99 : entryPrice * 1.01).toFixed(5)}` : 'Enter stop loss price'}
+            step="0.00001"
+            aria-invalid={!!stopValidation.stopLossError}
+          />
+          {stopValidation.stopLossError && (
+            <p className="text-xs text-destructive">{stopValidation.stopLossError}</p>
+          )}
         </div>
 
         {/* Take Profit */}
         <div className="space-y-2">
-          <Label>Take Profit (Optional)</Label>
-          <Input type="number" value={takeProfit} onChange={(e) => setTakeProfit(e.target.value)} placeholder="Enter take profit price" step="0.01" />
+          <Label>Take Profit</Label>
+          <Input
+            type="number"
+            value={takeProfit}
+            onChange={(e) => setTakeProfit(e.target.value)}
+            placeholder={entryPrice ? `e.g. ${(tradeDirection === 'buy' ? entryPrice * 1.02 : entryPrice * 0.98).toFixed(5)}` : 'Enter take profit price'}
+            step="0.00001"
+            aria-invalid={!!stopValidation.takeProfitError}
+          />
+          {stopValidation.takeProfitError && (
+            <p className="text-xs text-destructive">{stopValidation.takeProfitError}</p>
+          )}
+        </div>
+
+        {/* Risk Engine Panel */}
+        <div className="rounded-lg border border-border p-3 space-y-1 text-sm">
+          <div className="flex items-center gap-2 font-semibold">
+            <Calculator className="h-4 w-4" />
+            Risk Engine ({(RISK_PERCENT * 100).toFixed(0)}% per trade)
+          </div>
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">Available capital:</span>
+            <span className="font-mono">${riskCapital.toFixed(2)}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">Max risk (1%):</span>
+            <span className="font-mono">${riskPlan.riskAmount.toFixed(2)}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">Stop distance:</span>
+            <span className="font-mono">{riskPlan.stopDistance > 0 ? riskPlan.stopDistance.toFixed(5) : '—'}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">{accountMode === 'live' ? 'Suggested margin:' : 'Suggested lot size:'}</span>
+            <span className="font-mono">
+              {riskPlan.stopDistance > 0
+                ? accountMode === 'live'
+                  ? `${riskPlan.suggestedMargin.toFixed(2)} tUSD`
+                  : (Math.floor(riskPlan.positionSize * 10000) / 10000).toString()
+                : '—'}
+            </span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">Position size (notional):</span>
+            <span className="font-mono">{riskPlan.notional > 0 ? `$${riskPlan.notional.toFixed(2)}` : '—'}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">Loss if SL hit:</span>
+            <span className={`font-mono ${overRiskLimit ? 'text-destructive' : ''}`}>
+              {riskPlan.potentialLoss != null ? `-$${riskPlan.potentialLoss.toFixed(2)}` : '—'}
+            </span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">Profit if TP hit:</span>
+            <span className="font-mono text-green-600">
+              {riskPlan.potentialProfit != null ? `+$${riskPlan.potentialProfit.toFixed(2)}` : '—'}
+            </span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">Risk : Reward</span>
+            <span className="font-mono">{riskPlan.riskReward != null ? `1 : ${riskPlan.riskReward.toFixed(2)}` : '—'}</span>
+          </div>
+          {overRiskLimit && (
+            <p className="text-xs text-destructive pt-1">
+              This size risks more than 1% of your capital. Use Calculate for the risk-managed size.
+            </p>
+          )}
+          {accountMode === 'live' && (
+            <p className="text-xs text-muted-foreground pt-1 border-t">
+              Stop loss and take profit are stored with your position and monitored continuously.
+              When one is reached you are alerted and close the position from your wallet — the close
+              needs your confirmation. Leave them empty to keep the trade open until you close it.
+            </p>
+          )}
         </div>
 
         {/* Trade Summary */}
@@ -530,7 +716,7 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
           className="w-full" 
           size="lg"
           onClick={handleSubmitTrade}
-          disabled={isLoadingSignal || isSubmitting || onChainLoading || approvalPending || (accountMode === 'live' && (!isCorrectNetwork || !oracleHealthy)) || (accountMode === 'demo' && isSignalMarket(selectedPair) && !isForexMarketOpen())}
+          disabled={isLoadingSignal || isSubmitting || onChainLoading || approvalPending || !stopValidation.valid || !!sizeValidation.error || (accountMode === 'live' && (!isCorrectNetwork || !oracleHealthy)) || (accountMode === 'demo' && isSignalMarket(selectedPair, 'demo') && !isForexMarketOpen())}
         >
           {approvalPending ? (
             <span className="flex items-center">

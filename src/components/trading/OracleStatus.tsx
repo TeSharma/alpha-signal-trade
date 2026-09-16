@@ -1,10 +1,10 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import Web3 from 'web3';
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Activity, AlertTriangle, CheckCircle, XCircle, RefreshCw, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { getRpcUrl, getContractAddresses, type AccountMode } from '@/config/contracts';
+import { getRpcUrls, getContractAddresses, type AccountMode } from '@/config/contracts';
 import { getMarketsForMode } from '@/config/markets';
 
 // Compute pair IDs locally without MetaMask provider
@@ -29,6 +29,13 @@ const PRICE_ORACLE_V2_ABI = [
     inputs: [{ name: 'pairId', type: 'bytes32' }],
     name: 'hasFeed',
     outputs: [{ name: '', type: 'bool' }],
+    stateMutability: 'view',
+    type: 'function'
+  },
+  {
+    inputs: [{ name: 'pairId', type: 'bytes32' }],
+    name: 'getDecimals',
+    outputs: [{ name: '', type: 'uint8' }],
     stateMutability: 'view',
     type: 'function'
   }
@@ -59,15 +66,12 @@ const OracleStatus = ({ accountMode = 'demo' }: OracleStatusProps) => {
   const [isConnected, setIsConnected] = useState(false);
 
   // Mode-aware config
-  const rpcUrl = getRpcUrl(accountMode);
   const addresses = getContractAddresses(accountMode);
   const oracleAddress = addresses.PriceOracleV2 as string;
-  const pairs = getMarketsForMode(accountMode);
+  const pairs = useMemo(() => getMarketsForMode(accountMode), [accountMode]);
 
-  // RPC endpoints with fallbacks
-  const RPC_ENDPOINTS = accountMode === 'demo'
-    ? [rpcUrl, 'https://polygon-amoy.drpc.org/', 'https://polygon-amoy-bor-rpc.publicnode.com']
-    : [rpcUrl, 'https://polygon-rpc.com/', 'https://polygon-bor-rpc.publicnode.com'];
+  // Shared RPC endpoints with fallbacks (first dead endpoint must not take live mode offline)
+  const RPC_ENDPOINTS = useMemo(() => getRpcUrls(accountMode), [accountMode]);
 
   const fetchOracleStatus = useCallback(async (rpcIndex: number = 0) => {
     if (!oracleAddress || oracleAddress === '') {
@@ -82,9 +86,10 @@ const OracleStatus = ({ accountMode = 'demo' }: OracleStatusProps) => {
       const endpoint = RPC_ENDPOINTS[rpcIndex % RPC_ENDPOINTS.length];
       const web3 = new Web3(endpoint);
       const contract = new web3.eth.Contract(PRICE_ORACLE_V2_ABI as any, oracleAddress);
-      
+
       try {
-        await web3.eth.getCode(oracleAddress);
+        const code = await web3.eth.getCode(oracleAddress);
+        if (!code || code === '0x') throw new Error('No contract code at oracle address');
         setIsConnected(true);
       } catch (error: any) {
         if (rpcIndex < maxRetries - 1) {
@@ -107,9 +112,14 @@ const OracleStatus = ({ accountMode = 'demo' }: OracleStatusProps) => {
               return { pair, available: false, lastUpdated: null, price: null, isStale: true };
             }
 
-            const result = await contract.methods.getPrice(pairId).call() as { price: string; updatedAt: string };
+            const [result, feedDecimals] = await Promise.all([
+              contract.methods.getPrice(pairId).call() as Promise<{ price: string; updatedAt: string }>,
+              contract.methods.getDecimals(pairId).call() as Promise<string>
+            ]);
             const updatedAt = Number(result.updatedAt);
-            const price = web3.utils.fromWei(result.price, 'ether');
+            // PriceOracleV2 reports prices at the feed's own precision (8 for
+            // Chainlink), not 18 — never assume wei here.
+            const price = (Number(result.price) / Math.pow(10, Number(feedDecimals))).toString();
             const staleness = currentTime - updatedAt;
 
             return {
@@ -125,12 +135,19 @@ const OracleStatus = ({ accountMode = 'demo' }: OracleStatusProps) => {
         })
       );
 
+      const availableFeeds = statuses.filter(s => s.available);
+
+      // A flaky/rate-limited endpoint reports every feed as missing — try the
+      // next endpoint before declaring the oracle offline.
+      if (availableFeeds.length === 0 && rpcIndex < maxRetries - 1) {
+        return fetchOracleStatus(rpcIndex + 1);
+      }
+
       setFeedStatuses(statuses);
       setLastRefresh(new Date());
 
-      const availableFeeds = statuses.filter(s => s.available);
       const staleFeeds = statuses.filter(s => s.isStale);
-      
+
       if (availableFeeds.length === 0) {
         setOverallStatus('unavailable');
       } else if (staleFeeds.length > 0) {
@@ -139,6 +156,9 @@ const OracleStatus = ({ accountMode = 'demo' }: OracleStatusProps) => {
         setOverallStatus('healthy');
       }
     } catch (error) {
+      if (rpcIndex < maxRetries - 1) {
+        return fetchOracleStatus(rpcIndex + 1);
+      }
       console.error('Error fetching oracle status:', error);
       setOverallStatus('unavailable');
     } finally {

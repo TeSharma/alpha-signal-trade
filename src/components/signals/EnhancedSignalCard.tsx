@@ -248,6 +248,11 @@ export const EnhancedSignalCard: React.FC<EnhancedSignalCardProps> = ({ signal, 
                 ? signal.take_profit.map((tp, index) => (
                     <div key={index} className="text-sm">
                       TP {index + 1}: {formatPrice(tp)}
+                      {index === 0 ? (
+                        <span className="text-green-600"> · attached</span>
+                      ) : (
+                        <span className="text-gray-500"> · guidance only</span>
+                      )}
                     </div>
                   ))
                 : formatPrice(signal.take_profit)

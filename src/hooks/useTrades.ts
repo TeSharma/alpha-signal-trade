@@ -17,6 +17,11 @@ export interface Trade {
   account_mode: 'demo' | 'live';
   contract_address?: string;
   transaction_hash?: string;
+  chain_position_id?: number;
+  close_tx_hash?: string;
+  pending_exit_kind?: string | null;
+  pending_exit_price?: number | null;
+  pending_exit_at?: string | null;
   created_at: string;
   updated_at: string;
   closed_at?: string;
@@ -110,6 +115,7 @@ export const useTrades = () => {
     account_mode: 'demo' | 'live';
     contract_address?: string;
     transaction_hash?: string;
+    chain_position_id?: number;
   }) => {
     try {
       const { data: user } = await supabase.auth.getUser();
@@ -175,21 +181,6 @@ export const useTrades = () => {
         description: "Failed to close trade",
         variant: "destructive"
       });
-      return null;
-    }
-  };
-
-  const updatePnL = async (tradeId: string, currentPrice: number) => {
-    try {
-      const { data, error } = await supabase.rpc('calculate_trade_pnl', {
-        p_trade_id: tradeId,
-        p_current_price: currentPrice
-      });
-
-      if (error) throw error;
-      return data;
-    } catch (error) {
-      console.error('Error updating PnL:', error);
       return null;
     }
   };
@@ -321,7 +312,6 @@ export const useTrades = () => {
     closeTrade,
     cancelTrade,
     resetDemoBalance,
-    updatePnL,
     fetchTrades,
     fetchAccountBalance
   };

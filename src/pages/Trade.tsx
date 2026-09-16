@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Sidebar from "@/components/layout/Sidebar";
 import TopBar from "@/components/layout/TopBar";
 import MobileHeader from "@/components/layout/MobileHeader";
@@ -11,16 +11,21 @@ import AccountBalance from "@/components/trading/AccountBalance";
 import { DeploymentGuide } from "@/components/trading/DeploymentGuide";
 import V2PositionsPanel from "@/components/trading/V2PositionsPanel";
 import OracleStatus from "@/components/trading/OracleStatus";
+import PlatformLiquidityStatus from "@/components/trading/PlatformLiquidityStatus";
 import TradingViewChart from "@/components/trading/TradingViewChart";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { getNetworkName } from '@/config/contracts';
-
-const CHART_PAIRS = ['BTC/USD', 'ETH/USD', 'POL/USD', 'EUR/USD', 'GBP/USD', 'USD/JPY'];
+import { getMarketsForMode } from '@/config/markets';
 
 const Trade = () => {
   const [accountMode, setAccountMode] = useState<'demo' | 'live'>('demo');
   const [chartPair, setChartPair] = useState<string>('BTC/USD');
+  const chartPairs = getMarketsForMode(accountMode);
+
+  useEffect(() => {
+    if (!chartPairs.includes(chartPair)) setChartPair(chartPairs[0] || 'BTC/USD');
+  }, [chartPairs, chartPair]);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -63,9 +68,12 @@ const Trade = () => {
                     </div>
                     <div className="lg:col-span-2 space-y-6">
                       {accountMode === 'live' && (
-                        <div className="flex justify-end">
-                          <OracleStatus accountMode={accountMode} />
-                        </div>
+                        <>
+                          <div className="flex justify-end">
+                            <OracleStatus accountMode={accountMode} />
+                          </div>
+                          <PlatformLiquidityStatus accountMode={accountMode} />
+                        </>
                       )}
                       <div className="rounded-lg border border-border bg-card p-4 space-y-3">
                         <div className="flex items-center justify-between">
@@ -75,7 +83,7 @@ const Trade = () => {
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                              {CHART_PAIRS.map((p) => (
+                              {chartPairs.map((p) => (
                                 <SelectItem key={p} value={p}>{p}</SelectItem>
                               ))}
                             </SelectContent>
@@ -84,7 +92,7 @@ const Trade = () => {
                         <TradingViewChart pair={chartPair} height={500} />
                       </div>
                       <MarketOverview accountMode={accountMode} />
-                      {accountMode === 'live' && <V2PositionsPanel />}
+                      {accountMode === 'live' && <V2PositionsPanel accountMode={accountMode} />}
                       <TradeHistory accountMode={accountMode} />
                     </div>
                   </div>

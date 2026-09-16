@@ -6,21 +6,24 @@ import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog"
-import { TrendingUp, TrendingDown, X, DollarSign, Clock, Activity } from "lucide-react"
+import { TrendingUp, TrendingDown, X, DollarSign, Clock, Activity, AlertTriangle } from "lucide-react"
 import { useTrades, Trade } from '@/hooks/useTrades'
 import { useMarketData } from '@/hooks/useMarketData'
 import { useToast } from '@/components/ui/use-toast'
-import { computePnL } from '@/lib/pnl'
+import { computePnL, getAssetMultiplier } from '@/lib/pnl'
+import { useOnChainTradingV2 } from '@/hooks/useOnChainTradingV2'
 
 interface TradeHistoryProps {
   accountMode: 'demo' | 'live'
 }
 
 const TradeHistory = ({ accountMode }: TradeHistoryProps) => {
-  const { trades, closeTrade, cancelTrade, updatePnL } = useTrades()
-  const { getCurrentPrice } = useMarketData()
+  const { trades, closeTrade, loading } = useTrades()
+  const { getCurrentPrice } = useMarketData(accountMode)
   const { toast } = useToast()
+  const { closePosition } = useOnChainTradingV2(accountMode)
   const [activeTab, setActiveTab] = useState('open')
+  const [closingId, setClosingId] = useState<string | null>(null)
 
   const openTrades = trades.filter(trade => 
     trade.status === 'open' && trade.account_mode === accountMode
@@ -29,30 +32,44 @@ const TradeHistory = ({ accountMode }: TradeHistoryProps) => {
     trade.status === 'closed' && trade.account_mode === accountMode
   )
 
-  // Update PnL for open trades
-  useEffect(() => {
-    const updateOpenTradesPnL = async () => {
-      for (const trade of openTrades) {
-        const currentPrice = getCurrentPrice(trade.pair)
-        if (currentPrice > 0) {
-          await updatePnL(trade.id, currentPrice)
-        }
-      }
-    }
+  // Open-trade P&L is displayed from live prices (see calculateCurrentPnL).
+  // The stored P&L is written once, at close, by the server.
 
-    const interval = setInterval(updateOpenTradesPnL, 5000) // Update every 5 seconds
-    return () => clearInterval(interval)
-  }, [openTrades, getCurrentPrice, updatePnL])
 
+
+  /**
+   * Live positions live on-chain and can only be closed by their owner's wallet, so we
+   * send the transaction first and record the close only once it is confirmed.
+   */
   const handleCloseTrade = async (trade: Trade) => {
     const currentPrice = getCurrentPrice(trade.pair)
-    if (currentPrice > 0) {
+    if (!currentPrice || currentPrice <= 0) {
+      toast({
+        title: 'Price unavailable',
+        description: `No live price for ${trade.pair} right now. Please try again shortly.`,
+        variant: 'destructive',
+      })
+      return
+    }
+
+    setClosingId(trade.id)
+    try {
+      if (trade.account_mode === 'live' && trade.chain_position_id != null) {
+        const txHash = await closePosition(Number(trade.chain_position_id))
+        if (!txHash) return // wallet rejected or transaction failed; trade stays open
+      }
       await closeTrade(trade.id, currentPrice)
+    } finally {
+      setClosingId(null)
     }
   }
 
-  const handleCancelTrade = async (trade: Trade) => {
-    await cancelTrade(trade.id)
+
+  /** A target counts as hit only for a closed trade whose exit reached it. */
+  const isTakeProfitHit = (trade: Trade) => {
+    if (trade.status !== 'closed' || !trade.take_profit || !trade.exit_price) return false
+    const isLong = String(trade.direction).toLowerCase() === 'buy'
+    return isLong ? trade.exit_price >= trade.take_profit : trade.exit_price <= trade.take_profit
   }
 
   const calculateCurrentPnL = (trade: Trade) => {
@@ -71,8 +88,23 @@ const TradeHistory = ({ accountMode }: TradeHistoryProps) => {
     const pnl = isOpen ? calculateCurrentPnL(trade) : (trade.pnl || 0)
     const isProfitable = pnl >= 0
 
+    const pendingExit = isOpen && trade.pending_exit_kind ? trade.pending_exit_kind : null
+    const isClosing = closingId === trade.id
+
     return (
-      <div className="border rounded-lg p-4 space-y-3">
+      <div className={`border rounded-lg p-4 space-y-3 ${pendingExit ? 'border-amber-500 bg-amber-50' : ''}`}>
+        {pendingExit && (
+          <div className="flex items-start gap-2 text-sm text-amber-800">
+            <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+            <p>
+              <span className="font-semibold">
+                {pendingExit === 'stop_loss' ? 'Stop loss' : 'Take profit'} reached
+              </span>{' '}
+              at {Number(trade.pending_exit_price).toFixed(5)}. Confirm the close from your wallet —
+              the position stays open until the transaction is confirmed.
+            </p>
+          </div>
+        )}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Badge 
@@ -91,40 +123,21 @@ const TradeHistory = ({ accountMode }: TradeHistoryProps) => {
           </div>
           {isOpen && (
             <div className="flex gap-2">
-              {/* Cancel Trade Button - Cancels without affecting balance */}
+              {/* Close Position - closes at market price and updates balance */}
               <AlertDialog>
                 <AlertDialogTrigger asChild>
-                  <Button variant="ghost" size="sm" className="text-orange-600 hover:text-orange-700 hover:bg-orange-50">
-                    Cancel
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>Cancel Trade</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      Are you sure you want to cancel this {trade.pair} {trade.direction} position? This will remove the trade without affecting your balance.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Keep Trade</AlertDialogCancel>
-                    <AlertDialogAction onClick={() => handleCancelTrade(trade)} className="bg-orange-600 hover:bg-orange-700">
-                      Cancel Trade
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
-
-              {/* Close Trade Button - Closes at market price and updates balance */}
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button variant="outline" size="sm">
+                  <Button
+                    variant={pendingExit ? 'default' : 'outline'}
+                    size="sm"
+                    disabled={isClosing}
+                  >
                     <X className="h-4 w-4 mr-1" />
-                    Close
+                    {isClosing ? 'Closing…' : pendingExit ? 'Target reached — close now' : 'Close Position'}
                   </Button>
                 </AlertDialogTrigger>
                 <AlertDialogContent>
                   <AlertDialogHeader>
-                    <AlertDialogTitle>Close Trade</AlertDialogTitle>
+                    <AlertDialogTitle>Close Position</AlertDialogTitle>
                     <AlertDialogDescription>
                       Are you sure you want to close this {trade.pair} {trade.direction} position at current market price ({currentPrice.toFixed(5)})? This will update your balance with the P&L.
                     </AlertDialogDescription>
@@ -175,22 +188,38 @@ const TradeHistory = ({ accountMode }: TradeHistoryProps) => {
           </div>
         </div>
 
-        {(trade.stop_loss || trade.take_profit) && (
-          <div className="flex gap-4 text-xs">
-            {trade.stop_loss && (
+        <div className="flex flex-wrap gap-4 text-xs">
+          <div className="flex items-center gap-1">
+            <span className="text-gray-500">Position value:</span>
+            <span className="font-mono">
+              ${(trade.lot_size * trade.entry_price * getAssetMultiplier(trade.pair)).toFixed(2)}
+            </span>
+          </div>
+          {trade.stop_loss && (
+            <>
               <div className="flex items-center gap-1">
                 <span className="text-red-600">SL:</span>
                 <span className="font-mono">{trade.stop_loss.toFixed(5)}</span>
               </div>
-            )}
-            {trade.take_profit && (
               <div className="flex items-center gap-1">
-                <span className="text-green-600">TP:</span>
-                <span className="font-mono">{trade.take_profit.toFixed(5)}</span>
+                <span className="text-gray-500">Loss at SL:</span>
+                <span className="font-mono text-red-600">
+                  -${(
+                    Math.abs(trade.entry_price - trade.stop_loss) *
+                    trade.lot_size *
+                    getAssetMultiplier(trade.pair)
+                  ).toFixed(2)}
+                </span>
               </div>
-            )}
-          </div>
-        )}
+            </>
+          )}
+          {trade.take_profit && (
+            <div className="flex items-center gap-1">
+              <span className="text-green-600">TP1 ({isTakeProfitHit(trade) ? 'hit' : 'attached'}):</span>
+              <span className="font-mono">{trade.take_profit.toFixed(5)}</span>
+            </div>
+          )}
+        </div>
       </div>
     )
   }
@@ -247,7 +276,12 @@ const TradeHistory = ({ accountMode }: TradeHistoryProps) => {
             
             <ScrollArea className="h-96">
               <div className="space-y-3">
-                {openTrades.length === 0 ? (
+                {loading ? (
+                  <div className="text-center py-8 text-gray-500">
+                    <Activity className="h-12 w-12 mx-auto mb-4 opacity-50 animate-pulse" />
+                    <p>Loading your trades…</p>
+                  </div>
+                ) : openTrades.length === 0 ? (
                   <div className="text-center py-8 text-gray-500">
                     <Activity className="h-12 w-12 mx-auto mb-4 opacity-50" />
                     <p>No open trades</p>
@@ -276,7 +310,12 @@ const TradeHistory = ({ accountMode }: TradeHistoryProps) => {
 
             <ScrollArea className="h-96">
               <div className="space-y-3">
-                {closedTrades.length === 0 ? (
+                {loading ? (
+                  <div className="text-center py-8 text-gray-500">
+                    <Clock className="h-12 w-12 mx-auto mb-4 opacity-50 animate-pulse" />
+                    <p>Loading your trades…</p>
+                  </div>
+                ) : closedTrades.length === 0 ? (
                   <div className="text-center py-8 text-gray-500">
                     <Clock className="h-12 w-12 mx-auto mb-4 opacity-50" />
                     <p>No trade history</p>

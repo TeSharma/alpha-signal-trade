@@ -177,20 +177,18 @@ serve(async (req) => {
         }
 
         if (exitPrice != null) {
-          // close_trade RPC uses auth.uid(); call as service role via raw update.
-          // We mirror its logic minimally here: mark closed with PnL computed by calculate_trade_pnl.
-          const { error: pnlErr } = await supabase.rpc("calculate_trade_pnl", {
+          // Single source of truth: closes the trade, credits the balance and writes a
+          // portfolio snapshot in one transaction, and does nothing if already closed.
+          const { data: closeResult, error: closeErr } = await supabase.rpc("close_trade_system", {
             p_trade_id: t.id,
-            p_current_price: exitPrice,
+            p_exit_price: exitPrice,
+            p_reason: "auto",
           });
-          if (pnlErr) { console.warn(`[auto-close] pnl calc failed for ${t.id}:`, pnlErr); continue; }
-          const { error: closeErr } = await supabase
-            .from("trades")
-            .update({ status: "closed", exit_price: exitPrice, closed_at: new Date().toISOString() })
-            .eq("id", t.id);
           if (closeErr) { console.warn(`[auto-close] close failed for ${t.id}:`, closeErr); continue; }
-          tradesClosed += 1;
-          console.log(`[auto-close] Closed trade ${t.id} ${t.pair} @ ${exitPrice}`);
+          if ((closeResult as { closed?: boolean } | null)?.closed) {
+            tradesClosed += 1;
+            console.log(`[auto-close] Closed trade ${t.id} ${t.pair} @ ${exitPrice}`);
+          }
         }
       }
     }

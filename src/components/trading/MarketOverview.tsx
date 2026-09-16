@@ -112,7 +112,11 @@ const MarketOverview = ({ accountMode = 'demo' }: MarketOverviewProps) => {
           {/* Forex notice */}
           <div className="mt-4 flex items-center gap-2 text-sm text-muted-foreground bg-muted rounded-lg p-3">
             <Info className="h-4 w-4 shrink-0" />
-            <span>EUR/USD, GBP/USD, AUD/USD and Gold trade on-chain in Live mode via Chainlink feeds. USD/JPY stays AI-signals only.</span>
+            {accountMode === 'live' ? (
+              <span>All 7 markets — BTC/USD, ETH/USD, POL/USD, EUR/USD, GBP/USD, AUD/USD and XAU/USD (Gold) — trade on-chain via registered Chainlink feeds. USD/JPY stays AI-signals only.</span>
+            ) : (
+              <span>Demo trades settle off-chain on every pair. Live mode trades the 7 Chainlink-backed markets on-chain; USD/JPY stays AI-signals only.</span>
+            )}
           </div>
         </CardContent>
       </Card>

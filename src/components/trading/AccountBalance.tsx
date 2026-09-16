@@ -80,9 +80,11 @@ const AccountBalance = ({ accountMode, onModeChange }: AccountBalanceProps) => {
         {/* Account Mode Toggle */}
         <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
           <div className="flex items-center gap-2">
-            <span className="text-sm font-medium">Demo Account</span>
+            <span className="text-sm font-medium">
+              {accountMode === 'demo' ? 'Demo Account' : 'Live Account'}
+            </span>
             <Badge variant="outline" className="text-xs">
-              Risk-free
+              {accountMode === 'demo' ? 'Risk-free' : 'AI Risk Managed'}
             </Badge>
           </div>
           <div className="flex items-center gap-2">
