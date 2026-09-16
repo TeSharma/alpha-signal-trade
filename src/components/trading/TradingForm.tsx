@@ -38,7 +38,7 @@ const TradingForm = ({ accountMode }: TradingFormProps) => {
   const prefill = (location.state as any)?.prefill as SignalObject | undefined
   const [selectedPair, setSelectedPair] = useState(availableMarkets[0] || 'POL/USD')
   const [tradeDirection, setTradeDirection] = useState<'buy' | 'sell'>('buy')
-  const [lotSize, setLotSize] = useState('10')
+  const [lotSize, setLotSize] = useState(accountMode === 'demo' ? '0.01' : '10')
   const [leverage, setLeverage] = useState(5)
   const [stopLoss, setStopLoss] = useState('')
   const [takeProfit, setTakeProfit] = useState('')

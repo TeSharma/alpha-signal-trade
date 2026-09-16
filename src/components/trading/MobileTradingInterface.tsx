@@ -29,7 +29,7 @@ const MobileTradingInterface = ({ accountMode }: MobileTradingInterfaceProps) =>
   const availableMarkets = getMarketsForMode(accountMode);
   const [selectedPair, setSelectedPair] = useState(availableMarkets[0] || 'POL/USD');
   const [tradeDirection, setTradeDirection] = useState<'buy' | 'sell'>('buy');
-  const [lotSize, setLotSize] = useState('10');
+  const [lotSize, setLotSize] = useState(accountMode === 'demo' ? '0.01' : '10');
   const [leverage, setLeverage] = useState(5);
   const [stopLoss, setStopLoss] = useState('');
   const [takeProfit, setTakeProfit] = useState('');
@@ -50,6 +50,12 @@ const MobileTradingInterface = ({ accountMode }: MobileTradingInterfaceProps) =>
   const minMargin = networkMinimums.minMargin;
   const [maxLeverage, setMaxLeverage] = useState(50);
 
+  // Reset the size input to a sensible default for the mode (lots in demo,
+  // margin in live) so the form never opens on a size the risk rules reject.
+  useEffect(() => {
+    setLotSize(accountMode === 'demo' ? '0.01' : '10');
+  }, [accountMode]);
+
   // Reset selected pair when mode changes
   useEffect(() => {
     const markets = getMarketsForMode(accountMode);
@@ -57,6 +63,7 @@ const MobileTradingInterface = ({ accountMode }: MobileTradingInterfaceProps) =>
       setSelectedPair(markets[0] || 'POL/USD');
     }
   }, [accountMode, selectedPair]);
+
 
   // Keyed on mode + connected wallet only (hook functions change identity every
   // render, so including them would refetch continuously).
