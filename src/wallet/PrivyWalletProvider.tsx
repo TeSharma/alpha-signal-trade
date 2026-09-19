@@ -17,6 +17,11 @@ function MissingPrivyConfig({ children }: { children: ReactNode }) {
  * Privy wrapper. Supabase Auth stays the primary app identity — Privy is
  * used ONLY for non-custodial embedded wallet creation/signing.
  * Only the public client-safe App ID uses VITE_*. No secrets here.
+ *
+ * `createOnLogin: 'all-users'` guarantees EVERY authenticated user has an
+ * embedded EVM wallet: one is created on first login and the SAME wallet is
+ * returned on every later login (Privy never issues a second embedded wallet
+ * for an existing user), so returning users always recover their wallet.
  */
 export function PrivyWalletProvider({ children }: { children: ReactNode }) {
   if (!PRIVY_APP_ID) return <MissingPrivyConfig>{children}</MissingPrivyConfig>;
@@ -28,7 +33,8 @@ export function PrivyWalletProvider({ children }: { children: ReactNode }) {
         loginMethods: ['email'],
         appearance: { theme: 'light', walletList: ['metamask'] },
         embeddedWallets: {
-          ethereum: { createOnLogin: 'users-without-wallets' },
+          // Embedded wallet is the default wallet for every authenticated user.
+          ethereum: { createOnLogin: 'all-users' },
         },
       }}
     >

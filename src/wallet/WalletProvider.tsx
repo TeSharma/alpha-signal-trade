@@ -44,6 +44,27 @@ const rememberDisconnect = (value: boolean) => {
   }
 };
 
+// Which wallet the user wants to trade with. The Privy embedded wallet is the
+// default for everyone; MetaMask is only used after an explicit choice.
+const PREFERENCE_KEY = 'shtrader.wallet.preference';
+type WalletPreference = 'embedded' | 'injected';
+
+const getStoredPreference = (): WalletPreference => {
+  try {
+    return localStorage.getItem(PREFERENCE_KEY) === 'injected' ? 'injected' : 'embedded';
+  } catch {
+    return 'embedded';
+  }
+};
+
+const storePreference = (value: WalletPreference) => {
+  try {
+    localStorage.setItem(PREFERENCE_KEY, value);
+  } catch {
+    // storage unavailable — session-only behaviour
+  }
+};
+
 /**
  * Unified wallet provider.
  *
@@ -66,14 +87,39 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [error, setError] = useState<string | null>(null);
   const [balance, setBalance] = useState<string | null>(null);
   const [provider, setProvider] = useState<any | null>(null);
+  const [preference, setPreference] = useState<WalletPreference>(() => getStoredPreference());
+  const preferenceRef = useRef<WalletPreference>(preference);
+  // Set when the user explicitly disconnects, so nothing silently re-attaches
+  // for the rest of this page session.
+  const userDisconnectedRef = useRef(false);
+  const attachingRef = useRef(false);
+  // Latches the embedded wallet we already auto-attached (or tried to), so a
+  // failing auto-attach cannot retry in a loop on unrelated re-renders.
+  const autoAttachAttemptedRef = useRef<string | null>(null);
   const signerRef = useRef<any | null>(null);
   const chainIdRef = useRef<number | null>(null);
   const addressRef = useRef<string>('');
 
   const embeddedWallet = useMemo(
-    () => privyWallets.find((w) => w.walletClientType === 'privy') ?? privyWallets[0] ?? null,
+    () =>
+      // Only genuine embedded wallets count. Falling back to `privyWallets[0]`
+      // could select an externally-linked wallet (e.g. MetaMask linked inside
+      // Privy), which would defeat "the embedded wallet is always the default".
+      privyWallets.find(
+        (w) => w.walletClientType === 'privy' || (w as any).connectorType === 'embedded',
+      ) ?? null,
     [privyWallets],
   );
+
+  /** Persist + apply the user's wallet choice (state, ref and storage). */
+  const applyPreference = useCallback((next: WalletPreference) => {
+    preferenceRef.current = next;
+    storePreference(next);
+    // Re-arm the one-shot auto-attach latch: a fresh attempt is legitimate when
+    // we (re)turn to the embedded wallet.
+    if (next === 'embedded') autoAttachAttemptedRef.current = null;
+    setPreference(next);
+  }, []);
 
   /**
    * Balance is read through the app's own RPC endpoints (with fallbacks) rather
@@ -116,48 +162,67 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     [setWalletConnected],
   );
 
-  const connectEmbedded = useCallback(async () => {
-    if (!privyReady) {
-      toast.error('Wallet service is still loading. Try again in a moment.');
-      return;
-    }
-    if (!privyAuthenticated) {
-      const message = 'Sign in to create your embedded wallet first.';
-      setError(message);
-      toast.error(message);
-      return;
-    }
-    if (!embeddedWallet) {
-      const message = 'Embedded wallet is not ready yet. Try again in a moment.';
-      setError(message);
-      toast.error(message);
-      return;
-    }
-    setIsConnecting(true);
-    setError(null);
-    try {
-      const eip1193 = await embeddedWallet.getEthereumProvider();
-      const ethersProvider = new ethers.BrowserProvider(eip1193);
-      const signer = await ethersProvider.getSigner();
-      const addr = await signer.getAddress();
-      const network = await ethersProvider.getNetwork();
+  /**
+   * Attaches the Privy embedded wallet as the active trading wallet.
+   * `silent` is used for the automatic attach on load/login so routine page
+   * views do not raise toasts.
+   */
+  const attachEmbedded = useCallback(
+    async ({ silent = false }: { silent?: boolean } = {}) => {
+      if (attachingRef.current) return;
+      if (!privyReady) {
+        if (silent) return;
+        toast.error('Wallet service is still loading. Try again in a moment.');
+        return;
+      }
+      if (!privyAuthenticated) {
+        const message = 'Sign in to create your embedded wallet first.';
+        setError(message);
+        if (!silent) toast.error(message);
+        return;
+      }
+      if (!embeddedWallet) {
+        const message = 'Embedded wallet is not ready yet. Try again in a moment.';
+        setError(message);
+        if (!silent) toast.error(message);
+        return;
+      }
 
-      signerRef.current = signer;
-      setProvider(eip1193);
-      setAddress(addr);
-      setChainId(Number(network.chainId));
-      setSource('embedded');
-      setConnected(true);
-      setIsConnecting(false);
-      setWalletConnected(true);
-      await readBalance(addr, Number(network.chainId));
-      toast.success('Embedded wallet connected');
-    } catch (err: any) {
-      setIsConnecting(false);
-      setError(err?.message || 'Failed to connect embedded wallet');
-      toast.error(err?.message || 'Failed to connect embedded wallet');
-    }
-  }, [privyReady, privyAuthenticated, embeddedWallet, readBalance, setWalletConnected]);
+      attachingRef.current = true;
+      if (!silent) setIsConnecting(true);
+      setError(null);
+      try {
+        const eip1193 = await embeddedWallet.getEthereumProvider();
+        const ethersProvider = new ethers.BrowserProvider(eip1193);
+        const signer = await ethersProvider.getSigner();
+        const addr = await signer.getAddress();
+        const network = await ethersProvider.getNetwork();
+
+        signerRef.current = signer;
+        setProvider(eip1193);
+        setAddress(addr);
+        setChainId(Number(network.chainId));
+        setSource('embedded');
+        setConnected(true);
+        setWalletConnected(true);
+        userDisconnectedRef.current = false;
+        applyPreference('embedded');
+        await readBalance(addr, Number(network.chainId));
+        if (!silent) toast.success('Embedded wallet connected');
+      } catch (err: any) {
+        setError(err?.message || 'Failed to connect embedded wallet');
+        if (!silent) toast.error(err?.message || 'Failed to connect embedded wallet');
+      } finally {
+        attachingRef.current = false;
+        setIsConnecting(false);
+      }
+    },
+    [privyReady, privyAuthenticated, embeddedWallet, readBalance, setWalletConnected, applyPreference],
+  );
+
+  const connectEmbedded = useCallback(async () => {
+    await attachEmbedded();
+  }, [attachEmbedded]);
 
   const connectInjected = useCallback(async () => {
     if (!window.ethereum) {
@@ -191,22 +256,39 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       setIsConnecting(false);
       setWalletConnected(true);
       rememberDisconnect(false);
+      userDisconnectedRef.current = false;
+      // Explicit choice: honour MetaMask until the user switches back.
+      applyPreference('injected');
       await readBalance(accounts[0], detected);
       toast.success('Wallet connected successfully!');
     } catch (err: any) {
       setIsConnecting(false);
       setError(err?.message || 'Failed to connect wallet');
       toast.error(err?.message || 'Failed to connect wallet');
+      // MetaMask is not connected → fall back to the embedded wallet.
+      applyPreference('embedded');
     }
-  }, [readBalance, setWalletConnected]);
+  }, [readBalance, setWalletConnected, applyPreference]);
 
   const disconnect = useCallback(async () => {
     // Detaches the active trading wallet only. Does NOT log out of
     // Privy or Supabase auth.
+    if (source === 'injected') {
+      // Dropping MetaMask hands the session back to the embedded wallet.
+      rememberDisconnect(true);
+      applyPreference('embedded');
+      setDisconnected();
+      toast.info('MetaMask disconnected — using your embedded wallet');
+      return;
+    }
+    // Embedded wallet: clear now and stay disconnected for the rest of this
+    // page session. The embedded wallet is restored automatically on reload,
+    // so returning users always recover the same wallet.
+    userDisconnectedRef.current = true;
     rememberDisconnect(true);
     setDisconnected();
     toast.info('Wallet disconnected');
-  }, [setDisconnected]);
+  }, [source, setDisconnected, applyPreference]);
 
   const switchNetwork = useCallback(
     async (targetChainId: number) => {
@@ -256,17 +338,47 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     return () => clearInterval(id);
   }, [connected, address, readBalance]);
 
+  // Make the Privy embedded wallet the default active wallet. As soon as Privy
+  // reports an authenticated user with an embedded wallet it is attached
+  // automatically — no click needed. window.ethereum is NEVER attached here, so
+  // MetaMask is not prioritised just because it exists.
+  useEffect(() => {
+    if (preference !== 'embedded') return;
+    if (!privyReady || !privyAuthenticated || !embeddedWallet) return;
+    if (connected || isConnecting) return;
+    if (userDisconnectedRef.current) return;
+    // Attach each embedded wallet at most once per page session; explicit user
+    // actions (connect/disconnect) re-arm this via applyPreference().
+    const key = embeddedWallet.address;
+    if (autoAttachAttemptedRef.current === key) return;
+    autoAttachAttemptedRef.current = key;
+    void attachEmbedded({ silent: true });
+  }, [preference, privyReady, privyAuthenticated, embeddedWallet, connected, isConnecting, attachEmbedded]);
+
   // Rehydrate an already-approved injected wallet on page load, so a refresh
   // does not drop the session (eth_accounts does not prompt the user).
+  // MetaMask is opt-in: this only runs after an explicit "Connect MetaMask".
   useEffect(() => {
     let cancelled = false;
     const rehydrate = async () => {
-      if (!window.ethereum) return;
+      if (preferenceRef.current !== 'injected') return;
       // Respect an explicit disconnect from a previous session.
       if (wasExplicitlyDisconnected()) return;
+      if (!window.ethereum) {
+        // No injected provider any more — fall back to the embedded wallet.
+        applyPreference('embedded');
+        return;
+      }
       try {
         const accounts: string[] = await window.ethereum.request({ method: 'eth_accounts' });
-        if (cancelled || !accounts || accounts.length === 0) return;
+        if (cancelled) return;
+        if (!accounts || accounts.length === 0) {
+          // MetaMask is installed but not connected (locked or not authorised)
+          // → fall back to the embedded wallet.
+          console.log('[unified-wallet] injected wallet not connected on rehydrate; using embedded');
+          applyPreference('embedded');
+          return;
+        }
         // Read the chain id, retrying once — a null chain id would otherwise
         // look identical to "wrong network" to every network check.
         let detected: number | null = null;
@@ -300,20 +412,24 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         await readBalance(accounts[0], detected);
       } catch (err) {
         console.log('[unified-wallet] rehydrate skipped:', err);
+        applyPreference('embedded');
       }
     };
     rehydrate();
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [readBalance, setWalletConnected, applyPreference]);
 
   useEffect(() => {
     if (source !== 'injected' || !window.ethereum) return;
     const handleAccountsChanged = (accounts: string[]) => {
-      if (!accounts || accounts.length === 0) setDisconnected();
-      else {
+      if (!accounts || accounts.length === 0) {
+        // MetaMask was disconnected (or all accounts removed): hand the session
+        // back to the embedded wallet instead of leaving the user wallet-less.
+        applyPreference('embedded');
+        setDisconnected();
+      } else {
         setAddress(accounts[0]);
         readBalance(accounts[0], chainIdRef.current);
       }
@@ -325,7 +441,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       window.ethereum?.removeListener('accountsChanged', handleAccountsChanged);
       window.ethereum?.removeListener('chainChanged', handleChainChanged);
     };
-  }, [source, readBalance, setDisconnected]);
+  }, [source, readBalance, setDisconnected, applyPreference]);
 
   const value = useMemo(
     () => ({
