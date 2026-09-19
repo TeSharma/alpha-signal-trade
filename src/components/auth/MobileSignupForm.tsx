@@ -10,6 +10,7 @@ import { useToast } from '@/components/ui/use-toast'
 import { Eye, EyeOff, Check, X } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
+import { Logo } from '@/components/ui/Logo'
 import { signupSchema, type SignupFormData } from '@/lib/validation'
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form'
 
@@ -134,6 +135,7 @@ export const MobileSignupForm = () => {
       {/* Form */}
       <div className="p-4 space-y-4">
         <div className="text-center mb-6">
+          <Logo variant="symbol" alt="ShTrader" className="h-14 w-14 mx-auto mb-4" />
           <h2 className="text-2xl font-bold text-foreground">Create your account</h2>
           <p className="text-sm text-muted-foreground mt-2">Start trading with a free account</p>
         </div>

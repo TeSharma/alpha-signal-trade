@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" fill="none">
+<defs>
+  <linearGradient id="blue" x1="90" y1="80" x2="410" y2="430" gradientUnits="userSpaceOnUse">
+    <stop stop-color="#B15CFF"/><stop offset="0.5" stop-color="#5A19D6"/><stop offset="1" stop-color="#0047B8"/>
+  </linearGradient>
+  <linearGradient id="gold" x1="180" y1="180" x2="380" y2="380" gradientUnits="userSpaceOnUse">
+    <stop stop-color="#FF7DEB"/><stop offset="0.55" stop-color="#D12BFF"/><stop offset="1" stop-color="#B88312"/>
+  </linearGradient>
+  <filter id="softGlow" x="-30%" y="-30%" width="160%" height="160%">
+    <feGaussianBlur stdDeviation="7" result="blur"/>
+    <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+  </filter>
+</defs>
+
+<!-- Ribbon S -->
+<path d="M104 205 C105 129 170 76 254 76 C309 76 354 95 396 130 L344 179 C319 157 291 145 258 145 C218 145 193 164 192 197 C191 218 207 231 235 240 L306 264 C364 284 397 319 397 365 C397 441 330 474 255 474 C189 474 132 450 88 407 L141 355 C171 383 211 402 254 402 C292 402 314 389 314 362 C314 343 298 330 270 320 L198 295 C137 274 103 246 104 205Z"
+      fill="url(#blue)" stroke="#0B7CFF" stroke-width="3"/>
+
+<!-- Gold inner sweep -->
+<path d="M232 239 C259 248 290 260 316 272 C352 289 371 316 371 351 C371 397 329 429 272 438 C307 421 324 398 324 370 C324 347 307 333 279 323 L207 298 C174 287 151 270 139 248 C154 258 174 266 198 274 C223 282 248 286 268 279 C288 272 295 257 286 247 C276 237 255 232 232 226 C213 221 199 210 195 195 C202 214 214 228 232 239Z"
+      fill="url(#gold)"/>
+
+<!-- Candlesticks -->
+<g filter="url(#softGlow)" stroke-linecap="round">
+  <line x1="155" y1="285" x2="155" y2="190" stroke="#D966FF" stroke-width="7"/>
+  <rect x="142" y="216" width="26" height="49" rx="4" fill="#D966FF"/>
+  <line x1="205" y1="270" x2="205" y2="152" stroke="#D966FF" stroke-width="7"/>
+  <rect x="192" y="181" width="26" height="58" rx="4" fill="#D966FF"/>
+  <line x1="255" y1="255" x2="255" y2="126" stroke="#D966FF" stroke-width="7"/>
+  <rect x="242" y="153" width="26" height="61" rx="4" fill="#D966FF"/>
+  <line x1="305" y1="248" x2="305" y2="164" stroke="#D966FF" stroke-width="7"/>
+  <rect x="292" y="181" width="26" height="43" rx="4" fill="#D966FF"/>
+</g>
+
+</svg>

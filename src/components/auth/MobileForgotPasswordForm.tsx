@@ -9,6 +9,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { forgotPasswordSchema, type ForgotPasswordFormData } from '@/lib/validation'
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form'
 import { useToast } from '@/components/ui/use-toast'
+import { Logo } from '@/components/ui/Logo'
 
 export const MobileForgotPasswordForm = () => {
   const [loading, setLoading] = useState(false)
@@ -64,6 +65,7 @@ export const MobileForgotPasswordForm = () => {
       {/* Form */}
       <div className="p-4 space-y-4">
         <div className="text-center mb-6">
+          <Logo variant="symbol" alt="ShTrader" className="h-14 w-14 mx-auto mb-4" />
           <h2 className="text-2xl font-bold text-foreground">Reset Password</h2>
           <p className="text-sm text-muted-foreground mt-2">Enter your email to receive a reset link</p>
         </div>

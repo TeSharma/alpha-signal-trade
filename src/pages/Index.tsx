@@ -3,6 +3,7 @@ import React from 'react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Logo } from "@/components/ui/Logo";
 import { useNavigate } from 'react-router-dom';
 import { TrendingUp, Shield, BookOpen, Users, Bot, BarChart3, UserPlus, LogIn } from "lucide-react";
 
@@ -77,11 +78,7 @@ const Index = () => {
         <div className="text-center max-w-4xl mx-auto mb-16">
           {/* Logo positioned above the heading */}
           <div className="flex justify-center mb-8">
-            <img 
-              src="/lovable-uploads/de844a80-a7e2-4449-b7ea-cecb59ff1b0d.png" 
-              alt="ShTrader Logo" 
-              className="h-24 w-auto object-contain"
-            />
+            <Logo variant="full" on="light" alt="ShTrader logo" className="h-24 w-auto" />
           </div>
           
           <h1 className="text-5xl font-bold text-gray-900 mb-6">

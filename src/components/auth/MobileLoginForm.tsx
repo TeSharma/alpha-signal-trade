@@ -10,6 +10,7 @@ import { useToast } from '@/components/ui/use-toast'
 import { Eye, EyeOff } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
+import { Logo } from '@/components/ui/Logo'
 import { loginSchema, type LoginFormData } from '@/lib/validation'
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form'
 
@@ -97,6 +98,7 @@ export const MobileLoginForm = () => {
       {/* Form */}
       <div className="p-4 space-y-4">
         <div className="text-center mb-6">
+          <Logo variant="symbol" alt="ShTrader" className="h-14 w-14 mx-auto mb-4" />
           <h2 className="text-2xl font-bold text-foreground">Sign in to your account</h2>
           <p className="text-sm text-muted-foreground mt-2">Enter your details to access your account</p>
         </div>

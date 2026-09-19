@@ -2,6 +2,7 @@
 import React from 'react';
 import ResponsiveNav from "./ResponsiveNav";
 import { WalletConnectButton } from "@/components/wallet/WalletConnectButton";
+import { Logo } from "@/components/ui/Logo";
 
 const Sidebar = () => {
   return (
@@ -9,11 +10,7 @@ const Sidebar = () => {
       {/* Logo */}
       <div className="p-6">
         <div className="flex items-center justify-center">
-          <img 
-            src="/lovable-uploads/de844a80-a7e2-4449-b7ea-cecb59ff1b0d.png" 
-            alt="ShTrader Logo" 
-            className="h-16 w-auto object-contain"
-          />
+          <Logo variant="full" on="light" alt="ShTrader logo" className="h-16 w-auto" />
         </div>
       </div>
 
