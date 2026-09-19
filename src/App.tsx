@@ -25,6 +25,13 @@ const UpdatePassword = lazy(() => import("./pages/UpdatePassword"));
 const VerifyEmail = lazy(() => import("./pages/VerifyEmail"));
 const SeoMonitor = lazy(() => import("./pages/SeoMonitor"));
 const NotFound = lazy(() => import("./pages/NotFound"));
+
+// Dev-only showcase for the Dynamic Logo system. `import.meta.env.DEV` is
+// statically replaced by Vite, so the route and its chunk are dropped from
+// production builds. It is intentionally NOT added to the landing page.
+const DynamicLogoShowcase = import.meta.env.DEV
+  ? lazy(() => import("./components/dev/DynamicLogoShowcase"))
+  : undefined;
 import ZendeskWidget from "./components/support/ZendeskWidget";
 import { PrivyWalletProvider, WalletProvider } from "./wallet";
 
@@ -61,6 +68,11 @@ const App = () => (
               <Route path="/forgot-password" element={<ForgotPassword />} />
               <Route path="/update-password" element={<UpdatePassword />} />
               <Route path="/verify-email" element={<VerifyEmail />} />
+
+              {/* Dev-only Dynamic Logo showcase — absent from production builds. */}
+              {DynamicLogoShowcase && (
+                <Route path="/dev/dynamic-logo" element={<DynamicLogoShowcase />} />
+              )}
 
               <Route path="/dashboard" element={
                 <AuthGuard><WithMarketData><Dashboard /></WithMarketData></AuthGuard>
