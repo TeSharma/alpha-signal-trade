@@ -64,13 +64,13 @@ export const LOGO_ASSETS = {
  * this map yet; a future "Dynamic Logo" milestone will map real state onto it.
  */
 export const DYNAMIC_LOGO_ASSETS = {
-  neutral: `${BRAND_ASSET_DIR}/dynamic/neutral.svg`,
-  bullish: `${BRAND_ASSET_DIR}/dynamic/bullish.svg`,
-  bearish: `${BRAND_ASSET_DIR}/dynamic/bearish.svg`,
-  strongSignal: `${BRAND_ASSET_DIR}/dynamic/strong-signal.svg`,
-  highVolatility: `${BRAND_ASSET_DIR}/dynamic/high-volatility.svg`,
-  aiAnalyzing: `${BRAND_ASSET_DIR}/dynamic/ai-analyzing.svg`,
-  onChain: `${BRAND_ASSET_DIR}/dynamic/on-chain.svg`,
+  neutral: `${BRAND_ASSET_DIR}/dynamic-v2/neutral.svg`,
+  bullish: `${BRAND_ASSET_DIR}/dynamic-v2/bullish.svg`,
+  bearish: `${BRAND_ASSET_DIR}/dynamic-v2/bearish.svg`,
+  strongSignal: `${BRAND_ASSET_DIR}/dynamic-v2/strong-signal.svg`,
+  highVolatility: `${BRAND_ASSET_DIR}/dynamic-v2/high-volatility.svg`,
+  aiAnalyzing: `${BRAND_ASSET_DIR}/dynamic-v2/ai-analyzing.svg`,
+  onChain: `${BRAND_ASSET_DIR}/dynamic-v2/on-chain.svg`,
 } as const;
 
 export type DynamicLogoState = keyof typeof DYNAMIC_LOGO_ASSETS;
