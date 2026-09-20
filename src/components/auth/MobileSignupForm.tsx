@@ -135,7 +135,11 @@ export const MobileSignupForm = () => {
       {/* Form */}
       <div className="p-4 space-y-4">
         <div className="text-center mb-6">
-          <Logo variant="symbol" alt="ShTrader" className="h-14 w-14 mx-auto mb-4" />
+          <Logo
+            variant="full"
+            on="light"
+            className="h-12 w-auto mx-auto mb-4"
+          />
           <h2 className="text-2xl font-bold text-foreground">Create your account</h2>
           <p className="text-sm text-muted-foreground mt-2">Start trading with a free account</p>
         </div>
