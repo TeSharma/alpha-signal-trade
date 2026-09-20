@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Wallet, RefreshCw, AlertTriangle, CheckCircle } from "lucide-react";
 import { useUnifiedWallet } from "@/wallet";
+import { useSafePrivy } from "@/wallet/safePrivy";
 import { useNetworkEnforcement } from "@/hooks/useNetworkEnforcement";
 
 const WalletStatus = () => {
@@ -24,6 +25,18 @@ const WalletStatus = () => {
   const connectWallet = connectInjected;
   const disconnectWallet = disconnect;
   const { isCorrectNetwork, networkName, switchToAmoy } = useNetworkEnforcement();
+  const { ready: privyReady, authenticated: privyAuthenticated, login: privyLogin } = useSafePrivy();
+
+  // Same pattern as WalletConnectButton: when the user has no Privy session yet,
+  // open Privy login first so the embedded wallet can be created/retrieved;
+  // once authenticated, connect normally.
+  const handleEmbedded = async () => {
+    if (privyReady && !privyAuthenticated && privyLogin) {
+      await privyLogin();
+      return;
+    }
+    await connectEmbedded();
+  };
 
   const getNetworkName = (chainId: number | null) => {
     switch (chainId) {
@@ -103,7 +116,7 @@ const WalletStatus = () => {
           </Button>
           <Button
             variant="outline"
-            onClick={connectEmbedded}
+            onClick={handleEmbedded}
             disabled={isConnecting}
             className="w-full"
           >

@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { PrivyProvider } from '@privy-io/react-auth';
+import { polygon } from '@privy-io/chains';
 
 const PRIVY_APP_ID = import.meta.env.VITE_PRIVY_APP_ID as string | undefined;
 
@@ -31,6 +32,9 @@ export function PrivyWalletProvider({ children }: { children: ReactNode }) {
       appId={PRIVY_APP_ID}
       config={{
         loginMethods: ['email'],
+        // Embedded wallets start on Polygon; the existing demo/live network
+        // enforcement and switchNetwork() still govern any required switching.
+        defaultChain: polygon,
         appearance: { theme: 'light', walletList: ['metamask'] },
         embeddedWallets: {
           // Embedded wallet is the default wallet for every authenticated user.
