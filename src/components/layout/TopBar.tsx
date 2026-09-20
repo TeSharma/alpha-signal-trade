@@ -5,12 +5,20 @@ import { Badge } from "@/components/ui/badge";
 import { Settings, User } from "lucide-react";
 import { useApp } from "@/contexts/AppContext";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
+import { DynamicLogoStatus } from "@/components/brand/DynamicLogoStatus";
+import type { DynamicLogoSignalSource } from "@/lib/dynamicLogo/adapters";
 
 interface TopBarProps {
   accountMode: 'demo' | 'live';
+  /**
+   * Already-loaded active signal, if the current page has one. Optional and
+   * read-only: when omitted the Dynamic Logo renders its neutral state. Nothing
+   * is fetched or subscribed to in order to populate this.
+   */
+  activeSignal?: DynamicLogoSignalSource | null;
 }
 
-const TopBar = ({ accountMode }: TopBarProps) => {
+const TopBar = ({ accountMode, activeSignal }: TopBarProps) => {
   const { state } = useApp();
 
   return (
@@ -52,6 +60,7 @@ const TopBar = ({ accountMode }: TopBarProps) => {
 
       {/* Right side - User actions */}
       <div className="flex items-center gap-2">
+        <DynamicLogoStatus source={{ signal: activeSignal }} />
         <NotificationBell />
         <Button variant="ghost" size="sm">
           <Settings className="h-4 w-4" />

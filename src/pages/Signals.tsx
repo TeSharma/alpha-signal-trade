@@ -29,7 +29,7 @@ const PAIR_FILTERS = [
 
 const Signals = () => {
   const [accountMode, setAccountMode] = useState<'demo' | 'live'>('demo');
-  const { refreshSignals, isRefreshing } = useSignalList();
+  const { refreshSignals, isRefreshing, signals } = useSignalList();
   const [selectedPair, setSelectedPair] = useState("all");
 
   const handleRefresh = () => {
@@ -43,7 +43,7 @@ const Signals = () => {
       <div className="hidden lg:flex">
         <Sidebar />
         <div className="flex-1 flex flex-col">
-          <TopBar accountMode={accountMode} />
+          <TopBar accountMode={accountMode} activeSignal={signals[0] ?? null} />
           <main className="flex-1 p-6">
             <div className="max-w-7xl mx-auto space-y-6">
               <SignalHeader

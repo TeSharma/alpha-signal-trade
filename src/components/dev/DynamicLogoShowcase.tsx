@@ -6,6 +6,15 @@ import {
   DYNAMIC_LOGO_THRESHOLDS,
   type DynamicLogoInput,
 } from '@/lib/dynamicLogo/types';
+import {
+  describeDynamicLogoSource,
+  type DynamicLogoSource,
+} from '@/lib/dynamicLogo/adapters';
+import {
+  DYNAMIC_LOGO_ADAPTER_CASES,
+  type DynamicLogoAdapterCase,
+} from '@/lib/dynamicLogo/adapterCases';
+import { useDynamicLogoInput } from '@/hooks/useDynamicLogoState';
 
 /**
  * DEV-ONLY showcase for the Dynamic Logo system.
@@ -160,6 +169,99 @@ function StateEngineCase({ testCase }: { testCase: ShowcaseCase }) {
   );
 }
 
+/** One adapter case: source values → provenance → input → derived state → logo. */
+function AdapterCaseCard({ testCase }: { testCase: DynamicLogoAdapterCase }) {
+  const source = testCase.source as DynamicLogoSource;
+  const { state, input } = useDynamicLogoInput(source);
+  const provenance = describeDynamicLogoSource(source);
+
+  const expectedKeys = Object.keys(testCase.expectedInput) as (keyof DynamicLogoInput)[];
+  const mismatch = expectedKeys.filter(
+    (key) => input[key] !== testCase.expectedInput[key],
+  );
+  const passes = state === testCase.expectedState && mismatch.length === 0;
+
+  const inputEntries = Object.entries(input) as [keyof DynamicLogoInput, unknown][];
+
+  return (
+    <section className="flex flex-col overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
+      <div className="border-b border-gray-200 px-4 py-3">
+        <div className="flex items-start justify-between gap-2">
+          <h3 className="text-sm font-semibold text-gray-900">{testCase.name}</h3>
+          <span
+            className={
+              passes
+                ? 'shrink-0 rounded bg-green-100 px-2 py-0.5 text-[10px] font-semibold text-green-800'
+                : 'shrink-0 rounded bg-red-100 px-2 py-0.5 text-[10px] font-semibold text-red-800'
+            }
+          >
+            {passes ? 'PASS' : 'FAIL'}
+          </span>
+        </div>
+        <p className="mt-1 text-xs text-gray-600">{testCase.description}</p>
+      </div>
+
+      <div className="space-y-3 px-4 py-3">
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">
+            Source (existing state)
+          </p>
+          <pre className="mt-1 overflow-x-auto rounded bg-gray-50 p-2 text-[11px] text-gray-800">
+            {JSON.stringify(testCase.source, null, 1)}
+          </pre>
+          <div className="mt-1 flex flex-wrap gap-1">
+            <span
+              className={
+                provenance.signalUsable
+                  ? 'rounded bg-blue-100 px-1.5 py-0.5 text-[10px] text-blue-800'
+                  : 'rounded bg-gray-100 px-1.5 py-0.5 text-[10px] text-gray-600'
+              }
+            >
+              signal: {provenance.signalUsable ? 'real' : 'fallback'}
+            </span>
+            <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] text-gray-600">
+              volatility: {provenance.volatility}
+            </span>
+            <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] text-gray-600">
+              ai: {provenance.aiAnalyzing}
+            </span>
+            <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] text-gray-600">
+              on-chain: {provenance.onChainActivity}
+            </span>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-[1fr_auto] items-center gap-3">
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">
+              DynamicLogoInput
+            </p>
+            <dl className="mt-1 space-y-0.5 text-[11px]">
+              {inputEntries.map(([key, value]) => (
+                <div key={String(key)} className="flex justify-between gap-2">
+                  <dt className="text-gray-500">{key}</dt>
+                  <dd className="font-mono text-gray-900">{String(value)}</dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+          <DynamicLogo state={state} className="h-16 w-16" />
+        </div>
+      </div>
+
+      <div className="mt-auto border-t border-gray-200 bg-gray-50 px-4 py-2 text-[11px]">
+        <span className="text-gray-500">derived: </span>
+        <code className="font-semibold text-gray-900">{state}</code>
+        <span className="text-gray-400"> / expected: </span>
+        <code className="text-gray-700">{testCase.expectedState}</code>
+        {mismatch.length > 0 && (
+          <p className="mt-1 text-red-700">input mismatch: {mismatch.join(', ')}</p>
+        )}
+      </div>
+    </section>
+  );
+}
+
 export function DynamicLogoShowcase() {
   return (
     <div className="min-h-screen bg-gray-50 px-6 py-10">
@@ -171,8 +273,9 @@ export function DynamicLogoShowcase() {
             rendered on both background colourways so ink contrast can be verified.
           </p>
           <p className="mt-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
-            Not part of production. These assets are not connected to live market data, AI, signal
-            or trading state.
+            Development-only route. Not part of production. Nothing here fetches market data, calls
+            AI services, connects a wallet or touches the blockchain. The adapter section below
+            reflects existing application state read-only.
           </p>
         </header>
 
@@ -227,6 +330,40 @@ export function DynamicLogoShowcase() {
               <StateEngineCase key={testCase.label} testCase={testCase} />
             ))}
           </div>
+        </section>
+
+        {/* ---- Phase 3: adapter from existing application state ---- */}
+        <section className="mt-14">
+          <h2 className="text-2xl font-bold text-gray-900">
+            Adapter — existing application state
+          </h2>
+          <p className="mt-2 text-sm text-gray-600">
+            SOURCE → DynamicLogoInput → DERIVED STATE. Each case passes an existing-state
+            object through <code className="rounded bg-gray-200 px-1">useDynamicLogoInput()</code>{' '}
+            and asserts the derived state. These are the deterministic adapter tests —{' '}
+            <strong>PASS</strong>/<strong>FAIL</strong> is computed live in the browser.
+          </p>
+          <p className="mt-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+            Documented limitations (Phase 3): <strong>volatility</strong>,{' '}
+            <strong>aiAnalyzing</strong> and <strong>onChainActivity</strong> have no trustworthy
+            existing application source, so they stay 0/false. The only real application source is
+            the active signal (strength + direction). Nothing here reads live market data, AI
+            systems, wallet state or the blockchain.
+          </p>
+
+          <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
+            {DYNAMIC_LOGO_ADAPTER_CASES.map((testCase) => (
+              <AdapterCaseCard key={testCase.name} testCase={testCase} />
+            ))}
+          </div>
+
+          <p className="mt-4 text-xs text-gray-500">
+            Production integration: <code className="rounded bg-gray-200 px-1">TopBar</code>{' '}
+            (authenticated header, rendered by all 8 authenticated pages). Only{' '}
+            <code className="rounded bg-gray-200 px-1">/signals</code> supplies a real signal,
+            because its page already loads one — no new query, channel or poller is created. Every
+            other authenticated page renders the honest neutral state.
+          </p>
         </section>
 
         {/* ---- Precedence ladder ---- */}
