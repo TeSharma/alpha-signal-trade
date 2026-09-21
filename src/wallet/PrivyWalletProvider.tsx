@@ -1,8 +1,7 @@
 import type { ReactNode } from 'react';
 import { PrivyProvider } from '@privy-io/react-auth';
 import { polygon } from '@privy-io/chains';
-
-const PRIVY_APP_ID = import.meta.env.VITE_PRIVY_APP_ID as string | undefined;
+import { PRIVY_APP_ID } from '@/config/privy';
 
 function MissingPrivyConfig({ children }: { children: ReactNode }) {
   if (typeof window !== 'undefined') {

@@ -1,4 +1,5 @@
 import { usePrivy, useWallets } from '@privy-io/react-auth';
+import { PRIVY_ENABLED } from '@/config/privy';
 
 type SafePrivy = {
   ready: boolean;
@@ -16,11 +17,10 @@ const PRIVY_UNAVAILABLE: SafePrivy = {
 
 /**
  * Privy hooks throw (and log a warning on every render) when PrivyProvider is
- * not mounted, which happens when VITE_PRIVY_APP_ID is not configured. The flag
- * below is a build-time constant, so skipping the hooks entirely keeps hook call
- * order stable while avoiding console noise and re-render churn.
+ * not mounted, which happens when no Privy App ID is available. The flag
+ * imported from the shared config keeps hook call order stable while avoiding
+ * console noise and re-render churn.
  */
-export const PRIVY_ENABLED = Boolean(import.meta.env.VITE_PRIVY_APP_ID);
 
 const EMPTY_WALLETS = [] as ReturnType<typeof useWallets>['wallets'];
 
