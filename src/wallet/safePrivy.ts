@@ -1,4 +1,5 @@
 import { usePrivy, useWallets } from '@privy-io/react-auth';
+import { PRIVY_ENABLED as PRIVY_CONFIGURED } from '@/config/privy';
 
 type SafePrivy = {
   ready: boolean;
