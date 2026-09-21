@@ -21,7 +21,7 @@ const PRIVY_UNAVAILABLE: SafePrivy = {
  * below is a build-time constant, so skipping the hooks entirely keeps hook call
  * order stable while avoiding console noise and re-render churn.
  */
-export const PRIVY_ENABLED = Boolean(import.meta.env.VITE_PRIVY_APP_ID);
+export const PRIVY_ENABLED = PRIVY_CONFIGURED;
 
 const EMPTY_WALLETS = [] as ReturnType<typeof useWallets>['wallets'];
 
