@@ -1,14 +1,13 @@
 import type { ReactNode } from 'react';
 import { PrivyProvider } from '@privy-io/react-auth';
 import { polygon } from '@privy-io/chains';
-
-const PRIVY_APP_ID = import.meta.env.VITE_PRIVY_APP_ID as string | undefined;
+import { PRIVY_APP_ID } from '@/config/privy';
 
 function MissingPrivyConfig({ children }: { children: ReactNode }) {
   if (typeof window !== 'undefined') {
     console.warn(
-      '[privy] VITE_PRIVY_APP_ID is not set. Embedded wallets are disabled; ' +
-        'MetaMask remains available. Add VITE_PRIVY_APP_ID to .env to enable.',
+      '[privy] Privy App ID is not configured. Embedded wallets are disabled; ' +
+        'MetaMask remains available.',
     );
   }
   return <>{children}</>;
