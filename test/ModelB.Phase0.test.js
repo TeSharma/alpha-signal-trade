@@ -87,24 +87,27 @@ describe("Model-B Phase 0 scaffold", function () {
     expect(await vault.checkPhysicalInvariant()).to.equal(true);
   });
 
-  it("phase1 settlement stubs revert", async function () {
+  it("phase1 settlement functions are live and role-gated (supersede phase-0 stub test)", async function () {
     await vault.connect(admin).seedCapital(SETTLEMENT, RESERVE, OPS);
     const SET = await vault.LEDGER_SETTLEMENT();
     const RSV = await vault.LEDGER_RESERVE();
-    await expect(vault.transferLedger(SET, RSV, 1, "p0")).to.be.revertedWithCustomError(
-      vault,
-      "NotImplemented"
-    );
+    // No longer NotImplemented — access control reverts instead.
     await expect(
-      vault.emergencyTransferLedger(SET, RSV, 1, "p0")
-    ).to.be.revertedWithCustomError(vault, "NotImplemented");
+      vault.connect(stranger).transferLedger(SET, RSV, 1, "p1")
+    ).to.be.revertedWithCustomError(vault, "AccessControlUnauthorizedAccount");
     await expect(
-      vault.settleProfit(treasury.address, treasury.address, 1, 0, 1)
-    ).to.be.revertedWithCustomError(vault, "NotImplemented");
-    await expect(vault.retainSurplus(1, 1)).to.be.revertedWithCustomError(
-      vault,
-      "NotImplemented"
-    );
+      vault.connect(stranger).emergencyTransferLedger(SET, RSV, 1, "p1")
+    ).to.be.revertedWithCustomError(vault, "AccessControlUnauthorizedAccount");
+    await expect(
+      vault.connect(stranger).settleProfit(treasury.address, treasury.address, 1, 0, 1)
+    ).to.be.revertedWithCustomError(vault, "AccessControlUnauthorizedAccount");
+    await expect(
+      vault.connect(stranger).retainSurplus(1, 1)
+    ).to.be.revertedWithCustomError(vault, "AccessControlUnauthorizedAccount");
+    // Admin settlement outflow still requires the wiring step (risk manager).
+    await expect(
+      vault.connect(admin).transferLedger(SET, RSV, 1, "p1")
+    ).to.be.revertedWithCustomError(vault, "RiskManagerNotSet");
     expect(await vault.checkPhysicalInvariant()).to.equal(true);
   });
 
