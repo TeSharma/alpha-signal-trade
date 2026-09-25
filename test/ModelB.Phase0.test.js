@@ -122,25 +122,33 @@ describe("Model-B Phase 0 scaffold", function () {
     expect(await riskManager.status()).to.equal(0); // GREEN
   });
 
-it("phase3 trading stubs revert and flags toggle", async function () {
-    await expect(
-      platform.openPosition(ethers.ZeroHash, true, 1, 1, 0, 0)
-    ).to.be.revertedWithCustomError(platform, "NotImplemented");
+it("phase3 trading entry points are live and admin flags toggle (supersedes Phase-0 stub test)", async function () {
+    // Superseded Phase-0 NotImplemented stubs: the Phase-3 execution engine is
+    // live, so these paths now revert for their real reasons (unknown position,
+    // owner gating, unwired oracle) instead of NotImplemented.
     await expect(platform.closePosition(1)).to.be.revertedWithCustomError(
       platform,
-      "NotImplemented"
+      "PositionClosedAlready"
     );
     await expect(platform.liquidate(1)).to.be.revertedWithCustomError(
       platform,
-      "NotImplemented"
+      "PositionClosedAlready"
     );
     await expect(platform.closeWithTrigger(1)).to.be.revertedWithCustomError(
       platform,
-      "NotImplemented"
+      "NotAuthorisedKeeper"
     );
+    // Phase-0 wiring points the oracle at an EOA, so the open path cannot price.
+    await expect(platform.openPosition(ethers.ZeroHash, true, 1, 1, 0, 0)).to.be
+      .reverted;
+
     await platform.connect(admin).setPaused(true);
     expect(await platform.paused()).to.equal(true);
     await platform.connect(admin).setAdmissionHalted(true);
     expect(await platform.admissionHalted()).to.equal(true);
+    // Safety flags stay governance-gated.
+    await expect(
+      platform.connect(stranger).setPaused(false)
+    ).to.be.revertedWithCustomError(platform, "OwnableUnauthorizedAccount");
   });
 });
