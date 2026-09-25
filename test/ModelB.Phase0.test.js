@@ -111,28 +111,18 @@ describe("Model-B Phase 0 scaffold", function () {
     expect(await vault.checkPhysicalInvariant()).to.equal(true);
   });
 
-  it("phase2 risk stubs revert", async function () {
-    await expect(
-      riskManager.authorizeOpen(ethers.ZeroHash, 0, 0)
-    ).to.be.revertedWithCustomError(riskManager, "NotImplemented");
-    await expect(
-      riskManager.authorizeSettle.staticCall(0, 0)
-    ).to.be.revertedWithCustomError(riskManager, "NotImplemented");
-    await expect(riskManager.maxPermittedLiability()).to.be.revertedWithCustomError(
-      riskManager,
-      "NotImplemented"
-    );
-    await expect(riskManager.coverageMaxBps()).to.be.revertedWithCustomError(
-      riskManager,
-      "NotImplemented"
-    );
-    await expect(riskManager.status()).to.be.revertedWithCustomError(
-      riskManager,
-      "NotImplemented"
-    );
+    it("phase2 admission views implement approved math (supersedes Phase-0 stub)", async function () {
+    // Superseded Phase-0 NotImplemented stubs: views are implemented in Phase 2.
+    // This suite leaves the vault unseeded (S = 0) and registers no liability (L0 = 0).
+    expect(await riskManager.authorizeOpen(ethers.ZeroHash, 0, 0)).to.equal(true);
+    expect(await riskManager.authorizeSettle(0, 0)).to.equal(true);
+    expect(await riskManager.maxPermittedLiability()).to.equal(0n);
+    // Zero liability => vacuously fully covered.
+    expect(await riskManager.coverageMaxBps()).to.equal(ethers.MaxUint256);
+    expect(await riskManager.status()).to.equal(0); // GREEN
   });
 
-  it("phase3 trading stubs revert and flags toggle", async function () {
+it("phase3 trading stubs revert and flags toggle", async function () {
     await expect(
       platform.openPosition(ethers.ZeroHash, true, 1, 1, 0, 0)
     ).to.be.revertedWithCustomError(platform, "NotImplemented");
