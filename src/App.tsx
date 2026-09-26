@@ -23,6 +23,8 @@ const Signup = lazy(() => import("./pages/Signup"));
 const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
 const UpdatePassword = lazy(() => import("./pages/UpdatePassword"));
 const VerifyEmail = lazy(() => import("./pages/VerifyEmail"));
+const Terms = lazy(() => import("./pages/Terms"));
+const Privacy = lazy(() => import("./pages/Privacy"));
 const SeoMonitor = lazy(() => import("./pages/SeoMonitor"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
@@ -68,6 +70,8 @@ const App = () => (
               <Route path="/forgot-password" element={<ForgotPassword />} />
               <Route path="/update-password" element={<UpdatePassword />} />
               <Route path="/verify-email" element={<VerifyEmail />} />
+              <Route path="/terms" element={<Terms />} />
+              <Route path="/privacy" element={<Privacy />} />
 
               {/* Dev-only Dynamic Logo showcase — absent from production builds. */}
               {DynamicLogoShowcase && (

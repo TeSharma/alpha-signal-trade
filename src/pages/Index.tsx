@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Logo } from "@/components/ui/Logo";
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { TrendingUp, Shield, BookOpen, Users, Bot, BarChart3, UserPlus, LogIn } from "lucide-react";
 
 const Index = () => {
@@ -155,7 +155,15 @@ const Index = () => {
 
       {/* Footer */}
       <footer className="container mx-auto px-4 py-8 mt-16 border-t">
-        <div className="text-center text-gray-600">
+        <div className="text-center text-gray-600 space-y-3">
+          <div className="flex justify-center gap-6 text-sm">
+            <Link to="/terms" className="hover:text-gray-900 transition-colors">
+              Terms of Service
+            </Link>
+            <Link to="/privacy" className="hover:text-gray-900 transition-colors">
+              Privacy Policy
+            </Link>
+          </div>
           <p>&copy; 2024 ShTrader. Decentralized trading platform for everyone.</p>
         </div>
       </footer>
