@@ -23,7 +23,8 @@ const Signup = lazy(() => import("./pages/Signup"));
 const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
 const UpdatePassword = lazy(() => import("./pages/UpdatePassword"));
 const VerifyEmail = lazy(() => import("./pages/VerifyEmail"));
-const SeoMonitor = lazy(() => import("./pages/SeoMonitor"));
+const Terms = lazy(() => import("./pages/Terms"));
+const Privacy = lazy(() => import("./pages/Privacy"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 // Dev-only showcase for the Dynamic Logo system. `import.meta.env.DEV` is

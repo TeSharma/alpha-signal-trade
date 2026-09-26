@@ -20,19 +20,29 @@ interface LegalDocumentProps {
 
 const Blocks = ({ blocks }: { blocks: LegalBlock[] }) => (
   <>
-    {blocks.map((block, index) =>
-      typeof block === 'string' ? (
-        <p key={index} className="text-muted-foreground leading-relaxed">
-          {block}
-        </p>
-      ) : (
-        <ul key={index} className="list-disc pl-6 space-y-1 text-muted-foreground leading-relaxed">
-          {block.list.map((item) => (
-            <li key={item}>{item}</li>
-          ))}
-        </ul>
+    {blocks.map((block, index) => {
+      if (typeof block === 'string') {
+        return (
+          <p key={index} className="text-muted-foreground leading-relaxed">
+            {block}
+          </p>
+        )
+      }
+      if ('list' in block) {
+        return (
+          <ul key={index} className="list-disc pl-6 space-y-1 text-muted-foreground leading-relaxed">
+            {block.list.map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
+        )
+      }
+      return (
+        <h3 key={index} className="text-base font-semibold tracking-tight pt-2">
+          {block.subheading}
+        </h3>
       )
-    )}
+    })}
   </>
 )
 
