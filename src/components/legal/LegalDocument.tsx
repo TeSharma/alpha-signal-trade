@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
 
-export type LegalBlock = string | { list: string[] }
+export type LegalBlock = string | { list: string[] } | { subheading: string }
 
 export interface LegalSection {
   heading: string
