@@ -24,7 +24,9 @@ interface IVaultView {
  *        = 70,000 * 10000 / 15000 = $46,666.67.
  *      allow settle <=> closingM <= L0
  *                       AND pnlGross <= S             (absolute check first)
- *                       AND (S - pnlGross) * 10000 >= Cmin * (L0 - closingM)
+ *                       AND (S - pnlGross) * 10000 >= settlementFloorBps * (L0 - closingM)
+ *        (approved Option C: residual-book floor F = settlementFloorBps,
+ *        default 10000, hard-capped at 10000 and <= minimumCoverageBps).
  *      Stress red-lines (planning only, never stored): $70k/4 ~= $17,500 gross
  *      stress margin; $70k/3 ~= $23,333 profit-only margin capacity.
  *      External coverage X is exactly 0 until a verified provider exists —
@@ -45,6 +47,8 @@ contract ProtocolRiskManager is AccessControl {
     error LiabilityUnderflow();
     error LiabilityRegistered();
     error InvalidCoverageBands();
+    error SettlementFloorTooHigh(uint256 floorBps);
+    error SettlementFloorAboveCoverage(uint256 floorBps, uint256 coverageBps);
 
     address public vault;
     address public platform;
@@ -52,6 +56,12 @@ contract ProtocolRiskManager is AccessControl {
     address public hedgeManager;
 
     uint256 public minimumCoverageBps;
+    /// @notice Settlement floor (bps) applied to the residual book after a
+    ///         profitable settlement: (S - g) * 10000 >= settlementFloorBps * (L0 - M).
+    ///         Hard-capped at 10000 (100%) and constrained to settlementFloorBps <=
+    ///         minimumCoverageBps. Default 10000: a solvent book can never be locked
+    ///         by settlement policy (approved Option C).
+    uint256 public settlementFloorBps;
     uint256 public capPerPair;
     uint256 public capPerCorrGroup;
     bool public paused;
@@ -70,6 +80,7 @@ contract ProtocolRiskManager is AccessControl {
     mapping(bytes32 => bytes8) public pairCorrGroup;
 
     event RiskParamsUpdated(uint256 minimumCoverageBps, uint256 capPerPair, uint256 capPerCorrGroup);
+    event SettlementFloorUpdated(uint256 oldFloorBps, uint256 newFloorBps);
     event CoverageBandsUpdated(uint256 greenBps, uint256 warningBps, uint256 criticalBps);
     event PlatformUpdated(address indexed platform);
 
@@ -84,6 +95,7 @@ contract ProtocolRiskManager is AccessControl {
         vault = _vault;
         platform = _platform;
         minimumCoverageBps = _minimumCoverageBps;
+        settlementFloorBps = 10_000; // 100%: a solvent book can never be locked by policy.
         greenCoverageBps = 15000;
         warningCoverageBps = 12500;
         criticalCoverageBps = 11000;
@@ -94,10 +106,22 @@ contract ProtocolRiskManager is AccessControl {
         uint256 _capPerPair,
         uint256 _capPerCorrGroup
     ) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        if (_minimumCoverageBps < settlementFloorBps)
+            revert SettlementFloorAboveCoverage(settlementFloorBps, _minimumCoverageBps);
         minimumCoverageBps = _minimumCoverageBps;
         capPerPair = _capPerPair;
         capPerCorrGroup = _capPerCorrGroup;
         emit RiskParamsUpdated(_minimumCoverageBps, _capPerPair, _capPerCorrGroup);
+    }
+
+    /// @notice Update the settlement residual-book floor (bps). Hard-capped at
+    ///         10000 and constrained to F <= Cmin (approved Option C).
+    function setSettlementFloor(uint256 _floorBps) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        if (_floorBps > 10_000) revert SettlementFloorTooHigh(_floorBps);
+        if (_floorBps > minimumCoverageBps) revert SettlementFloorAboveCoverage(_floorBps, minimumCoverageBps);
+        uint256 old = settlementFloorBps;
+        settlementFloorBps = _floorBps;
+        emit SettlementFloorUpdated(old, _floorBps);
     }
 
     function setCoverageBands(
@@ -200,8 +224,10 @@ contract ProtocolRiskManager is AccessControl {
     /// @notice Authoritative settlement decision (V3 calls inside close path).
     /// @dev Validates closingM <= L0 before subtraction (no underflow /
     ///      liability corruption), then absolute pnlGross <= S (absolute
-    ///      insolvency check BEFORE coverage), then post-close coverage
-    ///      S' * 10000 >= Cmin * L' with L' = L0 - closingM, S' = S - pnlGross.
+    ///      insolvency check BEFORE coverage), then post-close residual-book
+    ///      floor S' * 10000 >= settlementFloorBps * L' with L' = L0 - closingM,
+    ///      S' = S - pnlGross (approved Option C: Cmin gates new risk and
+    ///      governance outflows; the floor gates settlement residuals).
     ///      NO pause/halt gate: settlements must proceed regardless (approved).
     function authorizeSettle(uint256 closingM, uint256 pnlGross) external view returns (bool) {
         uint256 l0 = currentMaxProtoLiab;
@@ -212,7 +238,7 @@ contract ProtocolRiskManager is AccessControl {
 
         uint256 lPrime = l0 - closingM;
         uint256 sPrime = (s + x) - pnlGross;
-        return sPrime * 10000 >= minimumCoverageBps * lPrime;
+        return sPrime * 10000 >= settlementFloorBps * lPrime;
     }
 
     /// @notice Max post-open liability permitted at current policy:

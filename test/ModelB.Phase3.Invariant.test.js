@@ -634,26 +634,34 @@ describe("Model-B Phase 3 — TradingPlatformV3 execution engine", function () {
 
     // (2) profitable direct close of a PAIR_A long
     await oracle.setPrice(PAIR_A, px(1005));
-    await platform.connect(trader).closePosition(id0);
+    const closeWinReceipt = await (
+      await platform.connect(trader).closePosition(id0)
+    ).wait();
     snap = await expectLiabilityInvariant();
     expect(snap.ids.length).to.equal(5);
 
     // (3) liquidate the PAIR_A short: PAIR_A is pushed past its $1020 liq price
     await oracle.setPrice(PAIR_A, px(1025));
-    await platform.connect(liquidator).liquidate(id2);
+    const liquidateReceipt = await (
+      await platform.connect(liquidator).liquidate(id2)
+    ).wait();
     snap = await expectLiabilityInvariant();
     expect(snap.ids.length).to.equal(4);
     expect(await manager.pairMaxProfitLiab(PAIR_A)).to.equal(5_995_200_000n);
 
     // (4) losing direct close on PAIR_B
     await oracle.setPrice(PAIR_B, px(995));
-    await platform.connect(trader).closePosition(id3);
+    const closeLossReceipt = await (
+      await platform.connect(trader).closePosition(id3)
+    ).wait();
     snap = await expectLiabilityInvariant();
     expect(snap.ids.length).to.equal(3);
 
     // (5) keeper trigger (stop-loss) close of the PAIR_B short
     await oracle.setPrice(PAIR_B, px(1013));
-    await platform.connect(keeper).closeWithTrigger(id4);
+    const triggerReceipt = await (
+      await platform.connect(keeper).closeWithTrigger(id4)
+    ).wait();
     snap = await expectLiabilityInvariant();
 
     // Exactly the two untouched positions remain, and nothing else does.
@@ -666,8 +674,107 @@ describe("Model-B Phase 3 — TradingPlatformV3 execution engine", function () {
     expect(await manager.corrGroupLiab(GRP_FX)).to.equal(5_995_200_000n);
     expect(await manager.corrGroupLiab(GRP_METAL)).to.equal(2_697_840_000n);
 
-    // Dollar conservation on the vault side: settlement capital only moved by
-    // settled profits (out) and retained loss surplus (in).
+    // ————————— AUDITABLE SETTLEMENT-LEDGER BREAKDOWN (EQ-5) —————————
+    // Every settlement-ledger movement of this sequence is itemised here by
+    // position ID, transaction, amount, reason and direction. The table is
+    // rebuilt from the Vault's own events (ProfitSettled / SurplusRetained) —
+    // it is not hand-asserted — so the conservation proof below is auditable.
+    const movements = [];
+    const movementsFrom = (receipt, transaction) => {
+      for (const log of receipt.logs) {
+        let parsed = null;
+        try {
+          parsed = vault.interface.parseLog(log);
+        } catch (_) {
+          /* not a Vault event */
+        }
+        if (!parsed) continue;
+        if (parsed.name === "ProfitSettled") {
+          movements.push({
+            positionId: parsed.args[0],
+            transaction,
+            amount: parsed.args[2] + parsed.args[3],
+            direction: "settlement outflow",
+            reason: `gross profit debit = traderProfit ${parsed.args[2]} + closeFee ${parsed.args[3]}`,
+          });
+        } else if (parsed.name === "SurplusRetained") {
+          movements.push({
+            positionId: parsed.args[0],
+            transaction,
+            amount: parsed.args[1],
+            direction: "surplus credit",
+            reason:
+              "realized loss surplus pulled from V3 custody into settlement capital",
+          });
+        }
+      }
+    };
+    movementsFrom(closeWinReceipt, "closePosition (win)");
+    movementsFrom(liquidateReceipt, "liquidate");
+    movementsFrom(closeLossReceipt, "closePosition (loss)");
+    movementsFrom(triggerReceipt, "closeWithTrigger (SL fill)");
+
+    // The complete table: exactly three movements, each with one owner and one
+    // direction. Nothing else may appear.
+    expect(
+      movements.map((m) => ({
+        positionId: m.positionId,
+        transaction: m.transaction,
+        amount: m.amount,
+        direction: m.direction,
+      }))
+    ).to.deep.equal([
+      {
+        positionId: id0,
+        transaction: "closePosition (win)",
+        amount: 49_960_000n,
+        direction: "settlement outflow",
+      },
+      {
+        positionId: id3,
+        transaction: "closePosition (loss)",
+        amount: 47_961_600n,
+        direction: "surplus credit",
+      },
+      {
+        positionId: id4,
+        transaction: "closeWithTrigger (SL fill)",
+        amount: 95_923_200n,
+        direction: "surplus credit",
+      },
+    ]);
+    // Liquidation (id2) and all six open fees are absent BY CONSTRUCTION: they
+    // move money inside V3 custody or to the treasury and never touch settlement
+    // capital. Their amounts, for the record:
+    //   id2 liquidation penalty        = 1,498,800,000
+    //     -> liquidator reward          449,640,000 (V3 custody)
+    //     -> protocol fee             1,049,160,000 (V3 custody -> treasury)
+    //   open fees (ids 0..5)           = 5,920,000   (V3 custody -> treasury)
+    expect(movements.length).to.equal(3);
+
+    // Conservation, term by term:
+    //   final S = initial S − Σ legitimate outflows
+    //                      + Σ realized-loss surplus credits
+    //                      + other explicitly permitted credits (ZERO here)
+    const seed = SETTLEMENT;
+    const outflows = 49_960_000n;
+    const credits = 47_961_600n + 95_923_200n;
+    const otherPermittedCredits = 0n;
+    expect(
+      movements
+        .filter((m) => m.direction === "settlement outflow")
+        .reduce((acc, m) => acc + m.amount, 0n)
+    ).to.equal(outflows);
+    expect(
+      movements
+        .filter((m) => m.direction === "surplus credit")
+        .reduce((acc, m) => acc + m.amount, 0n)
+    ).to.equal(credits);
+    expect(seed - outflows + credits + otherPermittedCredits).to.equal(
+      SETTLEMENT - 49_960_000n + 47_961_600n + 95_923_200n
+    );
+
+    // Dollar conservation on the vault side (economics unchanged).
     expect(await vault.settlementLedger()).to.equal(
       SETTLEMENT - 49_960_000n + 47_961_600n + 95_923_200n
     );

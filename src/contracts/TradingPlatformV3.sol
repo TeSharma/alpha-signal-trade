@@ -552,4 +552,3 @@ contract TradingPlatformV3 is Ownable, ReentrancyGuard {
         emit AdmissionHaltedSet(_halted);
     }
 }
-

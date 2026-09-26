@@ -85,13 +85,16 @@ describe("Model-B Phase 2 — ProtocolRiskManager admission", function () {
     // Valid closingM but pnlGross > S -> absolute check fails first.
     expect(await manager.authorizeSettle(0, SETTLEMENT + 1n)).to.equal(false);
   });
-  it("post-close coverage boundary: equality admits, +1 wei rejects", async function () {
+  it("post-close floor boundary: equality admits, +1 wei rejects", async function () {
     await setL0(u(50000));
-    // L0=50000, closingM=40000 -> L'=10000 -> need S' >= 15000.
-    // pnlGross=55000 -> S'=15000: equality -> admits.
-    expect(await manager.authorizeSettle(u(40000), u(55000))).to.equal(true);
-    // +1 wei of pnlGross -> S' below threshold -> rejects.
-    expect(await manager.authorizeSettle(u(40000), u(55000) + 1n)).to.equal(false);
+    const F = await manager.settlementFloorBps();
+    expect(F).to.equal(10000n);
+    // L0=50000, closingM=40000 -> L'=10000. Under the 100% floor (Option C) the
+    // requirement is S' >= L' = 10000, i.e. pnlGross <= 60000. Coverage here is
+    // 14000 bps (< Cmin): that is an admission condition, not a settlement lock.
+    expect(await manager.authorizeSettle(u(40000), u(60000))).to.equal(true);
+    // +1 wei of pnlGross pushes S' below L' -> rejected.
+    expect(await manager.authorizeSettle(u(40000), u(60000) + 1n)).to.equal(false);
   });
 
   it("winning close improving coverage ALLOWED though pre-close form fails", async function () {
@@ -105,12 +108,15 @@ describe("Model-B Phase 2 — ProtocolRiskManager admission", function () {
     expect(await manager.authorizeSettle(u(1000), u(69000))).to.equal(false);
   });
 
-  it("liability-unchanged settlement: equality admits, crossing rejects", async function () {
+  it("liability-unchanged settlement: floor equality admits, crossing rejects", async function () {
     await setL0(u(40000));
-    // closingM = 0 (liability unchanged): need S' >= 60000 -> pnlGross <= 10000.
-    expect(await manager.authorizeSettle(0, u(10000))).to.equal(true);
-    expect(await manager.authorizeSettle(0, u(10000) + 1n)).to.equal(false);
-    expect(await manager.authorizeSettle(0, u(11000))).to.equal(false);
+    // closingM = 0 leaves the liability unchanged (L' = 40000). Under the 100%
+    // floor: S' >= 40000 -> pnlGross <= 30000. Coverage is 14000 bps, below the
+    // 150% policy: admission is restricted, settlement is not (Option C).
+    expect(await manager.authorizeSettle(0, u(30000))).to.equal(true);
+    expect(await manager.authorizeSettle(0, u(30000) + 1n)).to.equal(false);
+    // The absolute check still refuses anything above the settlement ledger.
+    expect(await manager.authorizeSettle(0, u(11000) * 10n)).to.equal(false);
   });
   it("status bands honor approved example thresholds and boundaries", async function () {
     expect(await manager.status()).to.equal(0); // no liability -> GREEN
@@ -256,8 +262,16 @@ describe("Model-B Phase 2 — ProtocolRiskManager admission", function () {
     expect(await manager.maxPermittedLiability()).to.equal((SETTLEMENT * 10000n) / 15000n);
   });
 
-  it("Cmin = 0 means no coverage bound (documented edge)", async function () {
+  it("Cmin = 0 means no coverage bound (documented edge, reachable only with F = 0)", async function () {
+    // F <= Cmin is enforced, so a zero coverage ratio is only reachable with a
+    // zero floor: a positive residual requirement cannot be weakened by zeroing
+    // the admission ratio alone.
+    await expect(
+      manager.setRiskParams(0, HUGE_CAP, HUGE_CAP)
+    ).to.be.revertedWithCustomError(manager, "SettlementFloorAboveCoverage");
+    await manager.setSettlementFloor(0);
     await manager.setRiskParams(0, HUGE_CAP, HUGE_CAP);
+    expect(await manager.settlementFloorBps()).to.equal(0n);
     expect(await manager.maxPermittedLiability()).to.equal(ethers.MaxUint256);
     // Coverage inequality trivially satisfied: S*10000 >= 0 * L1.
     expect(await manager.authorizeOpen(PAIR_A, u(1000000000), 0)).to.equal(true);
@@ -296,7 +310,47 @@ describe("Model-B Phase 2 — ProtocolRiskManager admission", function () {
     }
   });
 
-  it("fuzz: authorizeSettle matches reference (validate -> absolute -> post-close)", async function () {
+  it("settlement floor defaults to 100%, is hard-capped at 100%, and is ordered F <= Cmin", async function () {
+    expect(await manager.settlementFloorBps()).to.equal(10000n);
+    // setRiskParams cannot drop Cmin below the floor.
+    await expect(
+      manager.setRiskParams(9999, HUGE_CAP, HUGE_CAP)
+    ).to.be.revertedWithCustomError(manager, "SettlementFloorAboveCoverage");
+    // The 100% hard cap is checked FIRST: any value above 10000 is TooHigh
+    // regardless of Cmin (so 15001 and 15000 both report the cap, not ordering).
+    await expect(
+      manager.setSettlementFloor(10001)
+    ).to.be.revertedWithCustomError(manager, "SettlementFloorTooHigh");
+    await expect(
+      manager.setSettlementFloor(15001)
+    ).to.be.revertedWithCustomError(manager, "SettlementFloorTooHigh");
+    // While Cmin = 150% > 100% the hard cap binds first, so the F <= Cmin rule
+    // is unreachable; it only becomes reachable once Cmin itself is below 100%.
+    await expect(
+      manager.setSettlementFloor(15000)
+    ).to.be.revertedWithCustomError(manager, "SettlementFloorTooHigh");
+    await manager.setSettlementFloor(9000); // accepted: 9000 <= Cmin(15000)
+    await manager.setRiskParams(9000, HUGE_CAP, HUGE_CAP); // F == Cmin is legal
+    await expect(
+      manager.setSettlementFloor(9001)
+    ).to.be.revertedWithCustomError(manager, "SettlementFloorAboveCoverage");
+    await expect(manager.setSettlementFloor(8999))
+      .to.emit(manager, "SettlementFloorUpdated")
+      .withArgs(9000n, 8999n);
+    // Restore the approved default policy: 150% coverage with a 100% floor.
+    await manager.setRiskParams(15000, HUGE_CAP, HUGE_CAP);
+    await manager.setSettlementFloor(10000);
+    expect(await manager.settlementFloorBps()).to.equal(10000n);
+    // Strangers cannot change either parameter.
+    await expect(
+      manager.connect(stranger).setSettlementFloor(10000)
+    ).to.be.revertedWithCustomError(manager, "AccessControlUnauthorizedAccount");
+    await expect(
+      manager.connect(stranger).setRiskParams(15000, HUGE_CAP, HUGE_CAP)
+    ).to.be.revertedWithCustomError(manager, "AccessControlUnauthorizedAccount");
+  });
+
+  it("fuzz: authorizeSettle matches reference (validate -> absolute -> floor)", async function () {
     function mulberry32(a) {
       return function () {
         a |= 0;
@@ -309,19 +363,45 @@ describe("Model-B Phase 2 — ProtocolRiskManager admission", function () {
     const r = mulberry32(0xbeef1);
     const rnd = (max) => BigInt(Math.floor(r() * Number(max)));
     const cmins = [11000n, 12500n, 15000n];
+    // Option C: the settlement clause uses the floor F, not Cmin. Exercise
+    // F in {0, 1, 10000} (below/at the 100% default) with required +/- 1 wei.
+    const floors = [0n, 1n, 10000n];
     for (let i = 0; i < 40; i++) {
       const cmin = cmins[Math.floor(r() * 3)];
       await manager.setRiskParams(cmin, HUGE_CAP, HUGE_CAP);
+      const floor = floors[i % floors.length];
+      await manager.setSettlementFloor(floor);
       const l0 = rnd(90000000001n);
       await setL0(l0);
       const closingM = rnd(l0 + 5000000001n); // may exceed l0 by up to $5,000
       const pnlGross = rnd(SETTLEMENT + 5000000001n); // may exceed S by up to $5,000
       let expected = closingM <= l0 && pnlGross <= SETTLEMENT;
       if (expected) {
-        expected = (SETTLEMENT - pnlGross) * 10000n >= cmin * (l0 - closingM);
+        expected = (SETTLEMENT - pnlGross) * 10000n >= floor * (l0 - closingM);
       }
       expect(await manager.authorizeSettle(closingM, pnlGross)).to.equal(expected);
     }
+    // N-1 inductive check for the governed default floor: at F = 10000 the
+    // contract clause (S - g) * 10000 >= F * (L0 - M) is EXACTLY S' >= L', so
+    // every settlement the floor admits provably leaves the residual book
+    // covering its own remaining liability. At F < 10000 governance has
+    // deliberately weakened that residual requirement, so restore the deployed
+    // default floor before asserting the inductive step.
+    await manager.setSettlementFloor(10000);
+    let n1Allowed = 0;
+    for (let i = 0; i < 40; i++) {
+      const l0 = rnd(90000000001n);
+      await setL0(l0);
+      const closingM = rnd(l0 + 1n);
+      const pnlGross = rnd(SETTLEMENT + 1n);
+      if (await manager.authorizeSettle(closingM, pnlGross)) {
+        n1Allowed++;
+        const sPrime = SETTLEMENT - pnlGross;
+        const lPrime = l0 - closingM;
+        expect(sPrime >= lPrime, "N-1: S' >= L' after allowed settlement").to.equal(true);
+      }
+    }
+    expect(n1Allowed, "N-1 fuzz exercised allowed settlements").to.be.greaterThan(0);
     await expectPhysical();
   });
 });
