@@ -155,7 +155,15 @@ const Index = () => {
 
       {/* Footer */}
       <footer className="container mx-auto px-4 py-8 mt-16 border-t">
-        <div className="text-center text-gray-600">
+        <div className="text-center text-gray-600 space-y-3">
+          <div className="flex justify-center gap-6 text-sm">
+            <a href="/terms" className="hover:text-gray-900 transition-colors">
+              Terms of Service
+            </a>
+            <a href="/privacy" className="hover:text-gray-900 transition-colors">
+              Privacy Policy
+            </a>
+          </div>
           <p>&copy; 2024 ShTrader. Decentralized trading platform for everyone.</p>
         </div>
       </footer>
